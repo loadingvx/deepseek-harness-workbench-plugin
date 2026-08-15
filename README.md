@@ -11,12 +11,14 @@ A workbench UI plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deep
 | | |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.0** (`latest`) |
+| Version | **0.1.1** (`latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.0
++ dsh-workbench-plugin@0.1.1
 ```
+
+Maintainers publish with `bash devops/release.sh` (uses your existing `npm login` on the official registry; never put credentials in the repo).
 
 ## Install
 
