@@ -1,3 +1,4 @@
+import { redactSecrets } from './redact.ts'
 import type { GitErrorCode, GitFail } from './types.ts'
 
 const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
@@ -139,8 +140,9 @@ export class GitError extends Error {
 
   constructor(code: GitErrorCode, detail?: string) {
     const copy = COPY[code]
-    const messageZh = detail && (code === 'GIT_FAILED' || code === 'LLM_FAILED')
-      ? `${copy.messageZh} ${detail}`
+    const safe = detail === undefined ? undefined : redactSecrets(detail)
+    const messageZh = safe && (code === 'GIT_FAILED' || code === 'LLM_FAILED')
+      ? `${copy.messageZh} ${safe}`
       : copy.messageZh
     super(`${code}: ${messageZh}`)
     this.name = 'GitError'

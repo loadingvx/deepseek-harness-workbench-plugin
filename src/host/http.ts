@@ -1,14 +1,15 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { fail, toFail } from '../shared/errors.ts'
-import type { GitResult } from '../shared/types.ts'
+import { redactSecrets } from '../shared/redact.ts'
+import type { GitFail, GitResult } from '../shared/types.ts'
 import { generateCommitMessage } from './commit-message.ts'
 import type { GitService } from './git-service.ts'
 import { resolveWorkspacePath } from './workspace.ts'
 import type { WorkspaceFs } from './workspace-fs.ts'
 
 function send(res: ServerResponse, status: number, body: unknown): void {
-  const json = JSON.stringify(body)
+  const json = JSON.stringify(redactFail(body))
   res.statusCode = status
   res.setHeader('content-type', 'application/json; charset=utf-8')
   res.setHeader('cache-control', 'no-store')
@@ -46,6 +47,18 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 function query(url: URL, key: string): string | undefined {
   const value = url.searchParams.get(key)
   return value === null || value === '' ? undefined : value
+}
+
+function redactFail(body: unknown): unknown {
+  if (typeof body !== 'object' || body === null || !('ok' in body) || (body as { ok?: unknown }).ok !== false) {
+    return body
+  }
+  const failBody = body as GitFail
+  return {
+    ...failBody,
+    messageZh: redactSecrets(failBody.messageZh),
+    hintZh: redactSecrets(failBody.hintZh),
+  }
 }
 
 function asStringArray(value: unknown): string[] {

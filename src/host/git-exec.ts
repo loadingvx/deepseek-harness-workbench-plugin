@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { GitError } from '../shared/errors.ts'
+import { redactSecrets } from '../shared/redact.ts'
 
 const DEFAULT_TIMEOUT_MS = 30_000
 
@@ -42,7 +43,7 @@ function classifyFailure(stderr: string, exitCode: number): GitError {
   if (/no upstream|no tracking information|does not have a corresponding remote/i.test(text)) {
     return new GitError('NO_UPSTREAM')
   }
-  const detail = text.trim() || `退出码 ${exitCode}`
+  const detail = redactSecrets(text.trim() || `退出码 ${exitCode}`)
   return new GitError('GIT_FAILED', detail.slice(0, 400))
 }
 
