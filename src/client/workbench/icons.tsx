@@ -142,6 +142,16 @@ export function IconPanelOff() {
   )
 }
 
+export function IconTune() {
+  return (
+    <Icon>
+      <path d="M2.5 4.5h4.2M9.4 4.5h4.1M2.5 11.5h7.2M12.4 11.5h1.1" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="8.2" cy="4.5" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="11.2" cy="11.5" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </Icon>
+  )
+}
+
 export function IconSparkle() {
   return (
     <Icon>

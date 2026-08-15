@@ -5,9 +5,10 @@ import type {
 } from '../../shared/types.ts'
 import { GitGraph } from './GitGraph.tsx'
 import { IconButton } from './IconButton.tsx'
+import { isDefaultCommitTemplate, resolveCommitTemplate } from '../../shared/commit-template.ts'
 import { visibleSyncActions } from '../../shared/sync-actions.ts'
 import { invalidBranchName } from '../../shared/branch-name.ts'
-import { IconBranch, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRefresh, IconSparkle } from './icons.tsx'
+import { IconBranch, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRefresh, IconSparkle, IconTune } from './icons.tsx'
 import type { Translate } from './types.ts'
 import { clampGraphHeight, GRAPH_DEFAULT_H, GRAPH_MIN_H, measureReservedAboveGraph } from './graph-layout.ts'
 import css from './GitSidebar.module.css'
@@ -29,13 +30,37 @@ const KIND_MARK: Record<string, string> = {
   conflict: 'C',
 }
 
-// 暂时隐藏自动生成提交说明的按钮（星标）；后续恢复时把这里改回 true 即可。
-const GENERATE_ENABLED = false
-
 const GRAPH_H_KEY = 'dsh-workbench-graph-h'
 const CHANGES_OPEN_KEY = 'dsh-workbench-changes-open'
 const GRAPH_OPEN_KEY = 'dsh-workbench-graph-open'
 const GRAPH_COMPACT_KEY = 'dsh-workbench-graph-compact'
+const TEMPLATE_KEY = 'dsh-workbench-commit-template'
+const MESSAGE_MIN_H = 32
+const MESSAGE_MAX_H = 140
+
+function readCustomTemplate(): string | null {
+  try {
+    const raw = localStorage.getItem(TEMPLATE_KEY)
+    if (raw === null || raw.trim() === '' || isDefaultCommitTemplate(raw)) return null
+    return resolveCommitTemplate(raw)
+  } catch {
+    return null
+  }
+}
+
+function writeCustomTemplate(value: string, fallback: string): string | null {
+  const next = resolveCommitTemplate(value, fallback)
+  try {
+    if (isDefaultCommitTemplate(next)) {
+      localStorage.removeItem(TEMPLATE_KEY)
+      return null
+    }
+    localStorage.setItem(TEMPLATE_KEY, next)
+    return next
+  } catch {
+    return isDefaultCommitTemplate(next) ? null : next
+  }
+}
 
 type GraphPrompt = 'branch' | 'merge' | null
 
@@ -79,7 +104,7 @@ function FileRow({
 }
 
 function FileGroup({
-  title, files, selected, staged, action, actionLabel, bulkLabel, rowKey, disabled, hideHead, onOpenDiff, onFileAction, onBulkAction,
+  title, files, selected, staged, action, actionLabel, bulkLabel, rowKey, disabled, onOpenDiff, onFileAction, onBulkAction,
 }: {
   title: string
   files: GitFileChange[]
@@ -87,27 +112,24 @@ function FileGroup({
   staged: boolean
   action: 'stage' | 'unstage'
   actionLabel: string
-  bulkLabel?: string
+  bulkLabel: string
   rowKey: string
   disabled: boolean
-  hideHead?: boolean
   onOpenDiff: (path: string, staged: boolean) => void
   onFileAction: (path: string) => void
-  onBulkAction?: () => void
+  onBulkAction: () => void
 }) {
   if (files.length === 0) return null
   return (
     <div className={css.group}>
-      {hideHead || bulkLabel === undefined || onBulkAction === undefined ? null : (
-        <div className={css.groupHead}>
-          <span className={css.groupTitle}>{title}</span>
-          <span className={css.sectionCount}>{files.length}</span>
-          <span className={css.sectionGrow} />
-          <IconButton label={bulkLabel} disabled={disabled} onClick={onBulkAction}>
-            {action === 'stage' ? <IconPlus /> : <IconMinus />}
-          </IconButton>
-        </div>
-      )}
+      <div className={css.groupHead}>
+        <span className={css.groupTitle}>{title}</span>
+        <span className={css.sectionCount}>{files.length}</span>
+        <span className={css.sectionGrow} />
+        <IconButton label={bulkLabel} disabled={disabled} onClick={onBulkAction}>
+          {action === 'stage' ? <IconPlus /> : <IconMinus />}
+        </IconButton>
+      </div>
       <ul className={css.files} aria-label={title}>
         {files.map(file => (
           <FileRow
@@ -139,6 +161,12 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   const [branches, setBranches] = useState<GitBranchInfo[]>([])
   const [log, setLog] = useState<GitLogEntry[]>([])
   const [message, setMessage] = useState('')
+  const [customTemplate, setCustomTemplate] = useState<string | null>(readCustomTemplate)
+  const [templateOpen, setTemplateOpen] = useState(false)
+  const [templateDraft, setTemplateDraft] = useState('')
+  const localeDefault = t('commit.templateDefault')
+  const template = customTemplate ?? localeDefault
+  const messageRef = useRef<HTMLTextAreaElement>(null)
   const [changesOpen, setChangesOpen] = useState(() => readFlag(CHANGES_OPEN_KEY, true))
   const [graphOpen, setGraphOpen] = useState(() => readFlag(GRAPH_OPEN_KEY, true))
   const [graphCompact, setGraphCompact] = useState(() => readFlag(GRAPH_COMPACT_KEY, false))
@@ -187,6 +215,15 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
     const timer = window.setInterval(() => { void refresh() }, 8000)
     return () => { window.clearInterval(timer) }
   }, [workspaceId])
+
+  useLayoutEffect(() => {
+    const area = messageRef.current
+    if (area === null) return
+    area.style.height = '0px'
+    const next = Math.min(MESSAGE_MAX_H, Math.max(MESSAGE_MIN_H, area.scrollHeight))
+    area.style.height = `${next}px`
+    area.toggleAttribute('data-overflow', next >= MESSAGE_MAX_H)
+  }, [message])
 
   const runWrite = async (
     action: () => Promise<GitResult<unknown>>,
@@ -303,7 +340,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
           ? t('merge.disabledNone')
           : null
   const writesDisabled = busy || status === null || !status.probe.gitAvailable || !status.probe.isRepo
-  const generateDisabled = writesDisabled || generating || dirtyCount === 0
+  const generateDisabled = writesDisabled || dirtyCount === 0
   const graphFills = changesOpen === false && graphOpen
 
   useLayoutEffect(() => {
@@ -346,6 +383,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   }
   const openPrompt = (kind: Exclude<GraphPrompt, null>): void => {
     if (writesDisabled) return
+    setTemplateOpen(false)
     setPrompt(kind)
     setPromptValue('')
     setPromptError(null)
@@ -428,9 +466,9 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   }
 
   const generate = (): void => {
-    if (workspaceId === undefined || generateDisabled) return
+    if (workspaceId === undefined || generateDisabled || generating) return
     setGenerating(true)
-    void client.generateCommitMessage(workspaceId).then((result) => {
+    void client.generateCommitMessage(workspaceId, template).then((result) => {
       setGenerating(false)
       if (!result.ok) {
         setError(result)
@@ -439,6 +477,21 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
       setError(null)
       setMessage(result.value.message.trim())
     })
+  }
+
+  const openTemplate = (): void => {
+    setPrompt(null)
+    setTemplateDraft(template)
+    setTemplateOpen(true)
+  }
+
+  const closeTemplate = (): void => {
+    setTemplateOpen(false)
+  }
+
+  const saveTemplate = (): void => {
+    setCustomTemplate(writeCustomTemplate(templateDraft, localeDefault))
+    setTemplateOpen(false)
   }
 
   return (
@@ -489,7 +542,9 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
           <div className={css.commitArea} data-git-chrome="commit">
             <div className={css.commitBox}>
               <textarea
+                ref={messageRef}
                 className={css.textarea}
+                rows={1}
                 value={message}
                 placeholder={t('commit.placeholder', { branch: branchName })}
                 disabled={writesDisabled || generating}
@@ -501,17 +556,16 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                   }
                 }}
               />
-              {GENERATE_ENABLED ? (
-                <span className={css.generate}>
-                  <IconButton
-                    label={generateDisabled ? t('commit.generateDisabled') : generating ? t('commit.generating') : t('commit.generate')}
-                    disabled={generateDisabled}
-                    onClick={generate}
-                  >
-                    <IconSparkle />
-                  </IconButton>
-                </span>
-              ) : null}
+              <span className={css.generate} data-spinning={generating || undefined}>
+                <IconButton
+                  dense
+                  label={generateDisabled ? t('commit.generateDisabled') : generating ? t('commit.generating') : t('commit.generate')}
+                  disabled={generateDisabled}
+                  onClick={generate}
+                >
+                  <IconSparkle />
+                </IconButton>
+              </span>
             </div>
             {actions.commit || actions.push || actions.pull ? (
               <div className={css.actionRow} role="group" aria-label={t('section.commit')}>
@@ -584,8 +638,16 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                 <span className={css.sectionTitle}>{t('section.changes')}</span>
                 {dirtyCount > 0 ? <span className={css.sectionCount}>{dirtyCount}</span> : null}
               </button>
-              {stageAllPaths.length > 0 ? (
-                <div className={css.sectionActions}>
+              <div className={css.sectionActions}>
+                <IconButton
+                  dense
+                  label={customTemplate === null ? t('commit.template') : t('commit.templateCustom')}
+                  active={customTemplate !== null}
+                  onClick={openTemplate}
+                >
+                  <IconTune />
+                </IconButton>
+                {stageAllPaths.length > 0 ? (
                   <IconButton
                     dense
                     label={writesDisabled ? t('action.disabledBusy') : t('action.stageAll')}
@@ -596,8 +658,8 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                   >
                     <IconPlus />
                   </IconButton>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
             </div>
             {changesOpen ? (
               <div className={css.paneBody}>
@@ -619,17 +681,20 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                   }}
                 />
                 <FileGroup
-                  hideHead
                   title={t('section.unstaged')}
                   files={status.unstaged}
                   selected={selected}
                   staged={false}
                   action="stage"
                   actionLabel={t('action.stage')}
+                  bulkLabel={t('action.stageAllUnstaged')}
                   rowKey="u"
                   disabled={writesDisabled}
                   onOpenDiff={onOpenDiff}
                   onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path])) }}
+                  onBulkAction={() => {
+                    if (workspaceId) void runWrite(() => client.stage(workspaceId, status.unstaged.map(file => file.path)))
+                  }}
                 />
                 <FileGroup
                   title={t('section.untracked')}
@@ -727,6 +792,55 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
             ) : null}
           </section>
         </>
+      ) : null}
+
+      {templateOpen ? (
+        <div
+          className={css.dialogMask}
+          onClick={closeTemplate}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') closeTemplate()
+          }}
+        >
+          <div
+            className={`${css.dialog} ${css.dialogWide}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="git-commit-template-title"
+            onClick={(event) => { event.stopPropagation() }}
+          >
+            <h2 id="git-commit-template-title">{t('commit.templateTitle')}</h2>
+            <p>{t('commit.templateHint')}</p>
+            <label className={css.field}>
+              <span>{t('commit.templateTitle')}</span>
+              <textarea
+                className={css.templateInput}
+                value={templateDraft}
+                autoFocus
+                onChange={(event) => { setTemplateDraft(event.target.value) }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') closeTemplate()
+                }}
+              />
+            </label>
+            <div className={css.dialogRow}>
+              <button
+                type="button"
+                className={css.dialogCancel}
+                onClick={() => { setTemplateDraft(localeDefault) }}
+              >
+                {t('commit.templateReset')}
+              </button>
+              <span className={css.sectionGrow} />
+              <button type="button" className={css.dialogCancel} onClick={closeTemplate}>
+                {t('commit.templateCancel')}
+              </button>
+              <button type="button" className={css.dialogOk} onClick={saveTemplate}>
+                {t('commit.templateSave')}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {prompt !== null ? (

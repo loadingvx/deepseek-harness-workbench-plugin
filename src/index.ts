@@ -5,7 +5,7 @@ import { registerGitTools } from './host/tools.ts'
 import { WorkspaceFs } from './host/workspace-fs.ts'
 
 export const name = 'dsh-workbench-plugin'
-export const inject = ['tools', 'webServer', 'llm']
+export const inject = ['tools', 'webServer', 'llm', 'agentDefaultModel']
 
 /** Host half: Git service, workspace files, JSON API, and model-facing tools. */
 export function apply(ctx: Context): void {

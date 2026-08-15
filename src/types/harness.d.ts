@@ -28,13 +28,21 @@ declare module '@deepseek-ai/cordis' {
         getSnapshot: () => { running?: boolean }
       } } | undefined
     }
+    agentDefaultModel?: {
+      currentSelection(): { provider: string; model: string; reasoningEffort?: string }
+    }
     llm: {
       listProviders(): Array<{ id: string }>
       listModels(provider: string): Promise<Array<{ id: string }>>
+      resolveModelInfo?(provider: string, model: string, signal?: AbortSignal): Promise<{
+        reasoning?: { efforts: Array<{ id: string }>; defaultEffort?: string }
+      }>
       stream(options: Record<string, unknown>): AsyncIterable<{
         type?: string
+        index?: number
         text?: string
-        reason?: { kind?: string; failure?: { message?: string } }
+        block?: { type?: string; text?: string }
+        reason?: { kind?: string; failure?: { message?: string; code?: string } }
       }>
     }
     slots: {

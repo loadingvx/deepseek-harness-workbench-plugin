@@ -100,7 +100,7 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
   },
   LLM_FAILED: {
     messageZh: '自动生成提交说明失败。',
-    hintZh: '请稍后重试，或先自己填写提交说明。常见原因：模型未就绪、网络中断、或差异太大。',
+    hintZh: '请稍后重试，或先自己填写提交说明。常见原因：模型未就绪、网络中断、思考占用了输出、或差异太大。',
   },
   NOTHING_TO_DESCRIBE: {
     messageZh: '没有可描述的改动。',

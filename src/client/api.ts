@@ -35,7 +35,7 @@ export interface GitClient {
   stage(workspaceId: string, paths: string[]): Promise<GitResult<{ done: boolean }>>
   unstage(workspaceId: string, paths: string[]): Promise<GitResult<{ done: boolean }>>
   commit(workspaceId: string, message: string, all?: boolean): Promise<GitResult<GitCommitResult>>
-  generateCommitMessage(workspaceId: string): Promise<GitResult<GitCommitMessage>>
+  generateCommitMessage(workspaceId: string, template?: string): Promise<GitResult<GitCommitMessage>>
   push(workspaceId: string): Promise<GitResult<GitPushResult>>
   pull(workspaceId: string): Promise<GitResult<GitPullResult>>
   fetch(workspaceId: string): Promise<GitResult<GitFetchResult>>
@@ -76,8 +76,8 @@ export function createGitClient(): GitClient {
     commit: (workspaceId, message, all) => request('/git/commit', {
       method: 'POST', body: JSON.stringify({ workspaceId, message, all: all === true }),
     }),
-    generateCommitMessage: workspaceId => request('/git/commit-message', {
-      method: 'POST', body: JSON.stringify({ workspaceId }),
+    generateCommitMessage: (workspaceId, template) => request('/git/commit-message', {
+      method: 'POST', body: JSON.stringify({ workspaceId, template }),
     }),
     push: workspaceId => request('/git/push', {
       method: 'POST', body: JSON.stringify({ workspaceId }),

@@ -144,7 +144,9 @@ export function registerGitHttp(
       } else if (method === 'POST' && route === '/git/commit-message') {
         const body = await readJson(req)
         result = await wrap(async () => {
-          const message = await generateCommitMessage(ctx, git, rootOf(body))
+          const message = await generateCommitMessage(ctx, git, rootOf(body), {
+            template: typeof body.template === 'string' ? body.template : undefined,
+          })
           return { message }
         })
       } else if (method === 'POST' && route === '/git/push') {
