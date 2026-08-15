@@ -13,11 +13,11 @@ A workbench UI plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deep
 | | |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.5** (`latest`) |
+| Version | **0.1.4** (`latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.5
++ dsh-workbench-plugin@0.1.4
 ```
 
 Maintainers publish with `bash devops/release.sh` (uses your existing `npm login` on the official registry; never put credentials in the repo).
@@ -42,7 +42,7 @@ If an older build is already installed, a dismissible bar appears at the top of 
 
 A failed registry lookup stays quiet. Dismiss skips only that latest version; a newer release will prompt again.
 
-**0.1.1 cannot show this banner** (the checker is not in that build). Upgrade once by hand to 0.1.5; later releases will prompt in the UI.
+**0.1.1 cannot show this banner** (the checker is not in that build). Upgrade once by hand to 0.1.4; later releases will prompt in the UI.
 
 ## License
 
