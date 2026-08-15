@@ -2,8 +2,9 @@ import { fail } from '../shared/errors.ts'
 import type {
   ExternalEditorId, ExternalEditorsSnapshot, ExternalOpenResult,
   FsFileSnapshot, FsListSnapshot, FsSearchSnapshot, FsWriteResult,
-  GitBranchInfo, GitCommitMessage, GitCommitResult, GitDiffSnapshot, GitLogEntry, GitPullResult,
-  GitPushResult, GitResult, GitStatusSnapshot, GitSwitchResult, PluginUpdateSnapshot,
+  GitBranchInfo, GitCommitMessage, GitCommitResult, GitCreateBranchResult, GitDiffSnapshot,
+  GitFetchResult, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
+  GitStatusSnapshot, GitSwitchResult, PluginUpdateSnapshot,
 } from '../shared/types.ts'
 
 async function request<T>(path: string, init?: RequestInit): Promise<GitResult<T>> {
@@ -37,6 +38,9 @@ export interface GitClient {
   generateCommitMessage(workspaceId: string): Promise<GitResult<GitCommitMessage>>
   push(workspaceId: string): Promise<GitResult<GitPushResult>>
   pull(workspaceId: string): Promise<GitResult<GitPullResult>>
+  fetch(workspaceId: string): Promise<GitResult<GitFetchResult>>
+  createBranch(workspaceId: string, name: string): Promise<GitResult<GitCreateBranchResult>>
+  mergeBranch(workspaceId: string, name: string): Promise<GitResult<GitMergeResult>>
   switchBranch(workspaceId: string, name: string): Promise<GitResult<GitSwitchResult>>
   listDir(workspaceId: string, path?: string): Promise<GitResult<FsListSnapshot>>
   searchFiles(workspaceId: string, query: string, hidden?: boolean): Promise<GitResult<FsSearchSnapshot>>
@@ -80,6 +84,15 @@ export function createGitClient(): GitClient {
     }),
     pull: workspaceId => request('/git/pull', {
       method: 'POST', body: JSON.stringify({ workspaceId }),
+    }),
+    fetch: workspaceId => request('/git/fetch', {
+      method: 'POST', body: JSON.stringify({ workspaceId }),
+    }),
+    createBranch: (workspaceId, name) => request('/git/create-branch', {
+      method: 'POST', body: JSON.stringify({ workspaceId, name }),
+    }),
+    mergeBranch: (workspaceId, name) => request('/git/merge', {
+      method: 'POST', body: JSON.stringify({ workspaceId, name }),
     }),
     switchBranch: (workspaceId, name) => request('/git/switch', {
       method: 'POST', body: JSON.stringify({ workspaceId, name }),

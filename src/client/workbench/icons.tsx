@@ -211,3 +211,47 @@ export function IconMore() {
     </Icon>
   )
 }
+
+/** Compact graph: commit dots + short subject lines, no meta. */
+export function IconCompact() {
+  return (
+    <Icon>
+      <path d="M4 3.2v9.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="4" cy="4" r="1.3" />
+      <circle cx="4" cy="8" r="1.3" />
+      <circle cx="4" cy="12" r="1.3" />
+      <path d="M7 4h6M7 8h6M7 12h6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </Icon>
+  )
+}
+
+export function IconFetch() {
+  return (
+    <Icon>
+      <path d="M8 2.5v7.2M5 7.2 8 10.4 11 7.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M3 12.6h10" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </Icon>
+  )
+}
+
+export function IconNewBranch() {
+  return (
+    <Icon>
+      <circle cx="4" cy="4" r="1.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="4" cy="12" r="1.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M4 5.5v5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M10 3.2v5.2M7.6 5.8h4.8" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </Icon>
+  )
+}
+
+export function IconMerge() {
+  return (
+    <Icon>
+      <circle cx="4.2" cy="3.6" r="1.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="4.2" cy="12.4" r="1.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M4.2 5.1v5.8M5.6 4.2c3.6 0 5.2 2 5.2 4.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M8.6 10.6 11.6 8.2 8.6 5.8" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </Icon>
+  )
+}

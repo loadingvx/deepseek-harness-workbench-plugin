@@ -1,10 +1,12 @@
-import { access } from 'node:fs/promises'
+import { access, stat } from 'node:fs/promises'
 import { join, normalize, relative, resolve as resolvePath, sep } from 'node:path'
 import { GitError } from '../shared/errors.ts'
+import { invalidBranchName, normalizeBranchName } from '../shared/branch-name.ts'
+import { MAX_FILE_BYTES } from './workspace-fs.ts'
 import type {
-  FileStatusKind, GitBranchInfo, GitCommitResult, GitDiffSnapshot, GitFileChange,
-  GitLogEntry, GitProbe, GitPullResult, GitPushResult, GitRefMark, GitStatusSnapshot,
-  GitSwitchResult,
+  FileStatusKind, GitBranchInfo, GitCommitResult, GitCreateBranchResult, GitDiffSnapshot,
+  GitFetchResult, GitFileChange, GitLogEntry, GitMergeResult, GitProbe, GitPullResult,
+  GitPushResult, GitRefMark, GitStatusSnapshot, GitSwitchResult,
 } from '../shared/types.ts'
 import { gitAvailable, runGit } from './git-exec.ts'
 import { GitMutex } from './mutex.ts'
@@ -61,6 +63,16 @@ function parsePath(raw: string): string {
   }
   const arrow = trimmed.indexOf(' -> ')
   return arrow === -1 ? trimmed : trimmed.slice(arrow + 4)
+}
+
+/** Visible header so an empty new file is not mistaken for “no diff”. */
+export function emptyNewFileDiff(path: string): string {
+  return [
+    `diff --git a/${path} b/${path}`,
+    'new file mode 100644',
+    '--- /dev/null',
+    `+++ b/${path}`,
+  ].join('\n') + '\n'
 }
 
 export function assertSafeRepoPath(root: string, filePath: string): string {
@@ -198,14 +210,19 @@ export class GitService {
 
   async diff(root: string, path?: string, staged = false, signal?: AbortSignal): Promise<GitDiffSnapshot> {
     await this.requireRepo(root, signal)
+    const safePath = path !== undefined ? assertSafeRepoPath(root, path) : undefined
+    if (safePath !== undefined && !staged) {
+      const untracked = await this.diffUntrackedFile(root, safePath, signal)
+      if (untracked !== undefined) {
+        return { staged, path: safePath, text: untracked, empty: untracked.trim() === '' }
+      }
+    }
     const args = ['diff', '--no-color', '--find-renames']
     if (staged) args.push('--cached')
-    if (path !== undefined) {
-      args.push('--', assertSafeRepoPath(root, path))
-    }
+    if (safePath !== undefined) args.push('--', safePath)
     const result = await runGit({ cwd: root, args, signal, allowNonZero: true })
     const text = result.stdout
-    return { staged, text, empty: text.trim() === '', ...path !== undefined ? { path } : {} }
+    return { staged, text, empty: text.trim() === '', ...safePath !== undefined ? { path: safePath } : {} }
   }
 
   async log(root: string, limit = 20, signal?: AbortSignal): Promise<GitLogEntry[]> {
@@ -325,10 +342,7 @@ export class GitService {
   async switchBranch(root: string, name: string, signal?: AbortSignal): Promise<GitSwitchResult> {
     return this.mutex.run(async () => {
       await this.requireRepo(root, signal)
-      const trimmed = name.trim()
-      if (trimmed === '' || trimmed.startsWith('-')) throw new GitError('BRANCH_MISSING')
-      const existing = await this.branches(root, signal)
-      if (!existing.some(branch => branch.name === trimmed)) throw new GitError('BRANCH_MISSING')
+      const trimmed = this.requireExistingBranch(name, await this.branches(root, signal))
       const snapshot = await this.status(root, signal)
       const dirty = snapshot.staged.length + snapshot.unstaged.length + snapshot.untracked.length
       if (dirty > 0) throw new GitError('DIRTY_WORKTREE')
@@ -337,10 +351,111 @@ export class GitService {
     })
   }
 
+  async fetch(root: string, signal?: AbortSignal): Promise<GitFetchResult> {
+    return this.mutex.run(async () => {
+      await this.requireRepo(root, signal)
+      const probe = await this.probe(root, signal)
+      if (probe.remote === undefined) throw new GitError('NO_REMOTE')
+      await runGit({ cwd: root, args: ['fetch', '--prune', probe.remote], signal, timeoutMs: 90_000 })
+      return { remote: probe.remote }
+    })
+  }
+
+  async createBranch(root: string, name: string, signal?: AbortSignal): Promise<GitCreateBranchResult> {
+    return this.mutex.run(async () => {
+      await this.requireRepo(root, signal)
+      const trimmed = this.requireNewBranchName(name)
+      const existing = await this.branches(root, signal)
+      if (existing.some(branch => branch.name === trimmed)) throw new GitError('BRANCH_EXISTS')
+      await runGit({ cwd: root, args: ['switch', '-c', trimmed], signal })
+      return { branch: trimmed }
+    })
+  }
+
+  async mergeBranch(root: string, name: string, signal?: AbortSignal): Promise<GitMergeResult> {
+    return this.mutex.run(async () => {
+      await this.requireRepo(root, signal)
+      const probe = await this.probe(root, signal)
+      if (probe.detached) throw new GitError('DETACHED_HEAD')
+      const current = probe.branch
+      if (current === undefined || current.trim() === '') throw new GitError('BRANCH_MISSING')
+      const trimmed = this.requireExistingBranch(name, await this.branches(root, signal))
+      if (trimmed === current) throw new GitError('GIT_FAILED', '不能把当前分支合并到自己。')
+      const snapshot = await this.status(root, signal)
+      const dirty = snapshot.staged.length + snapshot.unstaged.length + snapshot.untracked.length
+      if (dirty > 0) throw new GitError('DIRTY_WORKTREE')
+      await this.assertNoMergeLock(root)
+      try {
+        await runGit({ cwd: root, args: ['merge', '--no-edit', '--', trimmed], signal })
+      } catch (error) {
+        const conflict = await this.hasMergeHead(root)
+        await runGit({ cwd: root, args: ['merge', '--abort'], signal, allowNonZero: true })
+        if (conflict || (error instanceof GitError && error.code === 'MERGE_CONFLICT')) {
+          throw new GitError('MERGE_CONFLICT')
+        }
+        throw error
+      }
+      return { branch: current, from: trimmed }
+    })
+  }
+
+  /** Untracked files are invisible to `git diff`; show them as a full addition. */
+  private async diffUntrackedFile(root: string, safePath: string, signal?: AbortSignal): Promise<string | undefined> {
+    let info
+    try {
+      info = await stat(join(root, safePath))
+    } catch {
+      return undefined
+    }
+    if (info.isDirectory()) throw new GitError('FS_IS_DIRECTORY')
+    if (info.size > MAX_FILE_BYTES) throw new GitError('FS_TOO_LARGE')
+    const listed = await runGit({
+      cwd: root,
+      args: ['ls-files', '--error-unmatch', '--', safePath],
+      signal,
+      allowNonZero: true,
+    })
+    if (listed.exitCode === 0) return undefined
+    const result = await runGit({
+      cwd: root,
+      args: ['diff', '--no-color', '--no-index', '--', '/dev/null', safePath],
+      signal,
+      allowNonZero: true,
+    })
+    if (result.exitCode > 1 && result.stdout.trim() === '') {
+      throw new GitError('GIT_FAILED', result.stderr.trim() || `无法读取未跟踪文件 ${safePath}`)
+    }
+    if (result.stdout.trim() !== '') return result.stdout
+    return emptyNewFileDiff(safePath)
+  }
+
+  private requireNewBranchName(name: string): string {
+    const reason = invalidBranchName(name)
+    if (reason !== null) throw new GitError('BRANCH_INVALID')
+    return normalizeBranchName(name)
+  }
+
+  private requireExistingBranch(name: string, existing: GitBranchInfo[]): string {
+    const reason = invalidBranchName(name)
+    if (reason !== null) throw new GitError(reason === 'empty' ? 'BRANCH_MISSING' : 'BRANCH_INVALID')
+    const trimmed = normalizeBranchName(name)
+    if (!existing.some(branch => branch.name === trimmed)) throw new GitError('BRANCH_MISSING')
+    return trimmed
+  }
+
   private async requireRepo(root: string, signal?: AbortSignal): Promise<void> {
     const probe = await this.probe(root, signal)
     if (!probe.gitAvailable) throw new GitError('GIT_NOT_FOUND')
     if (!probe.isRepo) throw new GitError('NOT_A_REPO')
+  }
+
+  private async hasMergeHead(root: string): Promise<boolean> {
+    try {
+      await access(join(root, '.git', 'MERGE_HEAD'))
+      return true
+    } catch {
+      return false
+    }
   }
 
   private async assertNoMergeLock(root: string): Promise<void> {
@@ -350,11 +465,8 @@ export class GitService {
     } catch (error) {
       if (error instanceof GitError) throw error
     }
-    try {
-      await access(join(root, '.git', 'MERGE_HEAD'))
+    if (await this.hasMergeHead(root)) {
       throw new GitError('GIT_FAILED', '仓库正在合并中，请先处理合并再提交。')
-    } catch (error) {
-      if (error instanceof GitError) throw error
     }
   }
 }

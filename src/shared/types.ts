@@ -11,6 +11,9 @@ export type GitErrorCode =
   | 'DIRTY_WORKTREE'
   | 'BUSY'
   | 'BRANCH_MISSING'
+  | 'BRANCH_EXISTS'
+  | 'BRANCH_INVALID'
+  | 'MERGE_CONFLICT'
   | 'IDENTITY_MISSING'
   | 'INVALID_PATH'
   | 'NETWORK'
@@ -134,6 +137,19 @@ export interface GitPushResult {
 export interface GitPullResult {
   remote: string
   branch: string
+}
+
+export interface GitFetchResult {
+  remote: string
+}
+
+export interface GitCreateBranchResult {
+  branch: string
+}
+
+export interface GitMergeResult {
+  branch: string
+  from: string
 }
 
 export interface FsDirEntry {

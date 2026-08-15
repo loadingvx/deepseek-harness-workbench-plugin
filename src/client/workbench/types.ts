@@ -22,16 +22,23 @@ export interface FileTab {
   path: string
   title: string
   staged?: boolean
+  /** 1 = 主终端；2+ = 额外终端。展示文案用 terminalTabLabel，不要写死中文。 */
+  termIndex?: number
 }
 
-export function createTerminalTab(id = TERMINAL_TAB_ID, title = '终端'): FileTab {
-  return { id, kind: 'terminal', path: '', title }
+export function createTerminalTab(id = TERMINAL_TAB_ID, termIndex = 1): FileTab {
+  return { id, kind: 'terminal', path: '', title: '', termIndex }
 }
 
 export function nextTerminalTab(tabs: FileTab[]): FileTab {
   const count = tabs.filter(tab => tab.kind === 'terminal').length
   const n = count + 1
-  return createTerminalTab(`terminal:${Date.now()}`, n <= 1 ? '终端' : `终端 ${n}`)
+  return createTerminalTab(`terminal:${Date.now()}`, n)
+}
+
+export function terminalTabLabel(tab: FileTab, t: Translate): string {
+  const n = tab.termIndex ?? 0
+  return n > 1 ? t('term.tabN', { n }) : t('term.tab')
 }
 
 export interface FileBuffer {

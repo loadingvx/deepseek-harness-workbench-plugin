@@ -4,7 +4,7 @@ import type { GitStatusSnapshot, PluginUpdateSnapshot } from '../../shared/types
 import { redactSecrets } from '../../shared/redact.ts'
 import { PLUGIN_PAGE_URL } from '../../shared/version.ts'
 import { fileName, shortPath, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
-import type { FileTab, Translate } from './types.ts'
+import { terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import css from './StatusBar.module.css'
 
 export function StatusBar({
@@ -214,7 +214,7 @@ function StatusTabs({
           <span className={css.item}>{t('status.noFile')}</span>
         ) : tabs.map(tab => {
           const label = tab.kind === 'terminal'
-            ? (tab.title || t('term.tab'))
+            ? terminalTabLabel(tab, t)
             : tab.kind === 'diff'
               ? t('status.diff', { name: fileName(tab.path) })
               : fileName(tab.path)

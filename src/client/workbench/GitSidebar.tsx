@@ -6,7 +6,8 @@ import type {
 import { GitGraph } from './GitGraph.tsx'
 import { IconButton } from './IconButton.tsx'
 import { visibleSyncActions } from '../../shared/sync-actions.ts'
-import { IconBranch, IconCheck, IconChevron, IconMinus, IconPlus, IconPull, IconPush, IconRefresh, IconSparkle } from './icons.tsx'
+import { invalidBranchName } from '../../shared/branch-name.ts'
+import { IconBranch, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRefresh, IconSparkle } from './icons.tsx'
 import type { Translate } from './types.ts'
 import { clampGraphHeight, GRAPH_DEFAULT_H, GRAPH_MIN_H, measureReservedAboveGraph } from './graph-layout.ts'
 import css from './GitSidebar.module.css'
@@ -34,6 +35,9 @@ const GENERATE_ENABLED = false
 const GRAPH_H_KEY = 'dsh-workbench-graph-h'
 const CHANGES_OPEN_KEY = 'dsh-workbench-changes-open'
 const GRAPH_OPEN_KEY = 'dsh-workbench-graph-open'
+const GRAPH_COMPACT_KEY = 'dsh-workbench-graph-compact'
+
+type GraphPrompt = 'branch' | 'merge' | null
 
 function readFlag(key: string, fallback: boolean): boolean {
   try {
@@ -75,7 +79,7 @@ function FileRow({
 }
 
 function FileGroup({
-  title, files, selected, staged, action, actionLabel, bulkLabel, rowKey, disabled, onOpenDiff, onFileAction, onBulkAction,
+  title, files, selected, staged, action, actionLabel, bulkLabel, rowKey, disabled, hideHead, onOpenDiff, onFileAction, onBulkAction,
 }: {
   title: string
   files: GitFileChange[]
@@ -83,25 +87,28 @@ function FileGroup({
   staged: boolean
   action: 'stage' | 'unstage'
   actionLabel: string
-  bulkLabel: string
+  bulkLabel?: string
   rowKey: string
   disabled: boolean
+  hideHead?: boolean
   onOpenDiff: (path: string, staged: boolean) => void
   onFileAction: (path: string) => void
-  onBulkAction: () => void
+  onBulkAction?: () => void
 }) {
   if (files.length === 0) return null
   return (
     <div className={css.group}>
-      <div className={css.groupHead}>
-        <span className={css.groupTitle}>{title}</span>
-        <span className={css.sectionCount}>{files.length}</span>
-        <span className={css.sectionGrow} />
-        <IconButton label={bulkLabel} disabled={disabled} onClick={onBulkAction}>
-          {action === 'stage' ? <IconPlus /> : <IconMinus />}
-        </IconButton>
-      </div>
-      <ul className={css.files}>
+      {hideHead || bulkLabel === undefined || onBulkAction === undefined ? null : (
+        <div className={css.groupHead}>
+          <span className={css.groupTitle}>{title}</span>
+          <span className={css.sectionCount}>{files.length}</span>
+          <span className={css.sectionGrow} />
+          <IconButton label={bulkLabel} disabled={disabled} onClick={onBulkAction}>
+            {action === 'stage' ? <IconPlus /> : <IconMinus />}
+          </IconButton>
+        </div>
+      )}
+      <ul className={css.files} aria-label={title}>
         {files.map(file => (
           <FileRow
             key={`${rowKey}:${file.path}`}
@@ -132,6 +139,10 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   const [message, setMessage] = useState('')
   const [changesOpen, setChangesOpen] = useState(() => readFlag(CHANGES_OPEN_KEY, true))
   const [graphOpen, setGraphOpen] = useState(() => readFlag(GRAPH_OPEN_KEY, true))
+  const [graphCompact, setGraphCompact] = useState(() => readFlag(GRAPH_COMPACT_KEY, false))
+  const [prompt, setPrompt] = useState<GraphPrompt>(null)
+  const [promptValue, setPromptValue] = useState('')
+  const [promptError, setPromptError] = useState<string | null>(null)
   const [graphH, setGraphH] = useState(() => {
     try {
       const raw = Number(localStorage.getItem(GRAPH_H_KEY))
@@ -217,6 +228,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   const unstagedCount = status?.unstaged.length ?? 0
   const untrackedCount = status?.untracked.length ?? 0
   const dirtyCount = stagedCount + unstagedCount + untrackedCount
+  const stageAllPaths = [...(status?.unstaged ?? []), ...(status?.untracked ?? [])].map(file => file.path)
   const branchName = status?.probe.detached ? t('panel.detached') : (status?.probe.branch ?? t('panel.title'))
   const commitAll = stagedCount === 0 && dirtyCount > 0
   const commitDisabledReason = message.trim() === ''
@@ -239,14 +251,45 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   const remoteLabel = probe?.upstream ?? (probe?.remote !== undefined ? `${probe.remote}/${branchName}` : branchName)
   const pushDisabledReason = busy
     ? t('action.disabledBusy')
-    : (probe?.behind ?? 0) > 0
-      ? t('push.disabledBehind')
-      : null
+    : probe?.detached === true
+      ? t('push.disabledDetached')
+      : probe?.remote === undefined
+        ? t('push.disabledNoRemote')
+        : (probe?.behind ?? 0) > 0
+          ? t('push.disabledBehind')
+          : (probe?.ahead ?? 0) === 0 && probe?.upstream !== undefined
+            ? t('push.disabledNothing')
+            : !probe?.hasHead
+              ? t('push.disabledNothing')
+              : null
   const pullDisabledReason = busy
     ? t('action.disabledBusy')
-    : dirtyCount > 0
-      ? t('pull.disabledDirty')
+    : probe?.detached === true
+      ? t('pull.disabledDetached')
+      : probe?.remote === undefined
+        ? t('pull.disabledNoRemote')
+        : probe?.upstream === undefined
+          ? t('pull.disabledNoUpstream')
+          : dirtyCount > 0
+            ? t('pull.disabledDirty')
+            : (probe?.behind ?? 0) === 0
+              ? t('pull.disabledNothing')
+              : null
+  const fetchDisabledReason = busy
+    ? t('action.disabledBusy')
+    : probe?.remote === undefined
+      ? t('fetch.disabledNoRemote')
       : null
+  const mergeTargets = branches.filter(branch => !branch.current && branch.name !== probe?.branch)
+  const mergeDisabledReason = busy
+    ? t('action.disabledBusy')
+    : probe?.detached === true
+      ? t('merge.disabledDetached')
+      : dirtyCount > 0
+        ? t('merge.disabledDirty')
+        : mergeTargets.length === 0
+          ? t('merge.disabledNone')
+          : null
   const writesDisabled = busy || status === null || !status.probe.gitAvailable || !status.probe.isRepo
   const generateDisabled = writesDisabled || generating || dirtyCount === 0
   const graphFills = changesOpen === false && graphOpen
@@ -278,6 +321,23 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
       return !open
     })
   }
+  const toggleCompact = (): void => {
+    setGraphCompact((on) => {
+      writeFlag(GRAPH_COMPACT_KEY, !on)
+      return !on
+    })
+  }
+  const closePrompt = (): void => {
+    setPrompt(null)
+    setPromptValue('')
+    setPromptError(null)
+  }
+  const openPrompt = (kind: Exclude<GraphPrompt, null>): void => {
+    if (writesDisabled) return
+    setPrompt(kind)
+    setPromptValue('')
+    setPromptError(null)
+  }
 
   const commit = (): void => {
     if (workspaceId === undefined || commitDisabledReason !== null) return
@@ -296,6 +356,63 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   const pull = (): void => {
     if (workspaceId === undefined || pullDisabledReason !== null) return
     void runWrite(() => client.pull(workspaceId))
+  }
+
+  const fetchRemote = (): void => {
+    if (workspaceId === undefined || fetchDisabledReason !== null) return
+    void runWrite(() => client.fetch(workspaceId))
+  }
+
+  const runPromptWrite = async (
+    action: () => Promise<GitResult<unknown>>,
+    keepCodes: readonly string[],
+  ): Promise<void> => {
+    if (busy) return
+    setBusy(true)
+    const result = await action()
+    setBusy(false)
+    if (!result.ok) {
+      if (keepCodes.includes(result.code)) {
+        setPromptError(result.messageZh)
+        return
+      }
+      closePrompt()
+      setError(result)
+      return
+    }
+    setError(null)
+    closePrompt()
+    await refresh()
+  }
+
+  const submitPrompt = (): void => {
+    if (workspaceId === undefined || writesDisabled) return
+    if (prompt === 'branch') {
+      const reason = invalidBranchName(promptValue)
+      if (reason === 'empty') {
+        setPromptError(t('branch.newEmpty'))
+        return
+      }
+      if (reason === 'invalid') {
+        setPromptError(t('branch.newInvalid'))
+        return
+      }
+      void runPromptWrite(
+        () => client.createBranch(workspaceId, promptValue),
+        ['BRANCH_EXISTS', 'BRANCH_INVALID'],
+      )
+      return
+    }
+    if (prompt === 'merge') {
+      if (promptValue.trim() === '') {
+        setPromptError(t('merge.disabledEmpty'))
+        return
+      }
+      void runPromptWrite(
+        () => client.mergeBranch(workspaceId, promptValue),
+        ['BRANCH_MISSING', 'BRANCH_INVALID'],
+      )
+    }
   }
 
   const generate = (): void => {
@@ -437,6 +554,20 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                 <span className={css.sectionTitle}>{t('section.changes')}</span>
                 {dirtyCount > 0 ? <span className={css.sectionCount}>{dirtyCount}</span> : null}
               </button>
+              {stageAllPaths.length > 0 ? (
+                <div className={css.sectionActions}>
+                  <IconButton
+                    dense
+                    label={writesDisabled ? t('action.disabledBusy') : t('action.stageAll')}
+                    disabled={writesDisabled}
+                    onClick={() => {
+                      if (workspaceId) void runWrite(() => client.stage(workspaceId, stageAllPaths))
+                    }}
+                  >
+                    <IconPlus />
+                  </IconButton>
+                </div>
+              ) : null}
             </div>
             {changesOpen ? (
               <div className={css.paneBody}>
@@ -458,20 +589,17 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                   }}
                 />
                 <FileGroup
+                  hideHead
                   title={t('section.unstaged')}
                   files={status.unstaged}
                   selected={selected}
                   staged={false}
                   action="stage"
                   actionLabel={t('action.stage')}
-                  bulkLabel={t('action.stageAllUnstaged')}
                   rowKey="u"
                   disabled={writesDisabled}
                   onOpenDiff={onOpenDiff}
                   onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path])) }}
-                  onBulkAction={() => {
-                    if (workspaceId) void runWrite(() => client.stage(workspaceId, status.unstaged.map(file => file.path)))
-                  }}
                 />
                 <FileGroup
                   title={t('section.untracked')}
@@ -510,14 +638,143 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                 <span className={css.sectionTitle}>{t('section.graph')}</span>
                 {log.length > 0 ? <span className={css.sectionCount}>{log.length}</span> : null}
               </button>
+              <div className={css.sectionActions}>
+                <IconButton
+                  dense
+                  label={graphCompact ? t('graph.compactOff') : t('graph.compactOn')}
+                  active={graphCompact}
+                  aria-pressed={graphCompact}
+                  onClick={toggleCompact}
+                >
+                  <IconCompact />
+                </IconButton>
+                <IconButton
+                  dense
+                  label={fetchDisabledReason ?? t('action.fetchOn', { remote: remoteLabel })}
+                  disabled={writesDisabled || fetchDisabledReason !== null}
+                  onClick={fetchRemote}
+                >
+                  <IconFetch />
+                </IconButton>
+                <IconButton
+                  dense
+                  label={pullDisabledReason ?? t('action.pullOn', { remote: remoteLabel })}
+                  disabled={writesDisabled || pullDisabledReason !== null}
+                  onClick={pull}
+                >
+                  <IconPull />
+                </IconButton>
+                <IconButton
+                  dense
+                  label={pushDisabledReason ?? t('action.pushOn', { remote: remoteLabel })}
+                  disabled={writesDisabled || pushDisabledReason !== null}
+                  onClick={push}
+                >
+                  <IconPush />
+                </IconButton>
+                <IconButton
+                  dense
+                  label={busy ? t('action.disabledBusy') : t('action.newBranch')}
+                  disabled={writesDisabled}
+                  onClick={() => { openPrompt('branch') }}
+                >
+                  <IconNewBranch />
+                </IconButton>
+                <IconButton
+                  dense
+                  label={mergeDisabledReason ?? t('action.merge')}
+                  disabled={writesDisabled || mergeDisabledReason !== null}
+                  onClick={() => { openPrompt('merge') }}
+                >
+                  <IconMerge />
+                </IconButton>
+              </div>
             </div>
             {graphOpen ? (
               <div className={css.paneBody}>
-                <GitGraph entries={log} emptyLabel={t('graph.empty')} t={t} />
+                <GitGraph entries={log} emptyLabel={t('graph.empty')} compact={graphCompact} t={t} />
               </div>
             ) : null}
           </section>
         </>
+      ) : null}
+
+      {prompt !== null ? (
+        <div
+          className={css.dialogMask}
+          onClick={closePrompt}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') closePrompt()
+          }}
+        >
+          <div
+            className={css.dialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="git-graph-prompt-title"
+            onClick={(event) => { event.stopPropagation() }}
+          >
+            <h2 id="git-graph-prompt-title">{prompt === 'branch' ? t('branch.newTitle') : t('merge.title')}</h2>
+            <p>{prompt === 'branch' ? t('branch.newHint') : t('merge.hint', { branch: branchName })}</p>
+            {prompt === 'branch' ? (
+              <label className={css.field}>
+                <span>{t('action.newBranch')}</span>
+                <input
+                  className={css.fieldInput}
+                  value={promptValue}
+                  placeholder={t('branch.newPlaceholder')}
+                  autoFocus
+                  disabled={busy}
+                  onChange={(event) => { setPromptValue(event.target.value); setPromptError(null) }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      submitPrompt()
+                    }
+                    if (event.key === 'Escape') closePrompt()
+                  }}
+                />
+              </label>
+            ) : (
+              <label className={css.field}>
+                <span>{t('merge.pick')}</span>
+                <select
+                  className={css.fieldInput}
+                  value={promptValue}
+                  autoFocus
+                  disabled={busy}
+                  onChange={(event) => { setPromptValue(event.target.value); setPromptError(null) }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      submitPrompt()
+                    }
+                    if (event.key === 'Escape') closePrompt()
+                  }}
+                >
+                  <option value="">{t('merge.pickPlaceholder')}</option>
+                  {mergeTargets.map(branch => (
+                    <option key={branch.name} value={branch.name}>{branch.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {promptError !== null ? <p className={css.fieldError}>{promptError}</p> : null}
+            <div className={css.dialogRow}>
+              <button type="button" className={css.dialogCancel} disabled={busy} onClick={closePrompt}>
+                {prompt === 'branch' ? t('branch.newCancel') : t('merge.cancel')}
+              </button>
+              <button
+                type="button"
+                className={css.dialogOk}
+                disabled={busy || (prompt === 'merge' && promptValue.trim() === '')}
+                onClick={submitPrompt}
+              >
+                {prompt === 'branch' ? t('branch.newConfirm') : t('merge.confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </aside>
   )

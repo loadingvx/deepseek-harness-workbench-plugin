@@ -1,4 +1,5 @@
 .root {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -105,7 +106,7 @@
 
 .sectionToggle {
   display: flex;
-  flex: 1;
+  flex: 1 1 0;
   align-items: center;
   gap: 4px;
   min-width: 0;
@@ -125,10 +126,26 @@
 }
 
 .sectionTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.sectionActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sectionActions::-webkit-scrollbar {
+  display: none;
 }
 
 .sectionCount {
@@ -401,6 +418,10 @@
   min-height: 36px;
 }
 
+.graph[data-compact] .graphRow {
+  min-height: 22px;
+}
+
 .graphRail {
   position: relative;
   flex: none;
@@ -416,6 +437,10 @@
   background: #3b82f6;
 }
 
+.graph[data-compact] .graphLine {
+  top: 12px;
+}
+
 .graphDot {
   position: absolute;
   top: 8px;
@@ -424,6 +449,10 @@
   height: 8px;
   border-radius: 50%;
   background: #3b82f6;
+}
+
+.graph[data-compact] .graphDot {
+  top: 6px;
 }
 
 .graphDot[data-head] {
@@ -435,6 +464,10 @@
   flex: 1;
   min-width: 0;
   padding: 4px 0 8px;
+}
+
+.graph[data-compact] .graphBody {
+  padding: 2px 0;
 }
 
 .graphTop {
@@ -457,10 +490,16 @@
 
 .graphMeta {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 2px;
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
+}
+
+.graphWhen {
+  flex: none;
+  font-variant-numeric: tabular-nums;
 }
 
 .refPill {
@@ -498,4 +537,101 @@
 .hash {
   font-family: var(--dsw-font-markdown-code-block-font-family, var(--ds-font-family-code));
   font-size: var(--dsw-font-markdown-code-block-font-size, 13px);
+}
+
+.dialogMask {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--dsw-alias-bg-base) 55%, transparent);
+}
+
+.dialog {
+  width: min(360px, calc(100% - 24px));
+  padding: 14px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: var(--dsw-shadow-lv2);
+}
+
+.dialog h2 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dialog p {
+  margin: 0 0 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 10px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.fieldInput {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.fieldInput:focus {
+  outline: 2px solid var(--dsw-alias-border-l1);
+}
+
+.fieldError {
+  margin: 0 0 10px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.dialogRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialogCancel,
+.dialogOk {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dialogCancel {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+}
+
+.dialogOk {
+  border: none;
+  background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-bg-base);
+}
+
+.dialogCancel:disabled,
+.dialogOk:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

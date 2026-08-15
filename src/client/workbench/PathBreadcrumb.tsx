@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { GitClient } from '../api.ts'
 import type { FsDirEntry, GitFail } from '../../shared/types.ts'
 import { FileKindIcon } from './file-icons.tsx'
-import type { FileTab, Translate } from './types.ts'
+import { terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import { breadcrumbParts } from './breadcrumb-path.ts'
 import css from './PathBreadcrumb.module.css'
 
@@ -76,7 +76,7 @@ export function PathBreadcrumb({
         {active?.kind === 'terminal' ? (
           <li className={css.item}>
             <span className={css.sep} aria-hidden>/</span>
-            <span className={css.crumb} data-current>{t('term.tab')}</span>
+            <span className={css.crumb} data-current>{terminalTabLabel(active, t)}</span>
           </li>
         ) : null}
         {parts.map((part, index) => {

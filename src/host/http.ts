@@ -153,6 +153,17 @@ export function registerGitHttp(
       } else if (method === 'POST' && route === '/git/pull') {
         const body = await readJson(req)
         result = await wrap(() => git.pull(rootOf(body)))
+      } else if (method === 'POST' && route === '/git/fetch') {
+        const body = await readJson(req)
+        result = await wrap(() => git.fetch(rootOf(body)))
+      } else if (method === 'POST' && route === '/git/create-branch') {
+        const body = await readJson(req)
+        const name = typeof body.name === 'string' ? body.name : ''
+        result = await wrap(() => git.createBranch(rootOf(body), name))
+      } else if (method === 'POST' && route === '/git/merge') {
+        const body = await readJson(req)
+        const name = typeof body.name === 'string' ? body.name : ''
+        result = await wrap(() => git.mergeBranch(rootOf(body), name))
       } else if (method === 'POST' && route === '/git/switch') {
         const body = await readJson(req)
         const name = typeof body.name === 'string' ? body.name : ''

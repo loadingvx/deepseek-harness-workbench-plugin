@@ -1,7 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { GitError } from '../shared/errors.ts'
-import { assertSafeRepoPath, type GitService } from './git-service.ts'
-import { runGit } from './git-exec.ts'
+import type { GitService } from './git-service.ts'
 
 const MAX_DIFF_CHARS = 60_000
 const GENERATE_TIMEOUT_MS = 45_000
@@ -63,14 +62,12 @@ export async function collectChangePayload(
   const unstaged = status.unstaged.length > 0 ? (await git.diff(root, undefined, false, signal)).text : ''
   const untracked: Array<{ path: string; patch: string }> = []
   for (const file of status.untracked.slice(0, 20)) {
-    const safe = assertSafeRepoPath(root, file.path)
-    const result = await runGit({
-      cwd: root,
-      args: ['diff', '--no-color', '--no-index', '--', '/dev/null', safe],
-      signal,
-      allowNonZero: true,
-    })
-    untracked.push({ path: file.path, patch: result.stdout.slice(0, 8_000) })
+    try {
+      const result = await git.diff(root, file.path, false, signal)
+      untracked.push({ path: file.path, patch: result.text.slice(0, 8_000) })
+    } catch {
+      untracked.push({ path: file.path, patch: '' })
+    }
   }
   return { staged, unstaged, untracked }
 }

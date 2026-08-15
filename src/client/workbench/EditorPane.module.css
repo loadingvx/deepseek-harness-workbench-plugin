@@ -280,6 +280,25 @@
   line-height: 18px;
 }
 
+.diffPane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.diffHint {
+  flex: none;
+  margin: 0;
+  padding: 16px 20px;
+  max-width: 36em;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
 .banner {
   margin: 12px;
   padding: 10px;
@@ -347,7 +366,8 @@
   background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 16%, transparent);
 }
 
-.diffLine[data-kind='hunk'] {
+.diffLine[data-kind='hunk'],
+.diffLine[data-kind='meta'] {
   color: var(--dsw-alias-label-caption);
 }
 

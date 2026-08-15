@@ -6,7 +6,7 @@ import { joinWorkspaceFile, suggestNewFileDir, termIdFromTabId } from '../../sha
 import { IconClose, IconDiff, IconMore, IconPanelOff, IconPlus, IconSave, IconTerminal } from './icons.tsx'
 import { PathBreadcrumb } from './PathBreadcrumb.tsx'
 import { TerminalView } from './TerminalView.tsx'
-import { TERMINAL_TAB_ID, type FileBuffer, type FileTab, type Translate } from './types.ts'
+import { TERMINAL_TAB_ID, terminalTabLabel, type FileBuffer, type FileTab, type Translate } from './types.ts'
 import css from './EditorPane.module.css'
 
 export interface EditorPaneProps {
@@ -39,7 +39,14 @@ function fileName(path: string): string {
 function parseDiff(text: string): Array<{ kind: 'add' | 'del' | 'hunk' | 'meta' | 'ctx'; text: string }> {
   if (text.trim() === '') return []
   return text.split(/\r?\n/).map((line) => {
-    if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('diff ')) {
+    if (
+      line.startsWith('+++') || line.startsWith('---') || line.startsWith('diff ')
+      || line.startsWith('index ') || line.startsWith('new file ') || line.startsWith('deleted file ')
+      || line.startsWith('old mode ') || line.startsWith('new mode ')
+      || line.startsWith('rename from ') || line.startsWith('rename to ')
+      || line.startsWith('copy from ') || line.startsWith('copy to ')
+      || line.startsWith('similarity index') || line.startsWith('Binary files ')
+    ) {
       return { kind: 'meta' as const, text: line }
     }
     if (line.startsWith('@@')) return { kind: 'hunk' as const, text: line }
@@ -47,6 +54,18 @@ function parseDiff(text: string): Array<{ kind: 'add' | 'del' | 'hunk' | 'meta' 
     if (line.startsWith('-')) return { kind: 'del' as const, text: line }
     return { kind: 'ctx' as const, text: line }
   })
+}
+
+function isBinaryDiff(text: string): boolean {
+  return /^Binary files /m.test(text)
+}
+
+function isNewEmptyDiff(
+  text: string,
+  rows: Array<{ kind: 'add' | 'del' | 'hunk' | 'meta' | 'ctx' }>,
+): boolean {
+  if (rows.some(row => row.kind === 'add' || row.kind === 'del')) return false
+  return /^new file /m.test(text) || /^--- \/dev\/null$/m.test(text)
 }
 
 /** Center editor: explorer + tabs + text/diff, with unsaved-close confirmation. */
@@ -75,10 +94,13 @@ export function EditorPane({
   useEffect(() => {
     if (active?.kind !== 'diff' || workspaceId === undefined) {
       setDiffText('')
+      setDiffLoading(false)
       return
     }
+    let cancelled = false
     setDiffLoading(true)
     void client.diff(workspaceId, active.path, active.staged === true).then((result) => {
+      if (cancelled) return
       setDiffLoading(false)
       if (result.ok) {
         setError(null)
@@ -88,6 +110,7 @@ export function EditorPane({
         setDiffText('')
       }
     })
+    return () => { cancelled = true }
   }, [active, client, workspaceId])
 
   const requestClose = (id: string): void => {
@@ -187,11 +210,22 @@ export function EditorPane({
     )
   } else if (active.kind === 'diff') {
     const rows = parseDiff(diffText)
+    const binary = !diffLoading && isBinaryDiff(diffText)
+    const newEmpty = !diffLoading && isNewEmptyDiff(diffText, rows)
+    const empty = !diffLoading && rows.length === 0 && !binary && !newEmpty
+    const hint = diffLoading
+      ? t('panel.loading')
+      : binary
+        ? t('diff.binary')
+        : newEmpty
+          ? t('diff.newEmpty')
+          : empty
+            ? t('diff.empty')
+            : null
     body = (
-      <div className={css.editor}>
-        {diffLoading ? <p className={css.hint}>{t('panel.loading')}</p> : null}
-        {!diffLoading && rows.length === 0 ? <p className={css.hint}>{t('diff.empty')}</p> : null}
-        {rows.length > 0 ? (
+      <div className={css.diffPane}>
+        {hint !== null ? <p className={css.diffHint}>{hint}</p> : null}
+        {rows.length > 0 && !binary && !newEmpty ? (
           <pre className={css.diff}>
             {rows.map((row, index) => (
               <div key={`${index}:${row.text.slice(0, 24)}`} className={css.diffLine} data-kind={row.kind}>
@@ -298,7 +332,7 @@ export function EditorPane({
                 <div key={tab.id} className={css.tab} data-active={tab.id === activeId || undefined} role="tab">
                   <button type="button" className={css.tabName} onClick={() => { onActivate(tab.id) }}>
                     {tab.kind === 'terminal'
-                      ? (tab.title || t('term.tab'))
+                      ? terminalTabLabel(tab, t)
                       : tab.kind === 'diff'
                         ? `${fileName(tab.path)} · ${t('editor.diffTab')}`
                         : fileName(tab.path)}

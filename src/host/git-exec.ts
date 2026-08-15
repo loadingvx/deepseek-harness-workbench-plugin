@@ -27,7 +27,11 @@ function classifyFailure(stderr: string, exitCode: number): GitError {
     return new GitError('IDENTITY_MISSING')
   }
   if (/your local changes/i.test(text) || /would be overwritten/i.test(text)) return new GitError('DIRTY_WORKTREE')
+  if (/already exists/i.test(text)) return new GitError('BRANCH_EXISTS')
   if (/pathspec '.*' did not match/i.test(text)) return new GitError('BRANCH_MISSING')
+  if (/conflict|automatic merge failed|fix conflicts|unmerged paths/i.test(text)) {
+    return new GitError('MERGE_CONFLICT')
+  }
   if (/authentication failed|could not read username|terminal prompts disabled|permission denied \(publickey\)|403 forbidden|401 unauthorized/i.test(text)) {
     return new GitError('AUTH_FAILED')
   }
@@ -89,7 +93,7 @@ export function runGit(options: GitExecOptions): Promise<GitExecResult> {
       options.signal?.removeEventListener('abort', onAbort)
       const exitCode = code ?? 1
       if (exitCode !== 0 && !options.allowNonZero) {
-        reject(classifyFailure(stderr, exitCode))
+        reject(classifyFailure(`${stdout}\n${stderr}`, exitCode))
         return
       }
       resolve({ stdout, stderr, exitCode })

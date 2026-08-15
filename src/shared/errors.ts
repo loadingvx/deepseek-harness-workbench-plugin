@@ -40,7 +40,19 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
   },
   BRANCH_MISSING: {
     messageZh: '本地没有这个分支。',
-    hintZh: '第一期只能切换已经存在的本地分支，不会自动创建或拉取远程分支。',
+    hintZh: '请从列表里选一个已经存在的本地分支。要新建，请用 GRAPH 栏的「新建分支」。',
+  },
+  BRANCH_EXISTS: {
+    messageZh: '这个分支名已经有了。',
+    hintZh: '请换一个名字，或先切到已有分支再继续。',
+  },
+  BRANCH_INVALID: {
+    messageZh: '分支名不合法。',
+    hintZh: '不要用空格、..、~ ^ : ? * [ \\，也不要以 - / . 开头或以 / . 结尾。最长 64 个字符。',
+  },
+  MERGE_CONFLICT: {
+    messageZh: '合并时出现冲突，已自动取消，工作区保持原样。',
+    hintZh: '请先在本机终端处理分叉，或换一个能快进合并的分支再试。本插件不会留下半成品合并。',
   },
   IDENTITY_MISSING: {
     messageZh: '还没有配置 Git 用户信息，无法提交。',

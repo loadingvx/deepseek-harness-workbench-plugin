@@ -26,3 +26,8 @@
   opacity: 0.35;
   cursor: default;
 }
+
+.dense {
+  width: 22px;
+  height: 22px;
+}
