@@ -317,24 +317,19 @@
   overflow: hidden;
 }
 
-.gutter {
-  flex: none;
+.cmHost {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
   overflow: hidden;
-  padding: 8px 0;
-  border-right: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-base);
-  color: var(--dsw-alias-label-caption);
-  font: var(--dsw-font-markdown-code-block, 13px/22px var(--ds-font-family-code));
-  text-align: right;
-  user-select: none;
 }
 
-.gutter span {
-  display: block;
-  padding: 0 8px 0 10px;
+.cmHost :global(.cm-editor) {
+  height: 100%;
+  background: transparent;
 }
 
-.textarea,
 .diff {
   flex: 1;
   min-width: 0;
@@ -348,10 +343,6 @@
   font: var(--dsw-font-markdown-code-block, 13px/22px var(--ds-font-family-code));
   white-space: pre;
   resize: none;
-}
-
-.textarea:focus {
-  outline: none;
 }
 
 .diffLine {

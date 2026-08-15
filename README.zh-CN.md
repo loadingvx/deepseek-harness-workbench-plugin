@@ -2,7 +2,7 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-DeepSeek Harness Web UI 的工作台界面插件：在「对话」里打开 Cursor 风格三栏（对话 / 编辑器 / 文件与 Git）。
+DeepSeek Harness Web UI 的工作台界面插件：在「对话」里打开 Cursor 风格三栏（对话 / 编辑器 / 文件与 Git）。中间文件编辑支持语法高亮。
 
 ![工作台：对话 / 终端 / 文件与 Git](docs/img/workbench.png)
 
@@ -13,11 +13,11 @@ DeepSeek Harness Web UI 的工作台界面插件：在「对话」里打开 Curs
 | 项 | 值 |
 | --- | --- |
 | 包名 | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| 版本 | **0.1.4**（`latest`） |
+| 版本 | **0.1.5**（`latest`） |
 | 仓库 | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.4
++ dsh-workbench-plugin@0.1.5
 ```
 
 维护者发版：`bash devops/release.sh`（使用本机已有的 `npm login`，不要把账号密码写进仓库）。
@@ -42,7 +42,7 @@ dsh plugin --profile web add dsh-workbench-plugin
 
 网上查不到新版本时不会打扰你。点右侧关闭只跳过当前这个新版本；再出更新还会再提示。
 
-**已经装了 0.1.1 的人这次看不到这条提示**（旧包里还没有这段检查）。请手动执行一次上面的命令升到 0.1.4，之后有新版本就会自动提醒。
+**已经装了 0.1.1 的人这次看不到这条提示**（旧包里还没有这段检查）。请手动执行一次上面的命令升到 0.1.5，之后有新版本就会自动提醒。
 
 ## License
 

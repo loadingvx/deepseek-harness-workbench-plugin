@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { GitClient } from '../api.ts'
 import type { GitFail } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
@@ -7,6 +7,7 @@ import { IconClose, IconDiff, IconMore, IconPanelOff, IconPlus, IconSave, IconTe
 import { PathBreadcrumb } from './PathBreadcrumb.tsx'
 import { TerminalView } from './TerminalView.tsx'
 import { TERMINAL_TAB_ID, terminalTabLabel, type FileBuffer, type FileTab, type Translate } from './types.ts'
+import { CodeEditor } from './CodeEditor.tsx'
 import css from './EditorPane.module.css'
 
 export interface EditorPaneProps {
@@ -88,8 +89,6 @@ export function EditorPane({
   const [newFileError, setNewFileError] = useState<string | null>(null)
   const [diffText, setDiffText] = useState('')
   const [diffLoading, setDiffLoading] = useState(false)
-  const areaRef = useRef<HTMLTextAreaElement>(null)
-  const gutterRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (active?.kind !== 'diff' || workspaceId === undefined) {
@@ -171,8 +170,6 @@ export function EditorPane({
     setNewFileOpen(false)
   }
 
-  const lines = useMemo(() => (buffer?.draft.split(/\n/).length ?? 1), [buffer?.draft])
-
   const activeIndex = activeId === null ? -1 : tabs.findIndex(tab => tab.id === activeId)
   const closableIds = tabs.filter(tab => tab.kind !== 'terminal').map(tab => tab.id)
   const closeAllIds = closableIds
@@ -240,27 +237,13 @@ export function EditorPane({
     body = <p className={css.hint}>{t('panel.loading')}</p>
   } else {
     body = (
-      <div className={css.editor}>
-        <div className={css.gutter} ref={gutterRef} aria-hidden>
-          {Array.from({ length: lines }, (_, index) => <span key={index}>{index + 1}</span>)}
-        </div>
-        <textarea
-          ref={areaRef}
-          className={css.textarea}
-          spellCheck={false}
-          value={buffer.draft}
-          onChange={(event) => { onDraft(active.path, event.target.value) }}
-          onScroll={(event) => {
-            if (gutterRef.current !== null) gutterRef.current.scrollTop = event.currentTarget.scrollTop
-          }}
-          onKeyDown={(event) => {
-            if ((event.metaKey || event.ctrlKey) && event.key === 's') {
-              event.preventDefault()
-              void save()
-            }
-          }}
-        />
-      </div>
+      <CodeEditor
+        path={active.path}
+        value={buffer.draft}
+        label={fileName(active.path)}
+        onChange={(next) => { onDraft(active.path, next) }}
+        onSave={() => { void save() }}
+      />
     )
   }
 
