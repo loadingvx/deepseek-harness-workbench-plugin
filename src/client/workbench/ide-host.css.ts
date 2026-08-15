@@ -42,9 +42,12 @@ export const IDE_HOST_CSS = `
   justify-content: end;
 }
 [data-git-ide] > :not([data-conversation-scroll]):not([data-git-ide-panel]){
-  grid-column: 1 / -1;
+  grid-column: 1;
   grid-row: 1;
   min-width: 0;
+}
+[data-git-ide][data-git-chat=off] > :not([data-conversation-scroll]):not([data-git-ide-panel]){
+  display: none !important;
 }
 [data-git-ide] > [data-conversation-scroll]{
   grid-column: 1;
@@ -58,7 +61,9 @@ export const IDE_HOST_CSS = `
   display: none !important;
 }
 [data-git-ide-panel=editor],
-[data-git-ide-panel=side]{
+[data-git-ide-panel=side],
+[data-git-ide-panel=rail-side],
+[data-git-ide-panel=rail-editor]{
   position: relative;
   min-width: 0;
   max-width: 100%;
@@ -66,11 +71,17 @@ export const IDE_HOST_CSS = `
   overflow: hidden;
   align-self: stretch;
 }
-[data-git-ide-panel=editor]{ grid-column: 2; grid-row: 2; }
-[data-git-ide-panel=side]{ grid-column: 3; grid-row: 2; }
+[data-git-ide-panel=editor],
+[data-git-ide-panel=rail-editor]{
+  grid-column: 2;
+  grid-row: 1 / -1;
+}
+[data-git-ide-panel=side],
+[data-git-ide-panel=rail-side]{
+  grid-column: 3;
+  grid-row: 1 / -1;
+}
 [data-git-ide-panel=rail-chat]{ grid-column: 1; grid-row: 2; }
-[data-git-ide-panel=rail-editor]{ grid-column: 2; grid-row: 2; }
-[data-git-ide-panel=rail-side]{ grid-column: 3; grid-row: 2; }
 `
 
 export function ensureIdeStyles(): void {

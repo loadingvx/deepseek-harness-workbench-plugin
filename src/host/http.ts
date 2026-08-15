@@ -7,6 +7,7 @@ import { generateCommitMessage } from './commit-message.ts'
 import type { GitService } from './git-service.ts'
 import { resolveWorkspacePath } from './workspace.ts'
 import { ExternalOpen } from './external-open.ts'
+import { TerminalHub } from './terminal.ts'
 import type { WorkspaceFs } from './workspace-fs.ts'
 
 function send(res: ServerResponse, status: number, body: unknown): void {
@@ -76,7 +77,13 @@ async function wrap<T>(run: () => Promise<T>): Promise<GitResult<T>> {
 }
 
 /** Register the `/git` JSON API used by the sidebar panel and workbench. */
-export function registerGitHttp(ctx: Context, git: GitService, fs: WorkspaceFs, editors = new ExternalOpen(fs)): () => void {
+export function registerGitHttp(
+  ctx: Context,
+  git: GitService,
+  fs: WorkspaceFs,
+  editors = new ExternalOpen(fs),
+  term = new TerminalHub(),
+): () => void {
   const server = ctx.webServer
   if (server === undefined) {
     throw new Error('dsh-workbench-plugin: 需要 webServer 才能提供工作台接口，请把本插件装到 web profile。')
@@ -175,6 +182,43 @@ export function registerGitHttp(ctx: Context, git: GitService, fs: WorkspaceFs, 
         const path = typeof body.path === 'string' ? body.path : ''
         const app = typeof body.app === 'string' ? body.app : undefined
         result = await wrap(() => editors.open(rootOf(body), path, app))
+      } else if (method === 'GET' && route === '/git/term/stream') {
+        const id = workspaceId
+        if (id === undefined) {
+          result = fail('NO_WORKSPACE')
+        } else {
+          const cols = Number(query(url, 'cols') ?? '80')
+          const rows = Number(query(url, 'rows') ?? '24')
+          await term.attach(id, rootOf(), res, cols, rows)
+          return
+        }
+      } else if (method === 'POST' && route === '/git/term/write') {
+        const body = await readJson(req)
+        const data = typeof body.data === 'string' ? body.data : ''
+        result = await wrap(() => term.write(
+          typeof body.workspaceId === 'string' ? body.workspaceId : workspaceId ?? '',
+          rootOf(body),
+          data,
+        ))
+      } else if (method === 'POST' && route === '/git/term/resize') {
+        const body = await readJson(req)
+        result = await wrap(() => term.resize(
+          typeof body.workspaceId === 'string' ? body.workspaceId : workspaceId ?? '',
+          rootOf(body),
+          Number(body.cols),
+          Number(body.rows),
+        ))
+      } else if (method === 'POST' && route === '/git/term/interrupt') {
+        const body = await readJson(req)
+        result = await wrap(() => term.interrupt(typeof body.workspaceId === 'string' ? body.workspaceId : workspaceId ?? '', rootOf(body)))
+      } else if (method === 'POST' && route === '/git/term/restart') {
+        const body = await readJson(req)
+        result = await wrap(() => term.restart(
+          typeof body.workspaceId === 'string' ? body.workspaceId : workspaceId ?? '',
+          rootOf(body),
+          Number(body.cols),
+          Number(body.rows),
+        ))
       } else {
         result = fail('BAD_REQUEST')
       }
@@ -185,5 +229,9 @@ export function registerGitHttp(ctx: Context, git: GitService, fs: WorkspaceFs, 
     send(res, result.ok ? 200 : 400, result)
   }
 
-  return server.register({ kind: 'prefix', path: '/git', handler })
+  const dispose = server.register({ kind: 'prefix', path: '/git', handler })
+  return () => {
+    term.disposeAll()
+    dispose()
+  }
 }

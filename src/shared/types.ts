@@ -36,6 +36,8 @@ export type GitErrorCode =
   | 'EDITOR_NOT_FOUND'
   | 'EDITOR_FAILED'
   | 'EDITOR_UNKNOWN'
+  | 'TERM_NO_SHELL'
+  | 'TERM_FAILED'
 
 export interface GitFail {
   ok: false

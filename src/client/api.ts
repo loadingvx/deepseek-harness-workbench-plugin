@@ -44,6 +44,10 @@ export interface GitClient {
   writeFile(workspaceId: string, path: string, content: string): Promise<GitResult<FsWriteResult>>
   listEditors(): Promise<GitResult<ExternalEditorsSnapshot>>
   openExternal(workspaceId: string, path?: string, app?: ExternalEditorId): Promise<GitResult<ExternalOpenResult>>
+  writeTerm(workspaceId: string, data: string): Promise<GitResult<{ ok: true }>>
+  resizeTerm(workspaceId: string, cols: number, rows: number): Promise<GitResult<{ ok: true; cols: number; rows: number }>>
+  interruptTerm(workspaceId: string): Promise<GitResult<{ ok: true }>>
+  restartTerm(workspaceId: string, cols?: number, rows?: number): Promise<GitResult<{ cwd: string; shell: string; cols: number; rows: number }>>
 }
 
 export function createGitClient(): GitClient {
@@ -98,6 +102,18 @@ export function createGitClient(): GitClient {
     listEditors: () => request('/git/fs/editors'),
     openExternal: (workspaceId, path, app) => request('/git/fs/open', {
       method: 'POST', body: JSON.stringify({ workspaceId, path: path ?? '', app }),
+    }),
+    writeTerm: (workspaceId, data) => request('/git/term/write', {
+      method: 'POST', body: JSON.stringify({ workspaceId, data }),
+    }),
+    resizeTerm: (workspaceId, cols, rows) => request('/git/term/resize', {
+      method: 'POST', body: JSON.stringify({ workspaceId, cols, rows }),
+    }),
+    interruptTerm: workspaceId => request('/git/term/interrupt', {
+      method: 'POST', body: JSON.stringify({ workspaceId }),
+    }),
+    restartTerm: (workspaceId, cols, rows) => request('/git/term/restart', {
+      method: 'POST', body: JSON.stringify({ workspaceId, cols, rows }),
     }),
   }
 }

@@ -175,6 +175,15 @@ export function IconBranch() {
   )
 }
 
+export function IconTerminal() {
+  return (
+    <Icon>
+      <path d="M2.2 3.2h11.6v9.6H2.2z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M4.2 6.2 6.4 8 4.2 9.8M7.6 10.4h4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
 export function IconSearch() {
   return (
     <Icon>

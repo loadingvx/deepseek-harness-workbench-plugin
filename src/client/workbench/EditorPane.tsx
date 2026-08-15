@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { GitClient } from '../api.ts'
 import type { GitFail } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconClose, IconDiff, IconMore, IconPanelOff, IconSave } from './icons.tsx'
+import { IconClose, IconDiff, IconMore, IconPanelOff, IconSave, IconTerminal } from './icons.tsx'
+import { PathBreadcrumb } from './PathBreadcrumb.tsx'
+import { TerminalView } from './TerminalView.tsx'
 import type { FileBuffer, FileTab, Translate } from './types.ts'
 import css from './EditorPane.module.css'
 
@@ -20,6 +22,7 @@ export interface EditorPaneProps {
   onSaved: (path: string, content: string) => void
   onCollapse?: () => void
   notice?: GitFail | null
+  workspaceTitle?: string
   leadingSash?: ReactNode
   t: Translate
 }
@@ -45,7 +48,7 @@ function parseDiff(text: string): Array<{ kind: 'add' | 'del' | 'hunk' | 'meta' 
 /** Center editor: explorer + tabs + text/diff, with unsaved-close confirmation. */
 export function EditorPane({
   client, workspaceId, tabs, activeId, buffers,
-  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, leadingSash, t,
+  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, workspaceTitle, leadingSash, t,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.id === activeId) ?? null
   const buffer = active?.kind === 'file' ? buffers[active.path] : undefined
@@ -121,11 +124,17 @@ export function EditorPane({
   const lines = useMemo(() => (buffer?.draft.split(/\n/).length ?? 1), [buffer?.draft])
 
   const activeIndex = activeId === null ? -1 : tabs.findIndex(tab => tab.id === activeId)
-  const tabIds = tabs.map(tab => tab.id)
-  const closeAllIds = tabIds
-  const closeOthersIds = activeIndex >= 0 ? tabIds.filter((_, index) => index !== activeIndex) : []
-  const closeLeftIds = activeIndex > 0 ? tabIds.slice(0, activeIndex) : []
-  const closeRightIds = activeIndex >= 0 && activeIndex < tabIds.length - 1 ? tabIds.slice(activeIndex + 1) : []
+  const closableIds = tabs.filter(tab => tab.kind !== 'terminal').map(tab => tab.id)
+  const closeAllIds = closableIds
+  const closeOthersIds = activeIndex >= 0
+    ? closableIds.filter(id => id !== activeId)
+    : closableIds
+  const closeLeftIds = activeIndex > 0
+    ? tabs.slice(0, activeIndex).filter(tab => tab.kind !== 'terminal').map(tab => tab.id)
+    : []
+  const closeRightIds = activeIndex >= 0 && activeIndex < tabs.length - 1
+    ? tabs.slice(activeIndex + 1).filter(tab => tab.kind !== 'terminal').map(tab => tab.id)
+    : []
 
   useEffect(() => {
     if (!menuOpen) return
@@ -137,7 +146,9 @@ export function EditorPane({
   }, [menuOpen])
 
   let body: ReactNode
-  if (active === null) {
+  if (active?.kind === 'terminal') {
+    body = <TerminalView client={client} workspaceId={workspaceId} t={t} />
+  } else if (active === null) {
     body = (
       <div className={css.empty}>
         <p className={css.emptyTitle}>{t('editor.empty')}</p>
@@ -215,9 +226,39 @@ export function EditorPane({
   )
 
   return (
-    <section className={css.root} aria-label={t('editor.empty')} data-git-ide-panel="editor">
+    <section className={css.root} aria-label={active?.kind === 'terminal' ? t('term.title') : t('editor.empty')} data-git-ide-panel="editor">
       {leadingSash}
       <div className={css.main}>
+        <div className={css.crumbRow}>
+          <PathBreadcrumb
+            client={client}
+            workspaceId={workspaceId}
+            workspaceTitle={workspaceTitle}
+            active={active}
+            onOpenFile={onOpenFile}
+            t={t}
+          />
+          <div className={css.crumbActions}>
+            {active?.kind === 'file' ? (
+              <IconButton
+                label={saveReason ?? (dirty ? t('editor.save') : t('editor.saved'))}
+                disabled={saveReason !== null}
+                onClick={() => { void save() }}
+              >
+                <IconSave />
+              </IconButton>
+            ) : active?.kind === 'diff' ? (
+              <IconButton label={t('editor.fileTab')} onClick={() => { onOpenFile(active.path) }}>
+                <IconDiff />
+              </IconButton>
+            ) : null}
+            {onCollapse !== undefined ? (
+              <IconButton label={t('ide.hideEditor')} onClick={onCollapse}>
+                <IconPanelOff />
+              </IconButton>
+            ) : null}
+          </div>
+        </div>
         <div className={css.tabBar}>
           <div className={css.tabs} role="tablist">
             {tabs.map(tab => {
@@ -226,12 +267,20 @@ export function EditorPane({
               return (
                 <div key={tab.id} className={css.tab} data-active={tab.id === activeId || undefined} role="tab">
                   <button type="button" className={css.tabName} onClick={() => { onActivate(tab.id) }}>
-                    {tab.kind === 'diff' ? `${fileName(tab.path)} · ${t('editor.diffTab')}` : fileName(tab.path)}
+                    {tab.kind === 'terminal'
+                      ? t('term.tab')
+                      : tab.kind === 'diff'
+                        ? `${fileName(tab.path)} · ${t('editor.diffTab')}`
+                        : fileName(tab.path)}
                   </button>
                   {tabDirty ? <span className={css.dirtyDot} title={t('editor.dirty')} /> : null}
-                  <IconButton label={t('editor.close')} onClick={() => { requestClose(tab.id) }}>
-                    <IconClose />
-                  </IconButton>
+                  {tab.kind === 'terminal' ? (
+                    <span className={css.termMark} title={t('term.pinned')}><IconTerminal /></span>
+                  ) : (
+                    <IconButton label={t('editor.close')} onClick={() => { requestClose(tab.id) }}>
+                      <IconClose />
+                    </IconButton>
+                  )}
                 </div>
               )
             })}
@@ -261,29 +310,6 @@ export function EditorPane({
             </div>
           </div>
         </div>
-        {active !== null ? (
-          <div className={css.toolbar}>
-            <span className={css.path}>{active.path}</span>
-            {active.kind === 'file' ? (
-              <IconButton
-                label={saveReason ?? (dirty ? t('editor.save') : t('editor.saved'))}
-                disabled={saveReason !== null}
-                onClick={() => { void save() }}
-              >
-                <IconSave />
-              </IconButton>
-            ) : (
-              <IconButton label={t('editor.fileTab')} onClick={() => { onOpenFile(active.path) }}>
-                <IconDiff />
-              </IconButton>
-            )}
-            {onCollapse !== undefined ? (
-              <IconButton label={t('ide.hideEditor')} onClick={onCollapse}>
-                <IconPanelOff />
-              </IconButton>
-            ) : null}
-          </div>
-        ) : null}
         <div className={css.body}>
           {error !== null || notice != null ? (
             <div className={css.banner}>

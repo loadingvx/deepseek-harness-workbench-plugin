@@ -57,8 +57,7 @@
   border-radius: 8px;
   background: var(--dsw-alias-button-ghost-active-fill);
   color: var(--dsw-alias-label-secondary);
-  font-family: var(--dsh-font-mono, ui-monospace, monospace);
-  font-size: 11px;
+  font: var(--dsw-font-markdown-code-block-small, 12px/18px var(--ds-font-family-code));
   line-height: 16px;
   white-space: pre-wrap;
 }

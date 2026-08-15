@@ -142,6 +142,14 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     messageZh: '不支持用这个应用打开。',
     hintZh: '请从列表里选 Cursor、VS Code 或系统默认应用。不会执行列表以外的命令。',
   },
+  TERM_NO_SHELL: {
+    messageZh: '本机没有可用的命令行程序。',
+    hintZh: '请确认系统里有 bash 或 zsh，并且终端里能执行 `bash`。',
+  },
+  TERM_FAILED: {
+    messageZh: '工作区命令行没有启动成功。',
+    hintZh: '请确认已经打开本地工作区，然后点「重新连接」。若反复失败，请确认本机有 bash/zsh，并且 DeepSeek Harness 能创建伪终端。',
+  },
 }
 
 /** Structured Git failure with Chinese copy the UI can show as-is. */

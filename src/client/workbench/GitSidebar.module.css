@@ -495,5 +495,6 @@
 }
 
 .hash {
-  font-family: var(--dsh-font-mono, ui-monospace, monospace);
+  font-family: var(--dsw-font-markdown-code-block-font-family, var(--ds-font-family-code));
+  font-size: var(--dsw-font-markdown-code-block-font-size, 13px);
 }

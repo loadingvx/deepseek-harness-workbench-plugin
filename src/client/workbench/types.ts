@@ -14,12 +14,18 @@ export interface WorkbenchInjected {
   client: GitClient
 }
 
+export const TERMINAL_TAB_ID = 'terminal:main'
+
 export interface FileTab {
   id: string
-  kind: 'file' | 'diff'
+  kind: 'file' | 'diff' | 'terminal'
   path: string
   title: string
   staged?: boolean
+}
+
+export function createTerminalTab(): FileTab {
+  return { id: TERMINAL_TAB_ID, kind: 'terminal', path: '', title: '终端' }
 }
 
 export interface FileBuffer {

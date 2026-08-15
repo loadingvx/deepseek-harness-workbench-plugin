@@ -165,6 +165,16 @@ declare module 'react-dom' {
   export function createPortal(children: ReactNode, container: Element | DocumentFragment): ReactPortal
 }
 
+declare module 'node-pty' {
+  export function spawn(file: string, args: string[] | string, options: Record<string, unknown>): {
+    write(data: string): void
+    resize(cols: number, rows: number): void
+    kill(): void
+    onData(handler: (data: string) => void): { dispose(): void }
+    onExit(handler: (event: { exitCode: number; signal?: number }) => void): { dispose(): void }
+  }
+}
+
 declare module '@deepseek-ai/dsh-client-ui-primitives' {
   export const Tooltip: (props: {
     label: string
@@ -172,4 +182,32 @@ declare module '@deepseek-ai/dsh-client-ui-primitives' {
     delayMs?: number
     children: import('react').ReactNode
   }) => import('react').ReactElement
+
+  export interface TerminalBlockLabels {
+    signal: (signal: string) => string
+    exitCode: (exitCode: number) => string
+    running: string
+    failed: string
+    done: string
+    copy: string
+    copied: string
+    noOutput: string
+    collapseAria: string
+    collapse: string
+    expandAria: (hidden: number) => string
+    expand: (hidden: number) => string
+  }
+
+  export function TerminalBlock(props: {
+    command: string
+    cwd?: string
+    home?: string
+    output?: string
+    exitCode?: number
+    signal?: string
+    running?: boolean
+    maxLines?: number
+    className?: string
+    labels?: Partial<TerminalBlockLabels>
+  }): import('react').ReactElement
 }

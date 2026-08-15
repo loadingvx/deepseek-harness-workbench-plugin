@@ -14,7 +14,7 @@ import { IconChat, IconEditor, IconFiles, IconGit, IconLayout } from './icons.ts
 import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
 import { SideDock, type SideTab } from './SideDock.tsx'
-import type { FileBuffer, FileTab, WorkbenchInjected } from './types.ts'
+import { createTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type WorkbenchInjected } from './types.ts'
 import { useWorkspace } from './useWorkspace.ts'
 import css from './Workbench.module.css'
 
@@ -52,8 +52,8 @@ export function Workbench(props: WorkbenchProps) {
   const [sideOpen, setSideOpen] = useState(true)
   const [sideTab, setSideTab] = useState<SideTab>('git')
   const [host, setHost] = useState<HTMLElement | null>(null)
-  const [tabs, setTabs] = useState<FileTab[]>([])
-  const [activeId, setActiveId] = useState<string | null>(null)
+  const [tabs, setTabs] = useState<FileTab[]>(() => [createTerminalTab()])
+  const [activeId, setActiveId] = useState<string | null>(TERMINAL_TAB_ID)
   const [buffers, setBuffers] = useState<Record<string, FileBuffer>>({})
   const [selectedDiff, setSelectedDiff] = useState<{ path: string; staged: boolean } | null>(null)
   const [fileError, setFileError] = useState<GitFail | null>(null)
@@ -240,9 +240,10 @@ export function Workbench(props: WorkbenchProps) {
   }
 
   const closeTabs = (ids: string[]): void => {
-    if (ids.length === 0) return
+    const closable = ids.filter(id => id !== TERMINAL_TAB_ID)
+    if (closable.length === 0) return
     setTabs((current) => {
-      const closing = new Set(ids)
+      const closing = new Set(closable)
       for (const tab of current) {
         if (tab.kind === 'file' && closing.has(tab.id)) {
           setBuffers((buffersNow) => {
@@ -257,7 +258,7 @@ export function Workbench(props: WorkbenchProps) {
       setActiveId((active) => {
         if (active === null || !closing.has(active)) return active
         const index = current.findIndex(tab => tab.id === active)
-        return next[index]?.id ?? next[index - 1]?.id ?? null
+        return next[index]?.id ?? next[index - 1]?.id ?? TERMINAL_TAB_ID
       })
       return next
     })
@@ -278,6 +279,7 @@ export function Workbench(props: WorkbenchProps) {
         <EditorPane
           client={client}
           workspaceId={workspaceId}
+          workspaceTitle={workspace?.title}
           tabs={tabs}
           activeId={activeId}
           buffers={buffers}

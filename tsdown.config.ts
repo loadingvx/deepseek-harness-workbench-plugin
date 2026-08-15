@@ -34,7 +34,7 @@ const host: UserConfig = {
   clean: true,
   sourcemap: false,
   fixedExtension: false,
-  external: [/^@deepseek-ai\//, /^node:/],
+  external: [/^@deepseek-ai\//, /^node:/, 'node-pty'],
   outputOptions: {
     entryFileNames: 'index.js',
   },
@@ -59,24 +59,32 @@ const client: UserConfig = {
   plugins: [{
     name: 'dsh-css-modules-inline',
     resolveId(source: string, importer: string | undefined) {
-      if (!source.endsWith('.module.css')) return null
+      if (!source.endsWith('.css')) return null
       const abs = importer !== undefined ? resolvePath(dirname(importer), source) : source
-      if (!existsSync(abs)) return null
-      return CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
+      if (existsSync(abs)) return CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
+      try {
+        const resolved = import.meta.resolve(source)
+        const file = resolved.startsWith('file:') ? new URL(resolved).pathname : resolved
+        if (existsSync(file)) return CSS_VIRTUAL_PREFIX + file + CSS_VIRTUAL_SUFFIX
+      } catch { /* fall through */ }
+      return null
     },
     async load(virtualId: string) {
       if (!virtualId.startsWith(CSS_VIRTUAL_PREFIX)) return null
       const fileId = virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
       this.addWatchFile(fileId)
       const source = await readFile(fileId)
+      const modules = fileId.endsWith('.module.css')
       const { code, exports: cssExports } = transform({
         filename: fileId,
         code: source,
-        cssModules: { pattern: '[hash]_[local]' },
+        cssModules: modules ? { pattern: '[hash]_[local]' } : false,
         minify: true,
       })
       const classMap: Record<string, string> = {}
-      for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = exp.name
+      if (modules) {
+        for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = exp.name
+      }
       return [
         `const css = ${JSON.stringify(code.toString())};`,
         `const tagId = ${JSON.stringify(`${PACKAGE_ID}/${basename(fileId)}`)};`,
