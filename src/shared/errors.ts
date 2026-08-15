@@ -95,12 +95,12 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     hintZh: '请确认文件不是只读、磁盘还有空间，然后重试。',
   },
   LLM_UNAVAILABLE: {
-    messageZh: '现在没法自动生成提交说明。',
-    hintZh: '请确认「模型」里已经配好可用模型。生成走独立调用，不会写入当前对话。也可以先自己写一两句再提交。',
+    messageZh: '现在没法调用模型。',
+    hintZh: '请确认会话里已经配好可用模型。这次调用不会写入当前对话。也可以先自己动手完成。',
   },
   LLM_FAILED: {
-    messageZh: '自动生成提交说明失败。',
-    hintZh: '请稍后重试，或先自己填写提交说明。常见原因：模型未就绪、网络中断、思考占用了输出、或差异太大。',
+    messageZh: '模型调用失败。',
+    hintZh: '请稍后重试。常见原因：模型未就绪、网络中断、思考占用了输出、或内容太长。',
   },
   NOTHING_TO_DESCRIBE: {
     messageZh: '没有可描述的改动。',

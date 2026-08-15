@@ -69,6 +69,7 @@ export function Workbench(props: WorkbenchProps) {
   buffersRef.current = buffers
 
   const [updateHidden, setUpdateHidden] = useState(false)
+  const [aiTermIds, setAiTermIds] = useState<string[]>([])
   const pluginInfo = usePluginUpdate(client)
   const updateInfo = updateHidden ? null : visibleUpdate(pluginInfo)
   const termSeed = updateInfo === null || updateInfo.latest === null
@@ -289,6 +290,7 @@ export function Workbench(props: WorkbenchProps) {
         const index = current.findIndex(tab => tab.id === active)
         return next[index]?.id ?? next[index - 1]?.id ?? TERMINAL_TAB_ID
       })
+      setAiTermIds(ids => ids.filter(id => !closing.has(id)))
       return next
     })
   }
@@ -332,6 +334,15 @@ export function Workbench(props: WorkbenchProps) {
             const tab = nextTerminalTab(tabs)
             setTabs(current => [...current, tab])
             setActiveId(tab.id)
+          }}
+          aiTermIds={aiTermIds}
+          onAiModeChange={(tabId, open) => {
+            setAiTermIds((current) => {
+              const has = current.includes(tabId)
+              if (open && !has) return [...current, tabId]
+              if (!open && has) return current.filter(id => id !== tabId)
+              return current
+            })
           }}
           onCreateFile={async (path) => {
             if (workspaceId === undefined) return { ok: false, code: 'NO_WORKSPACE', messageZh: t('editor.addFileNoWorkspace'), hintZh: '' }
@@ -404,6 +415,7 @@ export function Workbench(props: WorkbenchProps) {
         active={tabs.find(tab => tab.id === activeId) ?? null}
         plugin={pluginInfo}
         tabs={tabs}
+        aiTermIds={aiTermIds}
         onActivate={(id) => {
           setEditorOpen(true)
           setActiveId(id)

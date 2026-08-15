@@ -4,6 +4,7 @@ import { fail, toFail } from '../shared/errors.ts'
 import { redactSecrets } from '../shared/redact.ts'
 import type { GitFail, GitResult } from '../shared/types.ts'
 import { generateCommitMessage, streamCommitMessage } from './commit-message.ts'
+import { streamTermAssist } from './term-assist.ts'
 import type { GitService } from './git-service.ts'
 import { resolveWorkspacePath } from './workspace.ts'
 import { ExternalOpen } from './external-open.ts'
@@ -185,6 +186,17 @@ export function registerGitHttp(
         const body = await readJson(req)
         await writeCommitMessageStream(res, (signal) => streamCommitMessage(ctx, git, rootOf(body), {
           signal,
+          template: typeof body.template === 'string' ? body.template : undefined,
+        }))
+        return
+      } else if (method === 'POST' && route === '/git/term/assist/stream') {
+        const body = await readJson(req)
+        const text = typeof body.text === 'string' ? body.text : ''
+        await writeCommitMessageStream(res, (signal) => streamTermAssist(ctx, {
+          signal,
+          text,
+          cwd: typeof body.cwd === 'string' ? body.cwd : undefined,
+          transcript: typeof body.transcript === 'string' ? body.transcript : undefined,
           template: typeof body.template === 'string' ? body.template : undefined,
         }))
         return

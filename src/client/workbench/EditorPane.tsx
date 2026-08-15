@@ -29,6 +29,8 @@ export interface EditorPaneProps {
   leadingSash?: ReactNode
   onNewTerminal?: () => void
   onCreateFile?: (path: string) => Promise<GitFail | null>
+  aiTermIds?: readonly string[]
+  onAiModeChange?: (tabId: string, open: boolean) => void
   t: Translate
 }
 
@@ -72,7 +74,7 @@ function isNewEmptyDiff(
 /** Center editor: explorer + tabs + text/diff, with unsaved-close confirmation. */
 export function EditorPane({
   client, workspaceId, tabs, activeId, buffers,
-  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onCreateFile, t,
+  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onCreateFile, aiTermIds, onAiModeChange, t,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.id === activeId) ?? null
   const buffer = active?.kind === 'file' ? buffers[active.path] : undefined
@@ -197,7 +199,17 @@ export function EditorPane({
 
   let body: ReactNode
   if (active?.kind === 'terminal') {
-    body = <TerminalView client={client} workspaceId={workspaceId} termId={termIdFromTabId(active.id)} injectComment={termSeed} t={t} />
+    body = (
+      <TerminalView
+        client={client}
+        workspaceId={workspaceId}
+        termId={termIdFromTabId(active.id)}
+        injectComment={termSeed}
+        t={t}
+        aiOpen={aiTermIds?.includes(active.id) === true}
+        onAiModeChange={(open) => { onAiModeChange?.(active.id, open) }}
+      />
+    )
   } else if (active === null) {
     body = (
       <div className={css.empty}>

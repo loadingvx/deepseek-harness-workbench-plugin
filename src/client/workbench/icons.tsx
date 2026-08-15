@@ -152,9 +152,25 @@ export function IconTune() {
   )
 }
 
-export function IconSparkle() {
+export function IconSend() {
   return (
     <Icon>
+      <path d="M3 8h9.2M8.4 4.6 12.4 8 8.4 11.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </Icon>
+  )
+}
+
+export function IconStop() {
+  return (
+    <Icon>
+      <path d="M4.2 4.2h7.6v7.6H4.2z" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </Icon>
+  )
+}
+
+export function IconSparkle({ size = 16 }: { size?: number }) {
+  return (
+    <Icon size={size}>
       <path d="M8 1.6 9.1 6 13.6 7.2 9.1 8.4 8 12.8 6.9 8.4 2.4 7.2 6.9 6z" />
       <path d="M12.2 10.2 12.7 12 14.6 12.5 12.7 13 12.2 14.8 11.7 13 9.8 12.5 11.7 12z" />
     </Icon>

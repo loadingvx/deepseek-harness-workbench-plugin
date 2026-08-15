@@ -134,8 +134,11 @@
 }
 
 .tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: none;
-  max-width: 140px;
+  max-width: 160px;
   height: 24px;
   padding: 0 8px;
   overflow: hidden;
@@ -154,6 +157,32 @@
 .tab[data-active] {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
+}
+
+.tab[data-ai] {
+  color: var(--dsw-alias-state-business-primary, #5b8def);
+}
+
+.tab[data-ai][data-active] {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #5b8def) 16%, transparent);
+  color: var(--dsw-alias-state-business-primary, #5b8def);
+}
+
+.aiMark {
+  display: inline-flex;
+  flex: none;
+  color: var(--dsw-alias-state-business-primary, #5b8def);
+  animation: status-ai-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes status-ai-pulse {
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aiMark {
+    animation: none;
+  }
 }
 
 .warnWrap {

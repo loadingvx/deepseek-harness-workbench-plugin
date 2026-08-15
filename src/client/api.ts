@@ -28,26 +28,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<GitResult<T
   }
 }
 
-async function readCommitMessageStream(
-  workspaceId: string,
-  template?: string,
+async function readLlmNdjsonStream(
+  path: string,
+  body: Record<string, unknown>,
   options?: { signal?: AbortSignal; onDelta?: (text: string) => void },
-): Promise<GitResult<GitCommitMessage>> {
+  emptyFail = '模型没有返回内容。',
+): Promise<GitResult<{ message: string }>> {
   try {
-    const response = await fetch('/git/commit-message/stream', {
+    const response = await fetch(path, {
       method: 'POST',
       signal: options?.signal,
       headers: {
         accept: 'application/x-ndjson, application/json',
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ workspaceId, template }),
+      body: JSON.stringify(body),
     })
     const ctype = response.headers.get('content-type') ?? ''
     if (response.body === null || (ctype.includes('application/json') && !ctype.includes('ndjson'))) {
       const data: unknown = await response.json()
       if (typeof data === 'object' && data !== null && 'ok' in data) {
-        const result = data as GitResult<GitCommitMessage>
+        const result = data as GitResult<{ message: string }>
         if (result.ok) options?.onDelta?.(result.value.message)
         return result
       }
@@ -90,11 +91,24 @@ async function readCommitMessageStream(
     if (failResult !== null) return failResult
     if (doneMessage !== null) return { ok: true, value: { message: doneMessage } }
     if (last !== '') return { ok: true, value: { message: last } }
-    return fail('LLM_FAILED', '模型没有返回提交说明。')
+    return fail('LLM_FAILED', emptyFail)
   } catch {
     if (options?.signal?.aborted) return fail('LLM_FAILED', '生成已取消。')
     return fail('NETWORK')
   }
+}
+
+async function readCommitMessageStream(
+  workspaceId: string,
+  template?: string,
+  options?: { signal?: AbortSignal; onDelta?: (text: string) => void },
+): Promise<GitResult<GitCommitMessage>> {
+  return readLlmNdjsonStream(
+    '/git/commit-message/stream',
+    { workspaceId, template },
+    options,
+    '模型没有返回提交说明。',
+  )
 }
 
 export interface GitClient {
@@ -128,6 +142,17 @@ export interface GitClient {
   restartTerm(workspaceId: string, cols?: number, rows?: number, termId?: string): Promise<GitResult<{ cwd: string; shell: string; cols: number; rows: number }>>
   closeTerm(workspaceId: string, termId?: string): Promise<GitResult<{ ok: true }>>
   pluginUpdate(): Promise<GitResult<PluginUpdateSnapshot>>
+  assistTerm(
+    workspaceId: string,
+    text: string,
+    options?: {
+      cwd?: string
+      transcript?: string
+      template?: string
+      signal?: AbortSignal
+      onDelta?: (text: string) => void
+    },
+  ): Promise<GitResult<{ message: string }>>
 }
 
 export function createGitClient(): GitClient {
@@ -206,5 +231,17 @@ export function createGitClient(): GitClient {
       method: 'POST', body: JSON.stringify({ workspaceId, termId }),
     }),
     pluginUpdate: () => request('/git/update'),
+    assistTerm: (workspaceId, text, options) => readLlmNdjsonStream(
+      '/git/term/assist/stream',
+      {
+        workspaceId,
+        text,
+        cwd: options?.cwd,
+        transcript: options?.transcript,
+        template: options?.template,
+      },
+      options,
+      '模型没有返回命令。',
+    ),
   }
 }

@@ -4,9 +4,11 @@ import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import type { GitClient } from '../api.ts'
 import { fail } from '../../shared/errors.ts'
+import { isTermAssistHotkey } from '../../shared/term-assist.ts'
 import type { GitFail } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconRefresh } from './icons.tsx'
+import { IconRefresh, IconSparkle } from './icons.tsx'
+import { TermAssistBar } from './TermAssistBar.tsx'
 import type { Translate } from './types.ts'
 import css from './TerminalView.module.css'
 
@@ -16,15 +18,18 @@ type TermEvent =
   | { type: 'exit'; code: number | null }
 
 export function TerminalView({
-  client, workspaceId, termId, injectComment, t,
+  client, workspaceId, termId, injectComment, t, aiOpen = false, onAiModeChange,
 }: {
   client: GitClient
   workspaceId?: string
   termId?: string
   injectComment?: string
   t: Translate
+  aiOpen?: boolean
+  onAiModeChange?: (open: boolean) => void
 }) {
   const [cwd, setCwd] = useState('')
+  const [shell, setShell] = useState('')
   const [status, setStatus] = useState<'idle' | 'live' | 'dead'>('idle')
   const [error, setError] = useState<GitFail | null>(null)
   const hostRef = useRef<HTMLDivElement | null>(null)
@@ -33,6 +38,12 @@ export function TerminalView({
   const sourceRef = useRef<EventSource | null>(null)
   const writeQueue = useRef<string[]>([])
   const flushing = useRef(false)
+  const assistInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+
+  const setAiOpen = (open: boolean): void => {
+    onAiModeChange?.(open)
+  }
 
   useEffect(() => {
     if (workspaceId === undefined || hostRef.current === null) {
@@ -43,6 +54,7 @@ export function TerminalView({
       fitRef.current = null
       setStatus('idle')
       setCwd('')
+      setShell('')
       return
     }
 
@@ -63,6 +75,11 @@ export function TerminalView({
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(hostRef.current)
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown') return true
+      if (isTermAssistHotkey(event)) return false
+      return true
+    })
     termRef.current = term
     fitRef.current = fit
 
@@ -98,6 +115,7 @@ export function TerminalView({
         }
         if (payload.type === 'hello') {
           setCwd(payload.cwd)
+          setShell(payload.shell)
           setStatus('live')
           return
         }
@@ -179,6 +197,40 @@ export function TerminalView({
     })
   }, [client, injectComment, status, termId, workspaceId])
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (!isTermAssistHotkey(event)) return
+      const root = rootRef.current
+      const target = event.target
+      if (root !== null && target instanceof Node && !root.contains(target)) return
+      event.preventDefault()
+      event.stopPropagation()
+      const next = !aiOpen
+      setAiOpen(next)
+      if (next) {
+        window.requestAnimationFrame(() => { assistInputRef.current?.focus() })
+      } else {
+        termRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => { window.removeEventListener('keydown', onKey, true) }
+  }, [aiOpen])
+
+  const readTranscript = (): string => {
+    const term = termRef.current
+    if (term === null) return ''
+    const buffer = term.buffer.active
+    const end = Math.min(buffer.length - 1, buffer.baseY + buffer.cursorY)
+    const start = Math.max(0, end - 39)
+    const lines: string[] = []
+    for (let i = start; i <= end; i++) {
+      const line = buffer.getLine(i)?.translateToString(true).replace(/\s+$/, '')
+      if (line !== undefined && line !== '') lines.push(line)
+    }
+    return lines.join('\n')
+  }
+
   const restart = async (): Promise<void> => {
     if (workspaceId === undefined) return
     setError(null)
@@ -205,9 +257,21 @@ export function TerminalView({
   }
 
   return (
-    <div className={css.root}>
+    <div ref={rootRef} className={css.root} data-ai={aiOpen || undefined}>
       <div className={css.meta}>
         <span className={css.cwd} title={cwd}>{cwd === '' ? t('term.connecting') : cwd}</span>
+        <IconButton
+          label={aiOpen ? t('term.ai.close') : t('term.ai.open')}
+          active={aiOpen}
+          onClick={() => {
+            const next = !aiOpen
+            setAiOpen(next)
+            if (next) window.requestAnimationFrame(() => { assistInputRef.current?.focus() })
+            else termRef.current?.focus()
+          }}
+        >
+          <IconSparkle />
+        </IconButton>
         <IconButton
           label={t('term.interrupt')}
           disabled={status !== 'live'}
@@ -235,6 +299,23 @@ export function TerminalView({
         className={css.term}
         onClick={() => { termRef.current?.focus() }}
       />
+      {aiOpen ? (
+        <TermAssistBar
+          client={client}
+          workspaceId={workspaceId}
+          termId={termId}
+          cwd={cwd}
+          shell={shell}
+          live={status === 'live'}
+          t={t}
+          inputRef={assistInputRef}
+          readTranscript={readTranscript}
+          onClose={() => {
+            setAiOpen(false)
+            termRef.current?.focus()
+          }}
+        />
+      ) : null}
     </div>
   )
 }
