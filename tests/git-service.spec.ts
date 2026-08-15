@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -95,6 +95,24 @@ describe('GitService', () => {
     const status = await git.status(root)
     expect(status.staged).toHaveLength(0)
     expect(status.untracked.map(file => file.path)).toContain('a.txt')
+  })
+
+  it('restores unstaged edits and deletes untracked files', async () => {
+    const root = await initRepo()
+    await writeFile(join(root, 'keep.txt'), 'keep\n')
+    await git.stage(root, ['keep.txt'])
+    await git.commit(root, 'seed')
+    await writeFile(join(root, 'keep.txt'), 'dirty\n')
+    expect((await git.status(root)).unstaged.map(file => file.path)).toContain('keep.txt')
+    await git.restore(root, ['keep.txt'])
+    expect((await git.status(root)).unstaged).toHaveLength(0)
+    expect(await readFile(join(root, 'keep.txt'), 'utf8')).toBe('keep\n')
+    await writeFile(join(root, 'scratch.txt'), 'temp\n')
+    expect((await git.status(root)).untracked.map(file => file.path)).toContain('scratch.txt')
+    await git.restore(root, ['scratch.txt'])
+    const after = await git.status(root)
+    expect(after.untracked.map(file => file.path)).not.toContain('scratch.txt')
+    await expect(git.restore(root, [])).rejects.toMatchObject({ code: 'INVALID_PATH' })
   })
 
   it('refuses a dirty branch switch and allows a clean one', async () => {

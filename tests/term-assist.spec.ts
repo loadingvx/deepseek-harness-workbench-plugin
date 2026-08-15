@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildTermAssistUserPrompt,
   classifyTermAssistInput,
+  destructiveAssistNote,
   isTermAssistHotkey,
   looksDestructiveCommand,
   looksLikeShellCommand,
@@ -24,6 +25,14 @@ import {
   isDefaultTermAssistTemplate,
   resolveTermAssistTemplate,
 } from '../src/shared/term-assist-prompt.ts'
+import {
+  DEFAULT_TERM_ASSIST_PREFS,
+  resolveTermAssistPrefs,
+} from '../src/shared/term-assist-prefs.ts'
+import {
+  commandMatchesBlacklist,
+  DEFAULT_BLACKLIST,
+} from '../src/shared/term-assist-blacklist.ts'
 import { collectAssistText, generateTermAssist, streamTermAssist } from '../src/host/term-assist.ts'
 
 describe('classifyTermAssistInput', () => {
@@ -45,11 +54,44 @@ describe('classifyTermAssistInput', () => {
     expect(classifyTermAssistInput('show me the git log')).toBe('ask')
     expect(classifyTermAssistInput('hello')).toBe('ask')
     expect(classifyTermAssistInput('你好')).toBe('ask')
+    expect(classifyTermAssistInput('sort by disk usage desc')).toBe('ask')
+    expect(classifyTermAssistInput('find all large files')).toBe('ask')
+  })
+
+  it('still runs real sort/find argv without calling the model', () => {
+    expect(classifyTermAssistInput('sort -k2 file.txt')).toBe('run')
+    expect(classifyTermAssistInput('du -sh * | sort -hr')).toBe('run')
+    expect(classifyTermAssistInput('find . -name *.ts')).toBe('run')
   })
 
   it('treats a lone help as a command, but “help me …” as a request', () => {
     expect(classifyTermAssistInput('help')).toBe('run')
     expect(classifyTermAssistInput('help me find the log')).toBe('ask')
+  })
+})
+
+describe('commandMatchesBlacklist', () => {
+  const rmRf = DEFAULT_BLACKLIST.filter(rule => rule.id === 'rm-rf')
+
+  it('treats rm -rf as recursive+force, not a literal string', () => {
+    expect(commandMatchesBlacklist('rm -rf /tmp', rmRf)).toBe(true)
+    expect(commandMatchesBlacklist('sudo rm -r -f dist', rmRf)).toBe(true)
+    expect(commandMatchesBlacklist('rm -f file.txt', rmRf)).toBe(false)
+    expect(commandMatchesBlacklist('rm file.txt', rmRf)).toBe(false)
+  })
+
+  it('lets a custom rm -r rule catch recursive deletes without -f', () => {
+    const rules = [{ id: 'rm-r', kind: 'rm' as const, enabled: true, pattern: 'rm -r' }]
+    expect(commandMatchesBlacklist('rm -r src', rules)).toBe(true)
+    expect(commandMatchesBlacklist('rm -rf src', rules)).toBe(true)
+    expect(commandMatchesBlacklist('rm src', rules)).toBe(false)
+  })
+
+  it('lets a path rule block rm / without blocking rm ./file', () => {
+    const rules = [{ id: 'rm-root', kind: 'rm' as const, enabled: true, pattern: 'rm /' }]
+    expect(commandMatchesBlacklist('rm /', rules)).toBe(true)
+    expect(commandMatchesBlacklist('rm -rf /', rules)).toBe(true)
+    expect(commandMatchesBlacklist('rm ./file', rules)).toBe(false)
   })
 })
 
@@ -61,16 +103,42 @@ describe('looksLikeShellCommand', () => {
 })
 
 describe('looksDestructiveCommand', () => {
-  it('flags rm -rf and other wipe commands', () => {
+  it('flags rm -rf even when flags are split or prefixed with sudo', () => {
     expect(looksDestructiveCommand('rm -rf /')).toBe(true)
     expect(looksDestructiveCommand('rm -fr ./dist')).toBe(true)
+    expect(looksDestructiveCommand('rm -r -f ./dist')).toBe(true)
+    expect(looksDestructiveCommand('sudo rm --recursive --force /tmp/x')).toBe(true)
     expect(looksDestructiveCommand('mkfs.ext4 /dev/sda')).toBe(true)
     expect(looksDestructiveCommand('reboot')).toBe(true)
+    expect(looksDestructiveCommand('git reset --hard HEAD')).toBe(true)
+    expect(looksDestructiveCommand('git clean -fd')).toBe(true)
+    expect(looksDestructiveCommand('find . -delete')).toBe(true)
   })
 
-  it('leaves ordinary deletes alone', () => {
+  it('leaves ordinary deletes and git reads alone', () => {
     expect(looksDestructiveCommand('rm file.txt')).toBe(false)
+    expect(looksDestructiveCommand('rm -f file.txt')).toBe(false)
     expect(looksDestructiveCommand('git status')).toBe(false)
+    expect(looksDestructiveCommand('git reset HEAD~1')).toBe(false)
+    expect(looksDestructiveCommand('git clean -n')).toBe(false)
+  })
+
+  it('honors prefs: master switch and blacklist edits', () => {
+    expect(looksDestructiveCommand('rm -rf /', { blockDestructive: false })).toBe(false)
+    expect(looksDestructiveCommand('rm -rf /', {
+      blockDestructive: true,
+      blacklist: DEFAULT_BLACKLIST.map(rule => rule.id === 'rm-rf' ? { ...rule, enabled: false } : rule),
+    })).toBe(false)
+    expect(looksDestructiveCommand('reboot', {
+      blockDestructive: true,
+      blacklist: DEFAULT_BLACKLIST.map(rule => rule.id === 'rm-rf' ? { ...rule, enabled: false } : rule),
+    })).toBe(true)
+    expect(looksDestructiveCommand('rm -r dist', {
+      blacklist: [{ id: 'custom-rm-r', kind: 'rm', enabled: true, pattern: 'rm -r' }],
+    })).toBe(true)
+    expect(looksDestructiveCommand('rm file.txt', {
+      blacklist: [{ id: 'custom-rm-r', kind: 'rm', enabled: true, pattern: 'rm -r' }],
+    })).toBe(false)
   })
 })
 
@@ -121,6 +189,22 @@ describe('parseAssistOutput', () => {
   it('rejects blank output', () => {
     expect(parseAssistOutput('   \n```\n```')).toEqual({ kind: 'empty' })
   })
+
+  it('hard-refuses rm -rf instead of treating it as a runnable command', () => {
+    const parsed = parseAssistOutput('# 清空目录\nrm -rf /')
+    expect(parsed.kind).toBe('ask')
+    if (parsed.kind !== 'ask') return
+    expect(parsed.note).toContain('已拒绝执行')
+    expect(parsed.note).toContain('rm -rf /')
+    expect(parsed.note).not.toMatch(/^rm\s+-rf/)
+    expect(parseAssistOutput('rm -r -f ./dist').kind).toBe('ask')
+    expect(parseAssistOutput('ls -la').kind).toBe('command')
+    expect(parseAssistOutput('rm -rf /', { blockDestructive: false })).toEqual({
+      kind: 'command',
+      command: 'rm -rf /',
+      explain: '',
+    })
+  })
 })
 
 describe('previewAssistText', () => {
@@ -154,11 +238,25 @@ describe('termAssistRunPayload', () => {
   it('skips the comment when there is nothing to explain', () => {
     expect(termAssistRunPayload('ls')).toBe('\x15ls\r')
   })
+
+  it('omits the divider and explain line when those prefs are off', () => {
+    const off = { showSeparator: false, showExplain: false }
+    expect(termAssistRunPayload('ls -la', '列出当前目录', '', off)).toBe('\x15ls -la\r')
+    expect(termAssistCommentPayload('hello', '', { showSeparator: false })).toBe("\x15: '# hello'\r")
+  })
 })
 
 describe('termAssistLeadIn', () => {
   it('starts with a blank line and a hardcoded ASCII separator', () => {
     expect(termAssistLeadIn()).toBe("\x15\r: '# --------'\r")
+  })
+
+  it('skips the divider when showSeparator is off', () => {
+    expect(termAssistLeadIn('', { showSeparator: false })).toBe('\x15')
+  })
+
+  it('uses custom divider text', () => {
+    expect(termAssistLeadIn('', { separatorText: '====' })).toBe("\x15\r: '# ===='\r")
   })
 })
 
@@ -186,6 +284,13 @@ describe('termAssistCommentPayload', () => {
   it('redacts secrets before writing a comment', () => {
     expect(termAssistCommentPayload('token ghp_abcdefghijklmnopqrstuv')).toContain('ghp_abc***uv')
     expect(termAssistCommentPayload('token ghp_abcdefghijklmnopqrstuv')).not.toContain('ghp_abcdefghijklmnopqrstuv')
+  })
+
+  it('writes the hard-refuse note without the original rm -rf line', () => {
+    const payload = termAssistCommentPayload(destructiveAssistNote('rm -rf /tmp/app'))
+    expect(payload).toContain('已拒绝执行')
+    expect(payload).toContain('拦截：rm -rf /tmp/app')
+    expect(payload).not.toMatch(/(?:^|\r)rm -rf /)
   })
 })
 
@@ -264,6 +369,23 @@ describe('resolveTermAssistTemplate', () => {
   it('tells the model to match the user’s language', () => {
     expect(DEFAULT_TERM_ASSIST_TEMPLATE_ZH).toContain('输入含中文')
     expect(DEFAULT_TERM_ASSIST_TEMPLATE_EN).toContain('Match the user’s language')
+  })
+})
+
+describe('resolveTermAssistPrefs', () => {
+  it('fills defaults and ignores junk', () => {
+    expect(resolveTermAssistPrefs(undefined)).toEqual(DEFAULT_TERM_ASSIST_PREFS)
+    expect(resolveTermAssistPrefs({ showSeparator: false, extra: 1 }).showSeparator).toBe(false)
+    expect(resolveTermAssistPrefs({ separatorText: '  ==  ' }).separatorText).toBe('==')
+    expect(resolveTermAssistPrefs({ separatorText: '' }).separatorText).toBe('--------')
+  })
+
+  it('migrates the old destructiveRules map into the blacklist', () => {
+    const prefs = resolveTermAssistPrefs({
+      destructiveRules: { rmRf: false, reboot: true },
+    })
+    expect(prefs.blacklist.find(rule => rule.id === 'rm-rf')?.enabled).toBe(false)
+    expect(prefs.blacklist.find(rule => rule.id === 'mkfs')?.enabled).toBe(true)
   })
 })
 
@@ -351,5 +473,46 @@ describe('generateTermAssist', () => {
     expect(events.filter(event => event.type === 'delta').map(event => event.text))
       .toEqual(['ASK: ', 'ASK: 还缺端口号'])
     expect(events.at(-1)).toEqual({ type: 'done', message: 'ASK: 还缺端口号' })
+  })
+
+  it('rewrites a model rm -rf into ASK so the client never receives a runnable command', async () => {
+    const ctx = {
+      llm: {
+        listProviders: () => [{ id: 'deepseek-official' }],
+        listModels: async () => [{ id: 'deepseek-v4-flash' }],
+        resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'off' }] } }),
+        stream: async function* () {
+          yield { type: 'text-delta', index: 0, text: 'rm -rf /' }
+          yield { type: 'block-end', index: 0, block: { type: 'text', text: 'rm -rf /' } }
+          yield { type: 'finish', reason: { kind: 'stop' } }
+        },
+      },
+      get: () => undefined,
+    }
+    const message = await generateTermAssist(ctx as never, { text: '清空整个磁盘' })
+    expect(message.startsWith('ASK:')).toBe(true)
+    expect(message).toContain('已拒绝执行')
+    expect(message).not.toMatch(/^rm -rf /)
+  })
+
+  it('keeps a model rm -rf when the caller turned blocking off', async () => {
+    const ctx = {
+      llm: {
+        listProviders: () => [{ id: 'deepseek-official' }],
+        listModels: async () => [{ id: 'deepseek-v4-flash' }],
+        resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'off' }] } }),
+        stream: async function* () {
+          yield { type: 'text-delta', index: 0, text: 'rm -rf /tmp/x' }
+          yield { type: 'block-end', index: 0, block: { type: 'text', text: 'rm -rf /tmp/x' } }
+          yield { type: 'finish', reason: { kind: 'stop' } }
+        },
+      },
+      get: () => undefined,
+    }
+    const message = await generateTermAssist(ctx as never, {
+      text: '清空临时目录',
+      prefs: { blockDestructive: false },
+    })
+    expect(message).toBe('rm -rf /tmp/x')
   })
 })

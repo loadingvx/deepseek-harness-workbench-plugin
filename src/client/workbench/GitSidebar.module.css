@@ -609,18 +609,19 @@
 }
 
 .dialogMask {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 4;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 24px;
   background: color-mix(in srgb, var(--dsw-alias-bg-base) 55%, transparent);
 }
 
 .dialog {
   width: min(360px, calc(100% - 24px));
-  padding: 14px;
+  padding: 16px 18px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
   background: var(--dsw-alias-bg-base);
@@ -628,23 +629,34 @@
 }
 
 .dialogWide {
-  width: min(440px, calc(100% - 24px));
+  width: min(880px, calc(100vw - 48px));
+  max-height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px;
+}
+
+.dialogWide .field {
+  flex: 1;
+  min-height: 0;
 }
 
 .templateInput {
   box-sizing: border-box;
   width: 100%;
-  min-height: 160px;
-  max-height: 280px;
+  min-height: 320px;
+  max-height: none;
+  flex: 1;
+  height: 48vh;
   resize: vertical;
-  padding: 8px;
+  padding: 10px 12px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   background: transparent;
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .templateInput:focus {
@@ -662,6 +674,7 @@
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;
+  white-space: pre-wrap;
 }
 
 .field {
@@ -720,6 +733,11 @@
 .dialogOk {
   border: none;
   background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-bg-base);
+}
+
+.dialogDanger {
+  background: var(--dsw-alias-state-error-primary);
   color: var(--dsw-alias-bg-base);
 }
 

@@ -49,6 +49,15 @@ export function IconGit() {
   )
 }
 
+export function IconRestore() {
+  return (
+    <Icon>
+      <path d="M4.2 8A3.8 3.8 0 1 0 8 4.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M2.6 4.2h3.2v3.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </Icon>
+  )
+}
+
 export function IconRefresh() {
   return (
     <Icon>

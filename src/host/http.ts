@@ -177,6 +177,12 @@ export function registerGitHttp(
           await git.unstage(rootOf(body), asStringArray(body.paths))
           return { done: true }
         })
+      } else if (method === 'POST' && route === '/git/restore') {
+        const body = await readJson(req)
+        result = await wrap(async () => {
+          await git.restore(rootOf(body), asStringArray(body.paths))
+          return { done: true }
+        })
       } else if (method === 'POST' && route === '/git/commit') {
         const body = await readJson(req)
         const message = typeof body.message === 'string' ? body.message : ''
@@ -198,6 +204,7 @@ export function registerGitHttp(
           cwd: typeof body.cwd === 'string' ? body.cwd : undefined,
           transcript: typeof body.transcript === 'string' ? body.transcript : undefined,
           template: typeof body.template === 'string' ? body.template : undefined,
+          prefs: body.prefs,
         }))
         return
       } else if (method === 'POST' && route === '/git/commit-message') {

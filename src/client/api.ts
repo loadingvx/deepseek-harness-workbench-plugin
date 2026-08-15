@@ -118,6 +118,7 @@ export interface GitClient {
   branches(workspaceId: string): Promise<GitResult<GitBranchInfo[]>>
   stage(workspaceId: string, paths: string[]): Promise<GitResult<{ done: boolean }>>
   unstage(workspaceId: string, paths: string[]): Promise<GitResult<{ done: boolean }>>
+  restore(workspaceId: string, paths: string[]): Promise<GitResult<{ done: boolean }>>
   commit(workspaceId: string, message: string, all?: boolean): Promise<GitResult<GitCommitResult>>
   generateCommitMessage(
     workspaceId: string,
@@ -149,6 +150,7 @@ export interface GitClient {
       cwd?: string
       transcript?: string
       template?: string
+      prefs?: unknown
       signal?: AbortSignal
       onDelta?: (text: string) => void
     },
@@ -170,6 +172,9 @@ export function createGitClient(): GitClient {
       method: 'POST', body: JSON.stringify({ workspaceId, paths }),
     }),
     unstage: (workspaceId, paths) => request('/git/unstage', {
+      method: 'POST', body: JSON.stringify({ workspaceId, paths }),
+    }),
+    restore: (workspaceId, paths) => request('/git/restore', {
       method: 'POST', body: JSON.stringify({ workspaceId, paths }),
     }),
     commit: (workspaceId, message, all) => request('/git/commit', {
@@ -239,6 +244,7 @@ export function createGitClient(): GitClient {
         cwd: options?.cwd,
         transcript: options?.transcript,
         template: options?.template,
+        prefs: options?.prefs,
       },
       options,
       '模型没有返回命令。',

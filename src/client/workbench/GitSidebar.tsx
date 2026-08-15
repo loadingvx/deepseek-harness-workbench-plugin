@@ -8,7 +8,7 @@ import { IconButton } from './IconButton.tsx'
 import { isDefaultCommitTemplate, resolveCommitTemplate } from '../../shared/commit-template.ts'
 import { visibleSyncActions } from '../../shared/sync-actions.ts'
 import { invalidBranchName } from '../../shared/branch-name.ts'
-import { IconBranch, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRefresh, IconSparkle, IconTune } from './icons.tsx'
+import { IconBranch, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRefresh, IconRestore, IconSparkle, IconTune } from './icons.tsx'
 import type { Translate } from './types.ts'
 import { clampGraphHeight, GRAPH_DEFAULT_H, GRAPH_MIN_H, measureReservedAboveGraph } from './graph-layout.ts'
 import css from './GitSidebar.module.css'
@@ -63,6 +63,14 @@ function writeCustomTemplate(value: string, fallback: string): string | null {
 }
 
 type GraphPrompt = 'branch' | 'merge' | null
+type RestoreAsk = { untracked: boolean; paths: string[] } | null
+
+function restoreFilesLabel(paths: string[], t: Translate): string {
+  if (paths.length === 1) return paths[0] ?? ''
+  const head = paths.slice(0, 5).join('、')
+  if (paths.length <= 5) return head
+  return t('restore.more', { list: head, count: paths.length })
+}
 
 function readFlag(key: string, fallback: boolean): boolean {
   try {
@@ -78,14 +86,16 @@ function writeFlag(key: string, value: boolean): void {
 }
 
 function FileRow({
-  file, active, action, actionLabel, onSelect, onAction, disabled,
+  file, active, action, actionLabel, restoreLabel, onSelect, onAction, onRestore, disabled,
 }: {
   file: GitFileChange
   active: boolean
   action: 'stage' | 'unstage'
   actionLabel: string
+  restoreLabel?: string
   onSelect: () => void
   onAction: () => void
+  onRestore?: () => void
   disabled: boolean
 }) {
   return (
@@ -96,6 +106,11 @@ function FileRow({
       <button type="button" className={css.filePath} title={file.path} onClick={onSelect}>
         {file.path}
       </button>
+      {onRestore !== undefined && restoreLabel !== undefined ? (
+        <IconButton dense label={restoreLabel} disabled={disabled} onClick={onRestore}>
+          <IconRestore />
+        </IconButton>
+      ) : null}
       <button type="button" className={css.fileAction} disabled={disabled} onClick={onAction} title={actionLabel}>
         {action === 'stage' ? '+' : '−'}
       </button>
@@ -104,7 +119,8 @@ function FileRow({
 }
 
 function FileGroup({
-  title, files, selected, staged, action, actionLabel, bulkLabel, rowKey, disabled, onOpenDiff, onFileAction, onBulkAction,
+  title, files, selected, staged, action, actionLabel, bulkLabel, restoreLabel, bulkRestoreLabel,
+  rowKey, disabled, onOpenDiff, onFileAction, onBulkAction, onRestore, onBulkRestore,
 }: {
   title: string
   files: GitFileChange[]
@@ -113,11 +129,15 @@ function FileGroup({
   action: 'stage' | 'unstage'
   actionLabel: string
   bulkLabel: string
+  restoreLabel?: string
+  bulkRestoreLabel?: string
   rowKey: string
   disabled: boolean
   onOpenDiff: (path: string, staged: boolean) => void
   onFileAction: (path: string) => void
   onBulkAction: () => void
+  onRestore?: (path: string) => void
+  onBulkRestore?: () => void
 }) {
   if (files.length === 0) return null
   return (
@@ -126,6 +146,11 @@ function FileGroup({
         <span className={css.groupTitle}>{title}</span>
         <span className={css.sectionCount}>{files.length}</span>
         <span className={css.sectionGrow} />
+        {onBulkRestore !== undefined && bulkRestoreLabel !== undefined ? (
+          <IconButton label={bulkRestoreLabel} disabled={disabled} onClick={onBulkRestore}>
+            <IconRestore />
+          </IconButton>
+        ) : null}
         <IconButton label={bulkLabel} disabled={disabled} onClick={onBulkAction}>
           {action === 'stage' ? <IconPlus /> : <IconMinus />}
         </IconButton>
@@ -138,9 +163,11 @@ function FileGroup({
             active={selected?.path === file.path && selected.staged === staged}
             action={action}
             actionLabel={actionLabel}
+            restoreLabel={restoreLabel}
             disabled={disabled}
             onSelect={() => { onOpenDiff(file.path, staged) }}
             onAction={() => { onFileAction(file.path) }}
+            onRestore={onRestore === undefined ? undefined : () => { onRestore(file.path) }}
           />
         ))}
       </ul>
@@ -172,6 +199,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   const [graphOpen, setGraphOpen] = useState(() => readFlag(GRAPH_OPEN_KEY, true))
   const [graphCompact, setGraphCompact] = useState(() => readFlag(GRAPH_COMPACT_KEY, false))
   const [prompt, setPrompt] = useState<GraphPrompt>(null)
+  const [restoreAsk, setRestoreAsk] = useState<RestoreAsk>(null)
   const [promptValue, setPromptValue] = useState('')
   const [promptError, setPromptError] = useState<string | null>(null)
   const [graphH, setGraphH] = useState(() => {
@@ -511,6 +539,17 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
     setTemplateOpen(false)
   }
 
+  const closeRestore = (): void => {
+    setRestoreAsk(null)
+  }
+
+  const confirmRestore = (): void => {
+    if (restoreAsk === null || workspaceId === undefined) return
+    const paths = restoreAsk.paths
+    setRestoreAsk(null)
+    void runWrite(() => client.restore(workspaceId, paths))
+  }
+
   const saveTemplate = (): void => {
     setCustomTemplate(writeCustomTemplate(templateDraft, localeDefault))
     setTemplateOpen(false)
@@ -711,12 +750,18 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                   action="stage"
                   actionLabel={t('action.stage')}
                   bulkLabel={t('action.stageAllUnstaged')}
+                  restoreLabel={t('action.restore')}
+                  bulkRestoreLabel={t('action.restoreAll')}
                   rowKey="u"
                   disabled={writesDisabled}
                   onOpenDiff={onOpenDiff}
                   onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path])) }}
                   onBulkAction={() => {
                     if (workspaceId) void runWrite(() => client.stage(workspaceId, status.unstaged.map(file => file.path)))
+                  }}
+                  onRestore={(path) => { setRestoreAsk({ untracked: false, paths: [path] }) }}
+                  onBulkRestore={() => {
+                    setRestoreAsk({ untracked: false, paths: status.unstaged.map(file => file.path) })
                   }}
                 />
                 <FileGroup
@@ -727,12 +772,18 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                   action="stage"
                   actionLabel={t('action.stage')}
                   bulkLabel={t('action.stageAllUntracked')}
+                  restoreLabel={t('action.restoreUntracked')}
+                  bulkRestoreLabel={t('action.restoreAllUntracked')}
                   rowKey="n"
                   disabled={writesDisabled}
                   onOpenDiff={onOpenDiff}
                   onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path])) }}
                   onBulkAction={() => {
                     if (workspaceId) void runWrite(() => client.stage(workspaceId, status.untracked.map(file => file.path)))
+                  }}
+                  onRestore={(path) => { setRestoreAsk({ untracked: true, paths: [path] }) }}
+                  onBulkRestore={() => {
+                    setRestoreAsk({ untracked: true, paths: status.untracked.map(file => file.path) })
                   }}
                 />
               </div>
@@ -815,6 +866,46 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
             ) : null}
           </section>
         </>
+      ) : null}
+
+      {restoreAsk !== null ? (
+        <div
+          className={css.dialogMask}
+          onClick={closeRestore}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') closeRestore()
+          }}
+        >
+          <div
+            className={css.dialog}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="git-restore-title"
+            onClick={(event) => { event.stopPropagation() }}
+          >
+            <h2 id="git-restore-title">
+              {restoreAsk.untracked ? t('restore.untrackedTitle') : t('restore.title')}
+            </h2>
+            <p>
+              {restoreAsk.untracked
+                ? t('restore.untrackedBody', { files: restoreFilesLabel(restoreAsk.paths, t) })
+                : t('restore.body', { files: restoreFilesLabel(restoreAsk.paths, t) })}
+            </p>
+            <div className={css.dialogRow}>
+              <button type="button" className={css.dialogCancel} disabled={busy} onClick={closeRestore}>
+                {t('restore.cancel')}
+              </button>
+              <button
+                type="button"
+                className={`${css.dialogOk} ${css.dialogDanger}`}
+                disabled={busy}
+                onClick={confirmRestore}
+              >
+                {restoreAsk.untracked ? t('restore.delete') : t('restore.ok')}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {templateOpen ? (

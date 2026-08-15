@@ -4,6 +4,7 @@ import type { GitFail } from '../../shared/types.ts'
 import {
   classifyTermAssistInput,
   clipAssistInput,
+  destructiveAssistNote,
   looksDestructiveCommand,
   parseAssistOutput,
   previewAssistText,
@@ -15,12 +16,27 @@ import {
   isDefaultTermAssistTemplate,
   resolveTermAssistTemplate,
 } from '../../shared/term-assist-prompt.ts'
+import {
+  cloneTermAssistPrefs,
+  DEFAULT_TERM_ASSIST_PREFS,
+  isDefaultTermAssistPrefs,
+  parseStoredTermAssistPrefs,
+  resolveTermAssistPrefs,
+  type TermAssistPrefs,
+} from '../../shared/term-assist-prefs.ts'
+import {
+  createBlacklistRule,
+  MAX_BLACKLIST_RULES,
+  type BlacklistKind,
+  type BlacklistRule,
+} from '../../shared/term-assist-blacklist.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconCheck, IconClose, IconSend, IconSparkle, IconStop, IconTune } from './icons.tsx'
+import { IconClose, IconSend, IconSparkle, IconStop, IconTune } from './icons.tsx'
 import type { Translate } from './types.ts'
 import css from './TermAssistBar.module.css'
 
 const TEMPLATE_KEY = 'dsh-workbench-term-assist-template'
+const PREFS_KEY = 'dsh-workbench-term-assist-prefs'
 
 function readCustomTemplate(): string | null {
   try {
@@ -46,11 +62,30 @@ function writeCustomTemplate(value: string, fallback: string): string | null {
   }
 }
 
+function readPrefs(): TermAssistPrefs {
+  try {
+    return parseStoredTermAssistPrefs(localStorage.getItem(PREFS_KEY))
+  } catch {
+    return cloneTermAssistPrefs(DEFAULT_TERM_ASSIST_PREFS)
+  }
+}
+
+function writePrefs(prefs: TermAssistPrefs): TermAssistPrefs {
+  const next = resolveTermAssistPrefs(prefs)
+  try {
+    if (isDefaultTermAssistPrefs(next)) localStorage.removeItem(PREFS_KEY)
+    else localStorage.setItem(PREFS_KEY, JSON.stringify(next))
+  } catch {
+    /* quota / private mode: keep in-memory prefs */
+  }
+  return next
+}
+
 function visiblePreview(raw: string): string {
   return previewAssistText(raw).replace(/^(ASK|NOTE|说明)\s*[:：]\s*/i, '')
 }
 
-type Phase = 'idle' | 'run' | 'ask' | 'confirm' | 'error'
+type Phase = 'idle' | 'run' | 'ask' | 'error'
 
 export function TermAssistBar({
   client,
@@ -79,15 +114,18 @@ export function TermAssistBar({
   const [phase, setPhase] = useState<Phase>('idle')
   const [preview, setPreview] = useState('')
   const [error, setError] = useState<GitFail | null>(null)
-  const [pending, setPending] = useState<{ command: string; explain: string } | null>(null)
   const [customTemplate, setCustomTemplate] = useState<string | null>(readCustomTemplate)
-  const [templateOpen, setTemplateOpen] = useState(false)
+  const [prefs, setPrefs] = useState<TermAssistPrefs>(readPrefs)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [templateDraft, setTemplateDraft] = useState('')
+  const [prefsDraft, setPrefsDraft] = useState<TermAssistPrefs>(readPrefs)
+  const [settingsError, setSettingsError] = useState('')
   const localeDefault = t('term.ai.templateDefault')
   const template = customTemplate ?? localeDefault
   const abortRef = useRef<AbortController | null>(null)
   const busyRef = useRef(false)
   const generating = phase === 'ask' || phase === 'run'
+  const settingsCustom = customTemplate !== null || !isDefaultTermAssistPrefs(prefs)
 
   useEffect(() => {
     return () => { abortRef.current?.abort() }
@@ -119,7 +157,6 @@ export function TermAssistBar({
       return false
     }
     setError(null)
-    setPending(null)
     setDraft('')
     setPreview('')
     setPhase('idle')
@@ -133,18 +170,23 @@ export function TermAssistBar({
     setPreview('')
   }
 
+  const refuseDestructive = async (command: string): Promise<void> => {
+    setPreview('')
+    const ok = await sendBytes(termAssistCommentPayload(destructiveAssistNote(command), shell, prefs))
+    resetBusy()
+    if (ok) fail(t('term.ai.refused'), t('term.ai.refusedHint'))
+    inputRef.current?.focus()
+  }
+
   const runCommand = async (command: string, fromModel: boolean, explain = '', userText = ''): Promise<void> => {
-    const note = fromModel ? resolveAssistExplain(explain, userText) : ''
-    if (fromModel && looksDestructiveCommand(command)) {
-      setPending({ command, explain: note })
-      setPreview(command)
-      setPhase('confirm')
-      busyRef.current = false
+    if (looksDestructiveCommand(command, prefs)) {
+      await refuseDestructive(command)
       return
     }
+    const note = fromModel ? resolveAssistExplain(explain, userText) : ''
     setPhase('run')
     setPreview(note === '' ? command : `# ${note}\n${command}`)
-    await sendBytes(termAssistRunPayload(command, note, shell))
+    await sendBytes(termAssistRunPayload(command, note, shell, prefs))
     resetBusy()
     inputRef.current?.focus()
   }
@@ -162,7 +204,8 @@ export function TermAssistBar({
     }
     if (workspaceId === undefined) return
     setError(null)
-    if (classifyTermAssistInput(text) === 'run') {
+    const direct = prefs.directRunKnownCommands && classifyTermAssistInput(text) === 'run'
+    if (direct) {
       busyRef.current = true
       void runCommand(text, false)
       return
@@ -176,6 +219,7 @@ export function TermAssistBar({
       cwd,
       transcript: readTranscript(),
       template,
+      prefs,
       signal: controller.signal,
       onDelta: (chunk) => {
         if (controller.signal.aborted) return
@@ -197,11 +241,14 @@ export function TermAssistBar({
         resetBusy()
         return
       }
-      const parsed = parseAssistOutput(result.value.message)
+      const parsed = parseAssistOutput(result.value.message, prefs)
       if (parsed.kind === 'ask') {
         setPreview('')
-        void sendBytes(termAssistCommentPayload(parsed.note, shell)).then(() => {
+        void sendBytes(termAssistCommentPayload(parsed.note, shell, prefs)).then((ok) => {
           resetBusy()
+          if (ok && parsed.note.startsWith('已拒绝执行')) {
+            fail(t('term.ai.refused'), t('term.ai.refusedHint'))
+          }
           inputRef.current?.focus()
         })
         return
@@ -215,6 +262,69 @@ export function TermAssistBar({
     })
   }
 
+  const openSettings = (): void => {
+    setTemplateDraft(template)
+    setPrefsDraft(cloneTermAssistPrefs(prefs))
+    setSettingsError('')
+    setSettingsOpen(true)
+  }
+
+  const closeSettings = (): void => {
+    setSettingsOpen(false)
+    setSettingsError('')
+  }
+
+  const saveSettings = (): void => {
+    const empty = prefsDraft.blacklist.find(rule => rule.enabled && rule.pattern.trim() === '')
+    if (empty !== undefined) {
+      setSettingsError(t('term.ai.pref.blacklistEmpty'))
+      return
+    }
+    setCustomTemplate(writeCustomTemplate(templateDraft, localeDefault))
+    setPrefs(writePrefs(prefsDraft))
+    setSettingsError('')
+    setSettingsOpen(false)
+  }
+
+  const resetSettingsDraft = (): void => {
+    setTemplateDraft(localeDefault)
+    setPrefsDraft(cloneTermAssistPrefs(DEFAULT_TERM_ASSIST_PREFS))
+    setSettingsError('')
+  }
+
+  const patchPrefs = (patch: Partial<TermAssistPrefs>): void => {
+    setSettingsError('')
+    setPrefsDraft(current => ({
+      ...current,
+      ...patch,
+      blacklist: patch.blacklist ?? current.blacklist,
+    }))
+  }
+
+  const patchRule = (id: string, patch: Partial<BlacklistRule>): void => {
+    setSettingsError('')
+    setPrefsDraft(current => ({
+      ...current,
+      blacklist: current.blacklist.map(rule => rule.id === id ? { ...rule, ...patch } : rule),
+    }))
+  }
+
+  const addRule = (kind: BlacklistKind): void => {
+    setSettingsError('')
+    setPrefsDraft(current => {
+      if (current.blacklist.length >= MAX_BLACKLIST_RULES) return current
+      return { ...current, blacklist: [...current.blacklist, createBlacklistRule(kind)] }
+    })
+  }
+
+  const removeRule = (id: string): void => {
+    setSettingsError('')
+    setPrefsDraft(current => ({
+      ...current,
+      blacklist: current.blacklist.filter(rule => rule.id !== id),
+    }))
+  }
+
   const statusText = !live
     ? t('term.ai.dead')
     : phase === 'ask' && preview === ''
@@ -223,11 +333,9 @@ export function TermAssistBar({
         ? t('term.ai.ask')
         : phase === 'run'
           ? t('term.ai.run')
-          : phase === 'confirm'
-            ? t('term.ai.confirmTitle')
-            : phase === 'error'
-              ? t('term.ai.failed')
-              : t('term.ai.title')
+          : phase === 'error'
+            ? t('term.ai.failed')
+            : t('term.ai.title')
 
   return (
     <div className={css.root} data-busy={generating || undefined} data-phase={phase}>
@@ -281,12 +389,9 @@ export function TermAssistBar({
         )}
         <IconButton
           dense
-          label={customTemplate === null ? t('term.ai.template') : t('term.ai.templateCustom')}
-          active={customTemplate !== null}
-          onClick={() => {
-            setTemplateDraft(template)
-            setTemplateOpen(true)
-          }}
+          label={settingsCustom ? t('term.ai.settingsCustom') : t('term.ai.settings')}
+          active={settingsCustom}
+          onClick={openSettings}
         >
           <IconTune />
         </IconButton>
@@ -295,41 +400,8 @@ export function TermAssistBar({
         </IconButton>
       </div>
 
-      {preview !== '' && phase !== 'confirm' ? (
+      {preview !== '' ? (
         <code className={css.stream} data-live={generating || undefined}>{preview}</code>
-      ) : null}
-
-      {phase === 'confirm' && pending !== null ? (
-        <div className={css.confirm} role="alertdialog" aria-labelledby="term-ai-confirm-title">
-          <p id="term-ai-confirm-title">{t('term.ai.confirmTitle')}</p>
-          <div className={css.confirmRow}>
-            <code>{pending.explain === '' ? pending.command : `# ${pending.explain}\n${pending.command}`}</code>
-            <span className={css.grow} />
-            <IconButton
-              dense
-              label={t('term.ai.confirmCancel')}
-              onClick={() => {
-                setPending(null)
-                setPreview('')
-                setPhase('idle')
-                inputRef.current?.focus()
-              }}
-            >
-              <IconClose />
-            </IconButton>
-            <IconButton
-              dense
-              label={t('term.ai.confirmOk')}
-              onClick={() => {
-                const next = pending
-                setPending(null)
-                void sendBytes(termAssistRunPayload(next.command, next.explain, shell)).then(() => { inputRef.current?.focus() })
-              }}
-            >
-              <IconCheck />
-            </IconButton>
-          </div>
-        </div>
       ) : null}
 
       {error !== null ? (
@@ -339,56 +411,209 @@ export function TermAssistBar({
         </div>
       ) : null}
 
-      {templateOpen ? (
+      {settingsOpen ? (
         <div
           className={css.dialogMask}
-          onClick={() => { setTemplateOpen(false) }}
+          onClick={closeSettings}
           onKeyDown={(event) => {
-            if (event.key === 'Escape') setTemplateOpen(false)
+            if (event.key === 'Escape') closeSettings()
           }}
         >
           <div
             className={css.dialog}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="term-ai-template-title"
+            aria-labelledby="term-ai-settings-title"
             onClick={(event) => { event.stopPropagation() }}
           >
-            <h2 id="term-ai-template-title">{t('term.ai.templateTitle')}</h2>
-            <p>{t('term.ai.templateHint')}</p>
-            <label className={css.field}>
-              <span>{t('term.ai.templateTitle')}</span>
-              <textarea
-                className={css.templateInput}
-                value={templateDraft}
-                autoFocus
-                onChange={(event) => { setTemplateDraft(event.target.value) }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Escape') setTemplateOpen(false)
-                }}
-              />
-            </label>
+            <h2 id="term-ai-settings-title">{t('term.ai.settingsTitle')}</h2>
+            <p>{t('term.ai.settingsHint')}</p>
+
+            <div className={css.settingsBody}>
+              <section className={css.section} aria-labelledby="term-ai-pref-display">
+                <h3 id="term-ai-pref-display">{t('term.ai.pref.display')}</h3>
+                <label className={css.check}>
+                  <input
+                    type="checkbox"
+                    checked={prefsDraft.showSeparator}
+                    onChange={(event) => { patchPrefs({ showSeparator: event.target.checked }) }}
+                  />
+                  <span>
+                    <span className={css.checkTitle}>{t('term.ai.pref.separator')}</span>
+                    <span className={css.checkHint}>{t('term.ai.pref.separatorHint')}</span>
+                  </span>
+                </label>
+                <label className={css.inlineField}>
+                  <span>{t('term.ai.pref.separatorText')}</span>
+                  <input
+                    className={css.sepInput}
+                    value={prefsDraft.separatorText}
+                    disabled={!prefsDraft.showSeparator}
+                    maxLength={80}
+                    spellCheck={false}
+                    aria-label={t('term.ai.pref.separatorText')}
+                    onChange={(event) => { patchPrefs({ separatorText: event.target.value }) }}
+                  />
+                </label>
+                <label className={css.check}>
+                  <input
+                    type="checkbox"
+                    checked={prefsDraft.showExplain}
+                    onChange={(event) => { patchPrefs({ showExplain: event.target.checked }) }}
+                  />
+                  <span>
+                    <span className={css.checkTitle}>{t('term.ai.pref.explain')}</span>
+                    <span className={css.checkHint}>{t('term.ai.pref.explainHint')}</span>
+                  </span>
+                </label>
+                <label className={css.check}>
+                  <input
+                    type="checkbox"
+                    checked={prefsDraft.directRunKnownCommands}
+                    onChange={(event) => { patchPrefs({ directRunKnownCommands: event.target.checked }) }}
+                  />
+                  <span>
+                    <span className={css.checkTitle}>{t('term.ai.pref.directRun')}</span>
+                    <span className={css.checkHint}>{t('term.ai.pref.directRunHint')}</span>
+                  </span>
+                </label>
+              </section>
+
+              <section className={css.section} aria-labelledby="term-ai-pref-safety">
+                <h3 id="term-ai-pref-safety">{t('term.ai.pref.safety')}</h3>
+                <label className={css.check}>
+                  <input
+                    type="checkbox"
+                    checked={prefsDraft.blockDestructive}
+                    onChange={(event) => { patchPrefs({ blockDestructive: event.target.checked }) }}
+                  />
+                  <span>
+                    <span className={css.checkTitle}>{t('term.ai.pref.block')}</span>
+                    <span className={css.checkHint}>{t('term.ai.pref.blockHint')}</span>
+                  </span>
+                </label>
+                {!prefsDraft.blockDestructive ? (
+                  <p className={css.warn} role="status">{t('term.ai.pref.blockOffWarn')}</p>
+                ) : prefsDraft.blacklist.length === 0 ? (
+                  <p className={css.warn} role="status">{t('term.ai.pref.blacklistNone')}</p>
+                ) : null}
+                {settingsError !== '' ? (
+                  <p className={css.warn} role="alert">{settingsError}</p>
+                ) : null}
+
+                <h4 className={css.subhead}>{t('term.ai.pref.rmList')}</h4>
+                <p className={css.checkHint}>{t('term.ai.pref.rmHint')}</p>
+                <div className={css.rules} data-off={!prefsDraft.blockDestructive || undefined}>
+                  {prefsDraft.blacklist.filter(rule => rule.kind === 'rm').map(rule => (
+                    <div key={rule.id} className={css.ruleRow}>
+                      <input
+                        type="checkbox"
+                        checked={rule.enabled}
+                        disabled={!prefsDraft.blockDestructive}
+                        aria-label={t('term.ai.pref.ruleOn')}
+                        onChange={(event) => { patchRule(rule.id, { enabled: event.target.checked }) }}
+                      />
+                      <input
+                        className={css.sepInput}
+                        value={rule.pattern}
+                        disabled={!prefsDraft.blockDestructive}
+                        spellCheck={false}
+                        maxLength={80}
+                        placeholder={t('term.ai.pref.rmPlaceholder')}
+                        aria-label={t('term.ai.pref.rmList')}
+                        onChange={(event) => { patchRule(rule.id, { pattern: event.target.value }) }}
+                      />
+                      <button
+                        type="button"
+                        className={css.textBtn}
+                        disabled={!prefsDraft.blockDestructive}
+                        onClick={() => { removeRule(rule.id) }}
+                      >
+                        {t('term.ai.pref.removeRule')}
+                      </button>
+                    </div>
+                  ))}
+                  {prefsDraft.blacklist.some(rule => rule.kind === 'rm') ? null : (
+                    <p className={css.checkHint}>{t('term.ai.pref.rmEmpty')}</p>
+                  )}
+                  <button
+                    type="button"
+                    className={css.textBtn}
+                    disabled={!prefsDraft.blockDestructive || prefsDraft.blacklist.length >= MAX_BLACKLIST_RULES}
+                    onClick={() => { addRule('rm') }}
+                  >
+                    {t('term.ai.pref.addRm')}
+                  </button>
+                </div>
+
+                <h4 className={css.subhead}>{t('term.ai.pref.otherList')}</h4>
+                <p className={css.checkHint}>{t('term.ai.pref.otherHint')}</p>
+                <div className={css.rules} data-off={!prefsDraft.blockDestructive || undefined}>
+                  {prefsDraft.blacklist.filter(rule => rule.kind === 'other').map(rule => (
+                    <div key={rule.id} className={css.ruleRow}>
+                      <input
+                        type="checkbox"
+                        checked={rule.enabled}
+                        disabled={!prefsDraft.blockDestructive}
+                        aria-label={t('term.ai.pref.ruleOn')}
+                        onChange={(event) => { patchRule(rule.id, { enabled: event.target.checked }) }}
+                      />
+                      <input
+                        className={css.sepInput}
+                        value={rule.pattern}
+                        disabled={!prefsDraft.blockDestructive}
+                        spellCheck={false}
+                        maxLength={80}
+                        placeholder={t('term.ai.pref.otherPlaceholder')}
+                        aria-label={t('term.ai.pref.otherList')}
+                        onChange={(event) => { patchRule(rule.id, { pattern: event.target.value }) }}
+                      />
+                      <button
+                        type="button"
+                        className={css.textBtn}
+                        disabled={!prefsDraft.blockDestructive}
+                        onClick={() => { removeRule(rule.id) }}
+                      >
+                        {t('term.ai.pref.removeRule')}
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className={css.textBtn}
+                    disabled={!prefsDraft.blockDestructive || prefsDraft.blacklist.length >= MAX_BLACKLIST_RULES}
+                    onClick={() => { addRule('other') }}
+                  >
+                    {t('term.ai.pref.addOther')}
+                  </button>
+                </div>
+                {prefsDraft.blacklist.length >= MAX_BLACKLIST_RULES ? (
+                  <p className={css.checkHint}>{t('term.ai.pref.blacklistMax', { max: MAX_BLACKLIST_RULES })}</p>
+                ) : null}
+              </section>
+
+              <label className={css.field}>
+                <span>{t('term.ai.templateTitle')}</span>
+                <textarea
+                  className={css.templateInput}
+                  value={templateDraft}
+                  onChange={(event) => { setTemplateDraft(event.target.value) }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') closeSettings()
+                  }}
+                />
+              </label>
+            </div>
+
             <div className={css.dialogRow}>
-              <button
-                type="button"
-                className={css.textBtn}
-                onClick={() => { setTemplateDraft(localeDefault) }}
-              >
+              <button type="button" className={css.textBtn} onClick={resetSettingsDraft}>
                 {t('term.ai.templateReset')}
               </button>
               <span className={css.grow} />
-              <button type="button" className={css.textBtn} onClick={() => { setTemplateOpen(false) }}>
+              <button type="button" className={css.textBtn} onClick={closeSettings}>
                 {t('term.ai.templateCancel')}
               </button>
-              <button
-                type="button"
-                className={css.textBtn}
-                data-primary
-                onClick={() => {
-                  setCustomTemplate(writeCustomTemplate(templateDraft, localeDefault))
-                  setTemplateOpen(false)
-                }}
-              >
+              <button type="button" className={css.textBtn} data-primary onClick={saveSettings}>
                 {t('term.ai.templateSave')}
               </button>
             </div>

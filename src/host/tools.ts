@@ -17,7 +17,7 @@ function failPayload(error: unknown): Record<string, unknown> {
   return { ok: false, code: fail.code, message: fail.messageZh, hint: fail.hintZh }
 }
 
-/** Register model-facing git_* tools and require approval for commit. */
+/** Register model-facing git_* tools. Read-only except commit (user must approve). No delete / reset --hard / clean. */
 export function registerGitTools(ctx: Context, git: GitService): () => void {
   const disposeStatus = ctx.tools.register(defineTool({
     name: 'git_status',
@@ -118,7 +118,7 @@ export function registerGitTools(ctx: Context, git: GitService): () => void {
 
   const disposeCommit = ctx.tools.register(defineTool({
     name: 'git_commit',
-    description: 'Create a git commit from already-staged files. Requires a non-empty message. Does not stage files, push, or amend. The user must approve this call.',
+    description: 'Create a git commit from already-staged files. Requires a non-empty message. Does not stage, delete, restore, reset, push, or amend. The user must approve this call.',
     parameters: {
       message: { type: 'string', required: true, description: 'Commit message' },
     },

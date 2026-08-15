@@ -18,6 +18,7 @@ import {
   parseAssistOutput,
   previewAssistText,
 } from '../shared/term-assist.ts'
+import { resolveTermAssistPrefs } from '../shared/term-assist-prefs.ts'
 import { DEFAULT_TERM_ASSIST_TEMPLATE, resolveTermAssistTemplate } from '../shared/term-assist-prompt.ts'
 
 const GENERATE_TIMEOUT_MS = 30_000
@@ -140,6 +141,7 @@ export async function* streamTermAssist(
     cwd?: string
     transcript?: string
     template?: string
+    prefs?: unknown
     signal?: AbortSignal
   },
 ): AsyncGenerator<TermAssistStreamEvent> {
@@ -188,7 +190,7 @@ export async function* streamTermAssist(
     if (assembled.fail !== '') {
       throw new GitError('LLM_FAILED', `${assembled.fail} 路由：${route.provider} / ${route.model}`)
     }
-    yield { type: 'done', message: redactSecrets(sanitizeDone(assembled.text)) }
+    yield { type: 'done', message: redactSecrets(sanitizeDone(assembled.text, options.prefs)) }
   } catch (error) {
     if (error instanceof GitError) throw error
     if (controller.signal.aborted) {
@@ -201,8 +203,8 @@ export async function* streamTermAssist(
   }
 }
 
-function sanitizeDone(raw: string): string {
-  const parsed = parseAssistOutput(raw)
+function sanitizeDone(raw: string, prefs?: unknown): string {
+  const parsed = parseAssistOutput(raw, resolveTermAssistPrefs(prefs))
   if (parsed.kind === 'command') {
     return parsed.explain === '' ? parsed.command : `# ${parsed.explain}\n${parsed.command}`
   }
@@ -217,6 +219,7 @@ export async function generateTermAssist(
     cwd?: string
     transcript?: string
     template?: string
+    prefs?: unknown
     signal?: AbortSignal
   },
 ): Promise<string> {

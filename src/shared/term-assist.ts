@@ -1,4 +1,11 @@
 import { redactSecrets } from './redact.ts'
+import { commandMatchesBlacklist } from './term-assist-blacklist.ts'
+import {
+  DEFAULT_TERM_ASSIST_PREFS,
+  DEFAULT_TERM_ASSIST_SEPARATOR,
+  resolveTermAssistPrefs,
+  type TermAssistPrefs,
+} from './term-assist-prefs.ts'
 
 export const MAX_TERM_ASSIST_INPUT = 4_000
 export const MAX_TERM_ASSIST_TRANSCRIPT = 6_000
@@ -33,6 +40,9 @@ const ENV_ASSIGN = /^[A-Za-z_][A-Za-z0-9_]*=/
 const PATH_START = /^(?:\.\.?\/|~\/|\/)/
 const ASK_LINE = /^(?:ASK|NOTE|说明)\s*[:：]\s*/i
 const GREETING = /^(hi|hey|hello|hola|yo|thanks|thank you|thx|ok|okay|bye|goodbye|你好|您好|嗨|谢谢|感谢|再见)(?:[\s!.。！？?,，~～].*)?$/i
+/** English glue words: `sort by disk usage` is a request, not `sort(1)` argv. */
+const PROSE_WORD = /^(a|an|the|this|that|these|those|my|all|by|of|from|into|onto|with|using|and|or|to|in|on|for|per|vs|versus|current|directory|folder|files?|lines?|disk|usage|size|largest|smallest|desc|asc|ascending|descending|please)$/i
+const ARGV_TOKEN = /^(?:-{1,2}[\w.-]+|[.~]?\/\S*|\S+\.\w+|\d+|[A-Za-z0-9._*+[\]%@:=,-]+)$/
 
 export type TermAssistKind = 'run' | 'ask'
 
@@ -72,9 +82,23 @@ function isQuestion(text: string): boolean {
   return false
 }
 
+function restLooksLikeArgv(text: string): boolean {
+  const words = text.split(/\s+/).filter(Boolean)
+  if (words.length <= 1) return true
+  if (/[|;&><]/.test(text)) return true
+  const token = firstToken(text)
+  if (token === 'echo' || token === 'printf') return true
+  const rest = words.slice(1)
+  if (rest.some(word => PROSE_WORD.test(word))) return false
+  if (CJK.test(text)) return false
+  return rest.every(word => ARGV_TOKEN.test(word))
+}
+
 /**
  * Heuristic: a real argv line goes straight to the PTY.
  * Anything that reads as a request is sent to the model.
+ * First-token allowlist is not enough: `sort by disk usage` starts with `sort`
+ * but is English, not `sort(1)` flags.
  */
 export function classifyTermAssistInput(raw: string): TermAssistKind {
   const text = stripTermPrompt(raw)
@@ -83,7 +107,7 @@ export function classifyTermAssistInput(raw: string): TermAssistKind {
   const token = firstToken(text)
   const known = KNOWN_SHELL_COMMANDS.has(token) || token.endsWith('.sh') || token.endsWith('.bash')
   if (CJK.test(text) && !known) return 'ask'
-  if (known) return 'run'
+  if (known) return restLooksLikeArgv(text) ? 'run' : 'ask'
   if (PATH_START.test(text) || ENV_ASSIGN.test(text)) return 'run'
   return 'ask'
 }
@@ -92,19 +116,27 @@ export function looksLikeShellCommand(raw: string): boolean {
   return classifyTermAssistInput(raw) === 'run'
 }
 
-/** LLM-proposed commands that must not auto-run. User-typed commands still go through. */
-export function looksDestructiveCommand(command: string): boolean {
+/**
+ * Hard veto when an enabled blacklist rule matches.
+ * Ordinary `rm file` is not blocked unless the user adds a rule for it.
+ */
+export function looksDestructiveCommand(command: string, prefs?: unknown): boolean {
   const text = command.trim()
   if (text === '') return false
-  if (/\brm\s+(-[^\s]*r[^\s]*f|-[^\s]*f[^\s]*r)/i.test(text)) return true
-  if (/\brm\s+.*--recursive\b/i.test(text) && /\b--force\b/i.test(text)) return true
-  if (/\bmkfs(\.\w+)?\b/i.test(text)) return true
-  if (/\bdd\b[\s\S]*\bof=/i.test(text)) return true
-  if (/:\(\)\s*\{/.test(text)) return true
-  if (/>\s*\/dev\/sd/i.test(text)) return true
-  if (/\b(shutdown|reboot|halt|poweroff|init\s+0|init\s+6)\b/i.test(text)) return true
-  if (/\bformat\s+[a-z]:/i.test(text)) return true
-  return false
+  const p = resolveTermAssistPrefs(prefs)
+  if (!p.blockDestructive) return false
+  return commandMatchesBlacklist(text, p.blacklist)
+}
+
+/** Chinese PTY note when assist refuses a destructive command. Secrets already redacted. */
+export function destructiveAssistNote(command: string): string {
+  const shown = redactSecrets(command.trim().replace(/\s+/g, ' '))
+  const clip = shown.length > 160 ? `${shown.slice(0, 159)}…` : shown
+  return [
+    '已拒绝执行：命令命中助手黑名单，AI 助手不会代为执行，以免误删文件或系统。',
+    clip === '' ? '' : `拦截：${clip}`,
+    '如确需操作，请在下方终端自行核对路径后手动输入。黑名单可在齿轮设置里增删。',
+  ].filter(line => line !== '').join('\n')
 }
 
 export function sanitizeAssistCommand(raw: string): string {
@@ -168,7 +200,7 @@ export function looksLikeModelCommand(text: string): boolean {
   return /^[A-Za-z0-9._+-]+(\s+(-{1,2}[\w.-]+|\S+))*$/.test(text) && words.length <= 8
 }
 
-export function parseAssistOutput(raw: string): AssistVerdict {
+export function parseAssistOutput(raw: string, prefs?: unknown): AssistVerdict {
   const text = sanitizeAssistCommand(raw)
   if (text === '') return { kind: 'empty' }
   if (ASK_LINE.test(text)) {
@@ -203,6 +235,9 @@ export function parseAssistOutput(raw: string): AssistVerdict {
   if (command === '') return { kind: 'empty' }
   const spoken = unwrapSpokenEcho(command)
   if (spoken !== null) return { kind: 'ask', note: spoken }
+  if (looksDestructiveCommand(command, prefs)) {
+    return { kind: 'ask', note: destructiveAssistNote(command) }
+  }
   if (looksLikeModelCommand(command)) return { kind: 'command', command, explain }
   if (comments.length > 0) return { kind: 'ask', note: [...comments, command].join('\n') }
   return { kind: 'ask', note: text }
@@ -275,23 +310,35 @@ export function termAssistPayload(command: string): string {
   return `\x15${command}\r`
 }
 
-/** Hardcoded divider so each assist turn is visually split from the last command. */
-export const TERM_ASSIST_META_SEPARATOR = '--------'
+/** Default divider text. Override via prefs.separatorText. */
+export const TERM_ASSIST_META_SEPARATOR = DEFAULT_TERM_ASSIST_SEPARATOR
 
-/** Empty prompt line + a no-op separator. Not produced by the model. */
-export function termAssistLeadIn(shell = ''): string {
-  return `\x15\r${termAssistNoopCommand(TERM_ASSIST_META_SEPARATOR, shell)}\r`
+function resolvedPrefs(prefs?: unknown): TermAssistPrefs {
+  return prefs === undefined ? DEFAULT_TERM_ASSIST_PREFS : resolveTermAssistPrefs(prefs)
 }
 
-/** Model-translated runs: blank + separator, explain line, then the command. */
-export function termAssistRunPayload(command: string, explain = '', shell = ''): string {
-  const note = clipAssistExplain(explain)
-  if (note === '') return termAssistPayload(command)
-  return `${termAssistLeadIn(shell)}${termAssistNoopCommand(note, shell)}\r${command}\r`
+/** Clear the current line, then optionally a no-op separator. Not produced by the model. */
+export function termAssistLeadIn(shell = '', prefs?: unknown): string {
+  const p = resolvedPrefs(prefs)
+  if (!p.showSeparator) return '\x15'
+  return `\x15\r${termAssistNoopCommand(p.separatorText, shell)}\r`
 }
 
-/** Non-executable replies: blank + separator, then quoted no-ops. */
-export function termAssistCommentPayload(note: string, shell = ''): string {
+/** Model-translated runs: optional separator, optional explain line, then the command. */
+export function termAssistRunPayload(command: string, explain = '', shell = '', prefs?: unknown): string {
+  const p = resolvedPrefs(prefs)
+  const rawExplain = clipAssistExplain(explain)
+  const note = p.showExplain ? rawExplain : ''
+  const modelTurn = rawExplain !== ''
+  if (note === '' && !(p.showSeparator && modelTurn)) return termAssistPayload(command)
+  const prefix = termAssistLeadIn(shell, p)
+  if (note === '') return `${prefix}${command}\r`
+  return `${prefix}${termAssistNoopCommand(note, shell)}\r${command}\r`
+}
+
+/** Non-executable replies: optional separator, then quoted no-ops. */
+export function termAssistCommentPayload(note: string, shell = '', prefs?: unknown): string {
+  const p = resolvedPrefs(prefs)
   const lines = clipAssistInput(redactSecrets(note))
     .split('\n')
     .map(line => line.trimEnd())
@@ -299,7 +346,7 @@ export function termAssistCommentPayload(note: string, shell = ''): string {
     .slice(0, 8)
     .map(line => termAssistNoopCommand(line, shell))
   const body = lines.length === 0 ? `${termAssistNoopCommand('#', shell)}\r` : `${lines.join('\r')}\r`
-  return `${termAssistLeadIn(shell)}${body}`
+  return `${termAssistLeadIn(shell, p)}${body}`
 }
 
 export function isTermAssistHotkey(event: {

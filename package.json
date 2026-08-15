@@ -1,6 +1,6 @@
 {
   "name": "dsh-workbench-plugin",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "DeepSeek Harness Web UI 工作台：聊天 / 编辑器（语法高亮） / 文件与 Git、侧边栏、模型工具",
   "type": "module",
   "main": "lib/index.js",

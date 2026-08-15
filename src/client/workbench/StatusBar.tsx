@@ -3,7 +3,7 @@ import type { GitClient } from '../api.ts'
 import type { GitStatusSnapshot, PluginUpdateSnapshot } from '../../shared/types.ts'
 import { redactSecrets } from '../../shared/redact.ts'
 import { PLUGIN_PAGE_URL, PLUGIN_REPO_URL } from '../../shared/version.ts'
-import { IconChevron, IconGithub, IconNpm } from './icons.tsx'
+import { IconChevron, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
 import { fileName, shortPath, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
 import { terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import css from './StatusBar.module.css'
@@ -19,6 +19,7 @@ export function StatusBar({
   active,
   plugin,
   tabs,
+  aiTermIds,
   onActivate,
   onPrepareUpdate,
   t,
@@ -29,6 +30,7 @@ export function StatusBar({
   active?: FileTab | null
   plugin: PluginUpdateSnapshot | null
   tabs?: FileTab[]
+  aiTermIds?: readonly string[]
   onActivate?: (id: string) => void
   onPrepareUpdate?: () => void
   t: Translate
@@ -77,7 +79,7 @@ export function StatusBar({
       data-git-ide-panel="status"
       aria-label={t('status.label')}
     >
-      <StatusTabs tabs={openTabs} activeId={active?.id} onActivate={onActivate} t={t} />
+      <StatusTabs tabs={openTabs} activeId={active?.id} aiTermIds={aiTermIds} onActivate={onActivate} t={t} />
       <span className={css.grow} />
       <span className={`${css.item} ${css.itemLead}`}>
         <button
@@ -173,11 +175,13 @@ export function StatusBar({
 function StatusTabs({
   tabs,
   activeId,
+  aiTermIds,
   onActivate,
   t,
 }: {
   tabs: FileTab[]
   activeId?: string
+  aiTermIds?: readonly string[]
   onActivate?: (id: string) => void
   t: Translate
 }) {
@@ -244,7 +248,12 @@ function StatusTabs({
             : tab.kind === 'diff'
               ? t('status.diff', { name: fileName(tab.path) })
               : fileName(tab.path)
-          const title = tab.kind === 'file' || tab.kind === 'diff' ? redactSecrets(tab.path) : label
+          const title = tab.kind === 'file' || tab.kind === 'diff'
+            ? redactSecrets(tab.path)
+            : tab.kind === 'terminal' && aiTermIds?.includes(tab.id)
+              ? t('term.ai.modeOn')
+              : label
+          const aiOn = tab.kind === 'terminal' && aiTermIds?.includes(tab.id) === true
           return (
             <button
               key={tab.id}
@@ -252,10 +261,16 @@ function StatusTabs({
               className={css.tab}
               data-tab={tab.id}
               data-active={tab.id === activeId || undefined}
+              data-ai={aiOn || undefined}
               role="tab"
               title={title}
               onClick={() => { onActivate?.(tab.id) }}
             >
+              {aiOn ? (
+                <span className={css.aiMark} aria-label={t('term.ai.mode')}>
+                  <IconSparkle size={11} />
+                </span>
+              ) : null}
               {label}
             </button>
           )

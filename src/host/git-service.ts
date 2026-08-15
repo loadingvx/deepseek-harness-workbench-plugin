@@ -282,6 +282,40 @@ export class GitService {
     })
   }
 
+  /** Discard worktree edits (`git restore`) or delete untracked paths (`git clean -f`). */
+  async restore(root: string, paths: readonly string[], signal?: AbortSignal): Promise<void> {
+    await this.mutex.run(async () => {
+      await this.requireRepo(root, signal)
+      if (paths.length === 0) throw new GitError('INVALID_PATH')
+      const safe = paths.map(path => assertSafeRepoPath(root, path))
+      const snapshot = await this.status(root, signal)
+      const untracked = new Set(snapshot.untracked.map(file => file.path))
+      const tracked = safe.filter(path => !untracked.has(path))
+      const junk = safe.filter(path => untracked.has(path))
+      if (tracked.length > 0) {
+        await runGit({ cwd: root, args: ['restore', '--worktree', '--', ...tracked], signal })
+      }
+      if (junk.length === 0) return
+      const files: string[] = []
+      const dirs: string[] = []
+      for (const path of junk) {
+        try {
+          const info = await stat(join(root, path))
+          if (info.isDirectory()) dirs.push(path)
+          else files.push(path)
+        } catch {
+          files.push(path)
+        }
+      }
+      if (files.length > 0) {
+        await runGit({ cwd: root, args: ['clean', '-f', '--', ...files], signal })
+      }
+      if (dirs.length > 0) {
+        await runGit({ cwd: root, args: ['clean', '-fd', '--', ...dirs], signal })
+      }
+    })
+  }
+
   async commit(root: string, message: string, all = false, signal?: AbortSignal): Promise<GitCommitResult> {
     return this.mutex.run(async () => {
       await this.requireRepo(root, signal)
