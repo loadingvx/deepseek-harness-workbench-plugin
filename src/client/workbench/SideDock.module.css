@@ -1,0 +1,28 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  background: var(--dsw-alias-button-ghost-active-fill);
+  border-left: 1px solid var(--dsw-alias-border-l1);
+}
+
+.tabs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}

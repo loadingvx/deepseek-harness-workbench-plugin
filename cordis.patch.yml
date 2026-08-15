@@ -1,0 +1,5 @@
+# Insert the Git host plugin after dsh-web-app.
+# One row is enough: the node half registers tools/HTTP; dsh.client discovers the browser half.
+- insert:
+    - id: git
+      name: dsh-git-plugin

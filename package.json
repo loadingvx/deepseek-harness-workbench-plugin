@@ -1,0 +1,62 @@
+{
+  "name": "dsh-git-plugin",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness Web UI Git 扩展：工作台（聊天/编辑器/Git）、侧边栏面板、模型工具",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-tool",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prepare": "tsdown",
+    "test": "vitest run",
+    "dev": "bash devops/dev.sh"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.1.0-rc.5",
+    "@deepseek-ai/dsh-tools": ">=0.1.0-rc.5",
+    "react": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "lightningcss": "^1.32.0",
+    "tsdown": "^0.22.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/react": "~18.3.1",
+    "react": "^18.2.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.8"
+  },
+  "license": "MIT"
+}
