@@ -3,7 +3,7 @@ import { join, normalize, relative, resolve as resolvePath, sep } from 'node:pat
 import { GitError } from '../shared/errors.ts'
 import type {
   FileStatusKind, GitBranchInfo, GitCommitResult, GitDiffSnapshot, GitFileChange,
-  GitLogEntry, GitProbe, GitStatusSnapshot, GitSwitchResult,
+  GitLogEntry, GitProbe, GitRefMark, GitStatusSnapshot, GitSwitchResult,
 } from '../shared/types.ts'
 import { gitAvailable, runGit } from './git-exec.ts'
 import { GitMutex } from './mutex.ts'
@@ -29,11 +29,11 @@ function letterKind(letter: string): FileStatusKind {
   }
 }
 
-/** Parse `git log --format=%D` decorations into HEAD + ref names. */
-export function parseDecorations(raw: string): { head: boolean; refs: string[] } {
+/** Parse `git log --format=%D` decorations into HEAD + typed ref marks. */
+export function parseDecorations(raw: string): { head: boolean; refs: GitRefMark[] } {
   if (raw.trim() === '') return { head: false, refs: [] }
   let head = false
-  const refs: string[] = []
+  const refs: GitRefMark[] = []
   for (const part of raw.split(',').map(item => item.trim()).filter(Boolean)) {
     if (part === 'HEAD') {
       head = true
@@ -41,10 +41,14 @@ export function parseDecorations(raw: string): { head: boolean; refs: string[] }
     }
     if (part.startsWith('HEAD -> ')) {
       head = true
-      refs.push(part.slice('HEAD -> '.length))
+      refs.push({ name: part.slice('HEAD -> '.length), kind: 'branch' })
       continue
     }
-    refs.push(part.startsWith('tag: ') ? part.slice('tag: '.length) : part)
+    if (part.startsWith('tag: ')) {
+      refs.push({ name: part.slice('tag: '.length), kind: 'tag' })
+      continue
+    }
+    refs.push({ name: part, kind: part.includes('/') ? 'remote' : 'branch' })
   }
   return { head, refs }
 }

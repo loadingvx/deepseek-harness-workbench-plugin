@@ -6,7 +6,10 @@ describe('parseDecorations', () => {
   it('reads HEAD and the current branch', () => {
     expect(parseDecorations('HEAD -> main, origin/main')).toEqual({
       head: true,
-      refs: ['main', 'origin/main'],
+      refs: [
+        { name: 'main', kind: 'branch' },
+        { name: 'origin/main', kind: 'remote' },
+      ],
     })
   })
 
@@ -14,10 +17,13 @@ describe('parseDecorations', () => {
     expect(parseDecorations('HEAD')).toEqual({ head: true, refs: [] })
   })
 
-  it('strips tag prefixes', () => {
+  it('keeps tags distinct from branches and remotes', () => {
     expect(parseDecorations('tag: v1.0.0, origin/main')).toEqual({
       head: false,
-      refs: ['v1.0.0', 'origin/main'],
+      refs: [
+        { name: 'v1.0.0', kind: 'tag' },
+        { name: 'origin/main', kind: 'remote' },
+      ],
     })
   })
 

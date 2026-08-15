@@ -249,31 +249,33 @@
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  height: 30px;
-  overflow: hidden;
+  min-height: 32px;
+  height: auto;
+  padding: 6px 12px;
   border: none;
   border-radius: 8px;
-  background: var(--dsw-alias-button-primary-fill, var(--dsw-alias-interactive-bg-hover));
-  color: var(--dsw-alias-button-primary-label, var(--dsw-alias-label-primary));
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-label-primary-foreground);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
+  line-height: 16px;
   cursor: pointer;
 }
 
 .commitLabel {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .commitButton:hover:not(:disabled) {
-  filter: brightness(1.06);
+  background: var(--dsw-alias-button-primary-hover);
 }
 
 .commitButton:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
@@ -451,17 +453,32 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  max-width: 96px;
+  max-width: 120px;
   height: 16px;
   padding: 0 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--dsw-alias-button-ghost-active-fill);
+  color: var(--dsw-alias-label-secondary);
   font-size: 10px;
   font-weight: 600;
+}
+
+.refPill[data-kind='branch'] {
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.refPill[data-kind='tag'] {
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.refPill[data-kind='remote'] {
+  background: var(--dsw-alias-button-ghost-active-fill);
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .hash {

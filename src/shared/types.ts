@@ -74,6 +74,13 @@ export interface GitDiffSnapshot {
   empty: boolean
 }
 
+export type GitRefKind = 'branch' | 'tag' | 'remote'
+
+export interface GitRefMark {
+  name: string
+  kind: GitRefKind
+}
+
 export interface GitLogEntry {
   hash: string
   shortHash: string
@@ -81,7 +88,7 @@ export interface GitLogEntry {
   date: string
   subject: string
   head: boolean
-  refs: string[]
+  refs: GitRefMark[]
 }
 
 export interface GitBranchInfo {

@@ -1,4 +1,5 @@
 import type { GitLogEntry } from '../../shared/types.ts'
+import { toRefMark } from './git-refs.ts'
 import type { Translate } from './types.ts'
 import css from './GitSidebar.module.css'
 
@@ -23,9 +24,20 @@ export function GitGraph({
           <div className={css.graphBody}>
             <div className={css.graphTop}>
               <span className={css.graphSubject} title={entry.subject}>{entry.subject}</span>
-              {entry.refs.map(ref => (
-                <span key={ref} className={css.refPill} title={ref}>{ref}</span>
-              ))}
+              {entry.refs.map((raw, index) => {
+                const ref = toRefMark(raw)
+                if (ref === null) return null
+                return (
+                  <span
+                    key={`${ref.kind}:${ref.name}:${index}`}
+                    className={css.refPill}
+                    data-kind={ref.kind}
+                    title={ref.kind === 'tag' ? `tag ${ref.name}` : ref.name}
+                  >
+                    {ref.name}
+                  </span>
+                )
+              })}
             </div>
             <div className={css.graphMeta}>
               <span>{entry.author}</span>
