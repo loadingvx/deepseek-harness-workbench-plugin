@@ -1,7 +1,7 @@
 {
-  "name": "dsh-git-plugin",
+  "name": "dsh-workbench-plugin",
   "version": "0.1.0",
-  "description": "DeepSeek Harness Web UI Git 扩展：工作台（聊天/编辑器/Git）、侧边栏面板、模型工具",
+  "description": "DeepSeek Harness Web UI 工作台：聊天 / 编辑器 / 文件与 Git、侧边栏、模型工具",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -12,7 +12,8 @@
   "files": [
     "lib/index.js",
     "lib/client.js",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "LICENSE"
   ],
   "dsh": {
     "bundle": {

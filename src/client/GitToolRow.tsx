@@ -3,7 +3,7 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import css from './GitToolRow.module.css'
 
-type GitToolRowProps = ToolCallViewProps & PropsLocale<'git'>
+type GitToolRowProps = ToolCallViewProps & PropsLocale<'workbench'>
 
 function resultText(block: ToolCallViewProps['block']): string | null {
   if (!('kind' in block) || block.content === undefined) return null

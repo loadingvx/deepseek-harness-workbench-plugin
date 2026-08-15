@@ -29,6 +29,26 @@ function letterKind(letter: string): FileStatusKind {
   }
 }
 
+/** Parse `git log --format=%D` decorations into HEAD + ref names. */
+export function parseDecorations(raw: string): { head: boolean; refs: string[] } {
+  if (raw.trim() === '') return { head: false, refs: [] }
+  let head = false
+  const refs: string[] = []
+  for (const part of raw.split(',').map(item => item.trim()).filter(Boolean)) {
+    if (part === 'HEAD') {
+      head = true
+      continue
+    }
+    if (part.startsWith('HEAD -> ')) {
+      head = true
+      refs.push(part.slice('HEAD -> '.length))
+      continue
+    }
+    refs.push(part.startsWith('tag: ') ? part.slice('tag: '.length) : part)
+  }
+  return { head, refs }
+}
+
 function parsePath(raw: string): string {
   const trimmed = raw.trim()
   if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
@@ -183,19 +203,22 @@ export class GitService {
     const safeLimit = Math.min(Math.max(1, Math.floor(limit)), 100)
     const result = await runGit({
       cwd: root,
-      args: ['log', `-n${safeLimit}`, '--format=%H%x1f%h%x1f%an%x1f%ad%x1f%s', '--date=iso-strict'],
+      args: ['log', `-n${safeLimit}`, '--format=%H%x1f%h%x1f%an%x1f%ad%x1f%s%x1f%D', '--date=iso-strict'],
       signal,
       allowNonZero: true,
     })
     if (result.exitCode !== 0) return []
     return result.stdout.split(/\r?\n/).filter(Boolean).map((line) => {
-      const [hash, shortHash, author, date, subject] = line.split('\x1f')
+      const [hash, shortHash, author, date, subject, decorations] = line.split('\x1f')
+      const marks = parseDecorations(decorations ?? '')
       return {
         hash: hash ?? '',
         shortHash: shortHash ?? '',
         author: author ?? '',
         date: date ?? '',
         subject: subject ?? '',
+        head: marks.head,
+        refs: marks.refs,
       }
     })
   }
@@ -232,13 +255,17 @@ export class GitService {
     })
   }
 
-  async commit(root: string, message: string, signal?: AbortSignal): Promise<GitCommitResult> {
+  async commit(root: string, message: string, all = false, signal?: AbortSignal): Promise<GitCommitResult> {
     return this.mutex.run(async () => {
       await this.requireRepo(root, signal)
       const trimmed = message.trim()
       if (trimmed === '') throw new GitError('EMPTY_MESSAGE')
       const snapshot = await this.status(root, signal)
-      if (snapshot.staged.length === 0) throw new GitError('NOTHING_STAGED')
+      if (snapshot.staged.length === 0) {
+        const rest = [...snapshot.unstaged, ...snapshot.untracked].map(file => file.path)
+        if (!all || rest.length === 0) throw new GitError('NOTHING_STAGED')
+        await runGit({ cwd: root, args: ['add', '--', ...rest.map(path => assertSafeRepoPath(root, path))], signal })
+      }
       await this.assertNoMergeLock(root)
       await runGit({ cwd: root, args: ['commit', '-m', trimmed], signal })
       const log = await this.log(root, 1, signal)

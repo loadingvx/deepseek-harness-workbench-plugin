@@ -81,6 +81,18 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     messageZh: '无法保存这个文件。',
     hintZh: '请确认文件不是只读、磁盘还有空间，然后重试。',
   },
+  LLM_UNAVAILABLE: {
+    messageZh: '现在没法自动生成提交说明。',
+    hintZh: '请确认「模型」里已经配好可用模型。生成走独立调用，不会写入当前对话。也可以先自己写一两句再提交。',
+  },
+  LLM_FAILED: {
+    messageZh: '自动生成提交说明失败。',
+    hintZh: '请稍后重试，或先自己填写提交说明。常见原因：模型未就绪、网络中断、或差异太大。',
+  },
+  NOTHING_TO_DESCRIBE: {
+    messageZh: '没有可描述的改动。',
+    hintZh: '请先修改或暂存文件，再点自动生成。工作区是干净的时候无法生成提交说明。',
+  },
 }
 
 /** Structured Git failure with Chinese copy the UI can show as-is. */
@@ -91,7 +103,9 @@ export class GitError extends Error {
 
   constructor(code: GitErrorCode, detail?: string) {
     const copy = COPY[code]
-    const messageZh = detail && code === 'GIT_FAILED' ? `${copy.messageZh} ${detail}` : copy.messageZh
+    const messageZh = detail && (code === 'GIT_FAILED' || code === 'LLM_FAILED')
+      ? `${copy.messageZh} ${detail}`
+      : copy.messageZh
     super(`${code}: ${messageZh}`)
     this.name = 'GitError'
     this.code = code
@@ -111,5 +125,6 @@ export function fail(code: GitErrorCode, detail?: string): GitFail {
 export function toFail(error: unknown): GitFail {
   if (error instanceof GitError) return error.toFail()
   if (error instanceof Error && error.message.includes('index.lock')) return fail('INDEX_LOCKED')
+  if (error instanceof Error && /without inject|llm/i.test(error.message)) return fail('LLM_UNAVAILABLE')
   return fail('GIT_FAILED', error instanceof Error ? error.message : String(error))
 }

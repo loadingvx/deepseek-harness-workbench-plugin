@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { GitClient } from '../api.ts'
 import type {
   GitBranchInfo, GitFail, GitFileChange, GitLogEntry, GitResult, GitStatusSnapshot,
 } from '../../shared/types.ts'
+import { GitGraph } from './GitGraph.tsx'
 import { IconButton } from './IconButton.tsx'
-import { IconCheck, IconMinus, IconPlus, IconRefresh } from './icons.tsx'
+import { IconBranch, IconCheck, IconChevron, IconMinus, IconPlus, IconRefresh, IconSparkle } from './icons.tsx'
 import type { Translate } from './types.ts'
 import css from './GitSidebar.module.css'
 
@@ -25,6 +26,26 @@ const KIND_MARK: Record<string, string> = {
   conflict: 'C',
 }
 
+// 暂时隐藏自动生成提交说明的按钮（星标）；后续恢复时把这里改回 true 即可。
+const GENERATE_ENABLED = false
+
+const GRAPH_H_KEY = 'dsh-workbench-graph-h'
+const CHANGES_OPEN_KEY = 'dsh-workbench-changes-open'
+const GRAPH_OPEN_KEY = 'dsh-workbench-graph-open'
+
+function readFlag(key: string, fallback: boolean): boolean {
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw === '0') return false
+    if (raw === '1') return true
+  } catch { /* ignore */ }
+  return fallback
+}
+
+function writeFlag(key: string, value: boolean): void {
+  try { localStorage.setItem(key, value ? '1' : '0') } catch { /* ignore */ }
+}
+
 function FileRow({
   file, active, action, actionLabel, onSelect, onAction, disabled,
 }: {
@@ -38,7 +59,9 @@ function FileRow({
 }) {
   return (
     <li className={css.file} data-active={active || undefined}>
-      <span className={css.fileKind} title={file.labelZh}>{KIND_MARK[file.kind] ?? '?'}</span>
+      <span className={css.fileKind} data-kind={file.kind} title={file.labelZh}>
+        {KIND_MARK[file.kind] ?? '?'}
+      </span>
       <button type="button" className={css.filePath} title={file.path} onClick={onSelect}>
         {file.path}
       </button>
@@ -49,15 +72,73 @@ function FileRow({
   )
 }
 
-/** Cursor-like source-control column: commit first, then changes, then history. */
+function FileGroup({
+  title, files, selected, staged, action, actionLabel, bulkLabel, rowKey, disabled, onOpenDiff, onFileAction, onBulkAction,
+}: {
+  title: string
+  files: GitFileChange[]
+  selected?: { path: string; staged: boolean } | null
+  staged: boolean
+  action: 'stage' | 'unstage'
+  actionLabel: string
+  bulkLabel: string
+  rowKey: string
+  disabled: boolean
+  onOpenDiff: (path: string, staged: boolean) => void
+  onFileAction: (path: string) => void
+  onBulkAction: () => void
+}) {
+  if (files.length === 0) return null
+  return (
+    <div className={css.group}>
+      <div className={css.groupHead}>
+        <span className={css.groupTitle}>{title}</span>
+        <span className={css.sectionCount}>{files.length}</span>
+        <span className={css.sectionGrow} />
+        <IconButton label={bulkLabel} disabled={disabled} onClick={onBulkAction}>
+          {action === 'stage' ? <IconPlus /> : <IconMinus />}
+        </IconButton>
+      </div>
+      <ul className={css.files}>
+        {files.map(file => (
+          <FileRow
+            key={`${rowKey}:${file.path}`}
+            file={file}
+            active={selected?.path === file.path && selected.staged === staged}
+            action={action}
+            actionLabel={actionLabel}
+            disabled={disabled}
+            onSelect={() => { onOpenDiff(file.path, staged) }}
+            onAction={() => { onFileAction(file.path) }}
+          />
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** Cursor-like source-control column: CHANGES + resizable GRAPH. */
 export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: GitSidebarProps) {
+  const rootRef = useRef<HTMLElement>(null)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<GitFail | null>(null)
   const [status, setStatus] = useState<GitStatusSnapshot | null>(null)
   const [branches, setBranches] = useState<GitBranchInfo[]>([])
   const [log, setLog] = useState<GitLogEntry[]>([])
   const [message, setMessage] = useState('')
+  const [changesOpen, setChangesOpen] = useState(() => readFlag(CHANGES_OPEN_KEY, true))
+  const [graphOpen, setGraphOpen] = useState(() => readFlag(GRAPH_OPEN_KEY, true))
+  const [graphH, setGraphH] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem(GRAPH_H_KEY))
+      return Number.isFinite(raw) && raw >= 96 ? raw : 220
+    } catch {
+      return 220
+    }
+  })
+  const [dragging, setDragging] = useState(false)
 
   const refresh = async (): Promise<void> => {
     if (workspaceId === undefined) {
@@ -102,192 +183,251 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
     await refresh()
   }
 
+  const beginResize = (event: React.PointerEvent<HTMLButtonElement>): void => {
+    event.preventDefault()
+    const startY = event.clientY
+    const startH = graphH
+    const host = rootRef.current
+    const max = Math.max(96, (host?.clientHeight ?? 480) - 160)
+    let latest = startH
+    setDragging(true)
+    const move = (next: PointerEvent): void => {
+      latest = Math.min(max, Math.max(96, startH + (startY - next.clientY)))
+      setGraphH(latest)
+    }
+    const up = (): void => {
+      setDragging(false)
+      try { localStorage.setItem(GRAPH_H_KEY, String(latest)) } catch { /* ignore */ }
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
   const stagedCount = status?.staged.length ?? 0
+  const unstagedCount = status?.unstaged.length ?? 0
+  const untrackedCount = status?.untracked.length ?? 0
+  const dirtyCount = stagedCount + unstagedCount + untrackedCount
+  const branchName = status?.probe.detached ? t('panel.detached') : (status?.probe.branch ?? t('panel.title'))
+  const commitAll = stagedCount === 0 && dirtyCount > 0
   const commitDisabledReason = message.trim() === ''
     ? t('commit.disabledEmpty')
-    : stagedCount === 0
+    : dirtyCount === 0
       ? t('commit.disabledNothing')
       : busy
         ? t('commit.disabledBusy')
         : null
   const writesDisabled = busy || status === null || !status.probe.gitAvailable || !status.probe.isRepo
-  const dirtyCount = stagedCount + (status?.unstaged.length ?? 0) + (status?.untracked.length ?? 0)
+  const generateDisabled = writesDisabled || generating || dirtyCount === 0
+  const graphFills = changesOpen === false && graphOpen
+
+  const toggleChanges = (): void => {
+    setChangesOpen((open) => {
+      writeFlag(CHANGES_OPEN_KEY, !open)
+      return !open
+    })
+  }
+  const toggleGraph = (): void => {
+    setGraphOpen((open) => {
+      writeFlag(GRAPH_OPEN_KEY, !open)
+      return !open
+    })
+  }
+
+  const commit = (): void => {
+    if (workspaceId === undefined || commitDisabledReason !== null) return
+    void runWrite(async () => {
+      const result = await client.commit(workspaceId, message, commitAll)
+      if (result.ok) setMessage('')
+      return result
+    })
+  }
+
+  const generate = (): void => {
+    if (workspaceId === undefined || generateDisabled) return
+    setGenerating(true)
+    void client.generateCommitMessage(workspaceId).then((result) => {
+      setGenerating(false)
+      if (!result.ok) {
+        setError(result)
+        return
+      }
+      setError(null)
+      setMessage(result.value.message.trim())
+    })
+  }
 
   return (
-    <aside className={css.root} aria-label={t('panel.title')}>
+    <aside ref={rootRef} className={css.root} aria-label={t('panel.title')} style={{ '--git-graph-h': `${graphH}px` } as never}>
       <header className={css.head}>
-        <span className={css.title}>{status?.probe.branch ?? t('panel.title')}</span>
+        <label className={css.branchWrap}>
+          <IconBranch />
+          <select
+            className={css.branchSelect}
+            value={status?.probe.branch ?? ''}
+            disabled={writesDisabled}
+            aria-label={t('branch.switch')}
+            onChange={(event) => {
+              const name = event.target.value
+              if (workspaceId === undefined || name === status?.probe.branch) return
+              void runWrite(() => client.switchBranch(workspaceId, name))
+            }}
+          >
+            {status?.probe.detached ? <option value="">{t('panel.detached')}</option> : null}
+            {branches.map(branch => (
+              <option key={branch.name} value={branch.name}>{branch.name}</option>
+            ))}
+          </select>
+        </label>
+        {status !== null && status.probe.ahead > 0 ? <span className={css.chip}>{t('panel.ahead', { count: status.probe.ahead })}</span> : null}
+        {status !== null && status.probe.behind > 0 ? <span className={css.chip}>{t('panel.behind', { count: status.probe.behind })}</span> : null}
         <IconButton label={t('panel.refresh')} disabled={loading || busy} onClick={() => { void refresh() }}>
           <IconRefresh />
         </IconButton>
       </header>
-      <div className={css.body}>
-        {workspaceId === undefined ? <p className={css.hint}>{t('panel.noWorkspace')}</p> : null}
-        {error !== null ? (
-          <div className={css.banner}>
-            <div>{error.messageZh}</div>
-            <div className={css.bannerHint}>{error.hintZh}</div>
-            <IconButton label={t('panel.retry')} onClick={() => { void refresh() }}><IconRefresh /></IconButton>
-          </div>
-        ) : null}
-        {loading && status === null ? <p className={css.hint}>{t('panel.loading')}</p> : null}
-        {status !== null && status.probe.isRepo ? (
-          <>
-            <div className={css.meta}>
-              <select
-                className={css.select}
-                value={status.probe.branch ?? ''}
-                disabled={writesDisabled}
-                aria-label={t('branch.switch')}
-                onChange={(event) => {
-                  const name = event.target.value
-                  if (workspaceId === undefined || name === status.probe.branch) return
-                  void runWrite(() => client.switchBranch(workspaceId, name))
-                }}
-              >
-                {status.probe.detached ? <option value="">{t('panel.detached')}</option> : null}
-                {branches.map(branch => (
-                  <option key={branch.name} value={branch.name}>{branch.name}</option>
-                ))}
-              </select>
-              {status.probe.ahead > 0 ? <span className={css.chip}>{t('panel.ahead', { count: status.probe.ahead })}</span> : null}
-              {status.probe.behind > 0 ? <span className={css.chip}>{t('panel.behind', { count: status.probe.behind })}</span> : null}
-            </div>
+
+      {workspaceId === undefined ? <p className={css.hint} style={{ padding: '8px 10px' }}>{t('panel.noWorkspace')}</p> : null}
+      {error !== null ? (
+        <div className={css.banner}>
+          <div>{error.messageZh}</div>
+          <div className={css.bannerHint}>{error.hintZh}</div>
+        </div>
+      ) : null}
+      {loading && status === null ? <p className={css.hint} style={{ padding: '8px 10px' }}>{t('panel.loading')}</p> : null}
+
+      {status !== null && status.probe.isRepo ? (
+        <>
+          <div className={css.commitArea}>
             <div className={css.commitBox}>
               <textarea
                 className={css.textarea}
                 value={message}
-                placeholder={t('commit.placeholder')}
-                disabled={writesDisabled}
+                placeholder={t('commit.placeholder', { branch: branchName })}
+                disabled={writesDisabled || generating}
                 onChange={(event) => { setMessage(event.target.value) }}
+                onKeyDown={(event) => {
+                  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                    event.preventDefault()
+                    commit()
+                  }
+                }}
               />
-              <div className={css.commitRow}>
-                <IconButton
-                  label={commitDisabledReason ?? t('action.commit')}
-                  disabled={commitDisabledReason !== null || writesDisabled}
-                  onClick={() => {
-                    if (workspaceId === undefined) return
-                    void runWrite(async () => {
-                      const result = await client.commit(workspaceId, message)
-                      if (result.ok) setMessage('')
-                      return result
-                    })
-                  }}
-                >
-                  <IconCheck />
-                </IconButton>
-              </div>
+              {GENERATE_ENABLED ? (
+                <span className={css.generate}>
+                  <IconButton
+                    label={generateDisabled ? t('commit.generateDisabled') : generating ? t('commit.generating') : t('commit.generate')}
+                    disabled={generateDisabled}
+                    onClick={generate}
+                  >
+                    <IconSparkle />
+                  </IconButton>
+                </span>
+              ) : null}
             </div>
-            {dirtyCount === 0 ? <p className={css.hint}>{t('panel.empty')}</p> : null}
-            {status.staged.length > 0 ? (
-              <section className={css.section}>
-                <div className={css.sectionTitle}>
-                  {t('section.staged')}
-                  <span className={css.count}>{status.staged.length}</span>
-                  <IconButton
-                    label={t('action.unstageAll')}
-                    disabled={writesDisabled}
-                    onClick={() => {
-                      if (workspaceId) void runWrite(() => client.unstage(workspaceId, status.staged.map(file => file.path)))
-                    }}
-                  >
-                    <IconMinus />
-                  </IconButton>
-                </div>
-                <ul className={css.files}>
-                  {status.staged.map(file => (
-                    <FileRow
-                      key={`s:${file.path}`}
-                      file={file}
-                      active={selected?.path === file.path && selected.staged}
-                      action="unstage"
-                      actionLabel={t('action.unstage')}
-                      disabled={writesDisabled}
-                      onSelect={() => { onOpenDiff(file.path, true) }}
-                      onAction={() => { if (workspaceId) void runWrite(() => client.unstage(workspaceId, [file.path])) }}
-                    />
-                  ))}
-                </ul>
-              </section>
+            <button
+              type="button"
+              className={css.commitButton}
+              disabled={commitDisabledReason !== null || writesDisabled}
+              title={commitDisabledReason ?? undefined}
+              onClick={commit}
+            >
+              <IconCheck />
+              <span className={css.commitLabel}>
+                {commitAll ? t('action.commitAll') : t('action.commitOn', { branch: branchName })}
+              </span>
+            </button>
+          </div>
+
+          <section className={css.pane} data-kind="changes" data-open={changesOpen || undefined}>
+            <div className={css.sectionHead}>
+              <button type="button" className={css.sectionToggle} aria-expanded={changesOpen} onClick={toggleChanges}>
+                <IconChevron open={changesOpen} />
+                <span className={css.sectionTitle}>{t('section.changes')}</span>
+                {dirtyCount > 0 ? <span className={css.sectionCount}>{dirtyCount}</span> : null}
+              </button>
+            </div>
+            {changesOpen ? (
+              <div className={css.paneBody}>
+                {dirtyCount === 0 ? <p className={css.hint}>{t('panel.empty')}</p> : null}
+                <FileGroup
+                  title={t('section.staged')}
+                  files={status.staged}
+                  selected={selected}
+                  staged
+                  action="unstage"
+                  actionLabel={t('action.unstage')}
+                  bulkLabel={t('action.unstageAllStaged')}
+                  rowKey="s"
+                  disabled={writesDisabled}
+                  onOpenDiff={onOpenDiff}
+                  onFileAction={(path) => { if (workspaceId) void runWrite(() => client.unstage(workspaceId, [path])) }}
+                  onBulkAction={() => {
+                    if (workspaceId) void runWrite(() => client.unstage(workspaceId, status.staged.map(file => file.path)))
+                  }}
+                />
+                <FileGroup
+                  title={t('section.unstaged')}
+                  files={status.unstaged}
+                  selected={selected}
+                  staged={false}
+                  action="stage"
+                  actionLabel={t('action.stage')}
+                  bulkLabel={t('action.stageAllUnstaged')}
+                  rowKey="u"
+                  disabled={writesDisabled}
+                  onOpenDiff={onOpenDiff}
+                  onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path])) }}
+                  onBulkAction={() => {
+                    if (workspaceId) void runWrite(() => client.stage(workspaceId, status.unstaged.map(file => file.path)))
+                  }}
+                />
+                <FileGroup
+                  title={t('section.untracked')}
+                  files={status.untracked}
+                  selected={selected}
+                  staged={false}
+                  action="stage"
+                  actionLabel={t('action.stage')}
+                  bulkLabel={t('action.stageAllUntracked')}
+                  rowKey="n"
+                  disabled={writesDisabled}
+                  onOpenDiff={onOpenDiff}
+                  onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path])) }}
+                  onBulkAction={() => {
+                    if (workspaceId) void runWrite(() => client.stage(workspaceId, status.untracked.map(file => file.path)))
+                  }}
+                />
+              </div>
             ) : null}
-            {status.unstaged.length > 0 ? (
-              <section className={css.section}>
-                <div className={css.sectionTitle}>
-                  {t('section.unstaged')}
-                  <span className={css.count}>{status.unstaged.length}</span>
-                  <IconButton
-                    label={t('action.stageAll')}
-                    disabled={writesDisabled}
-                    onClick={() => {
-                      if (workspaceId) void runWrite(() => client.stage(workspaceId, status.unstaged.map(file => file.path)))
-                    }}
-                  >
-                    <IconPlus />
-                  </IconButton>
-                </div>
-                <ul className={css.files}>
-                  {status.unstaged.map(file => (
-                    <FileRow
-                      key={`u:${file.path}`}
-                      file={file}
-                      active={selected?.path === file.path && !selected.staged}
-                      action="stage"
-                      actionLabel={t('action.stage')}
-                      disabled={writesDisabled}
-                      onSelect={() => { onOpenDiff(file.path, false) }}
-                      onAction={() => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [file.path])) }}
-                    />
-                  ))}
-                </ul>
-              </section>
+          </section>
+
+          {changesOpen && graphOpen ? (
+            <button
+              type="button"
+              className={css.gutter}
+              data-active={dragging || undefined}
+              aria-label={t('section.resize')}
+              onPointerDown={beginResize}
+            />
+          ) : null}
+
+          <section className={css.pane} data-kind="graph" data-open={graphOpen || undefined} data-fill={graphFills || undefined}>
+            <div className={css.sectionHead}>
+              <button type="button" className={css.sectionToggle} aria-expanded={graphOpen} onClick={toggleGraph}>
+                <IconChevron open={graphOpen} />
+                <span className={css.sectionTitle}>{t('section.graph')}</span>
+                {log.length > 0 ? <span className={css.sectionCount}>{log.length}</span> : null}
+              </button>
+            </div>
+            {graphOpen ? (
+              <div className={css.paneBody}>
+                <GitGraph entries={log} emptyLabel={t('graph.empty')} t={t} />
+              </div>
             ) : null}
-            {status.untracked.length > 0 ? (
-              <section className={css.section}>
-                <div className={css.sectionTitle}>
-                  {t('section.untracked')}
-                  <span className={css.count}>{status.untracked.length}</span>
-                  <IconButton
-                    label={t('action.stageAll')}
-                    disabled={writesDisabled}
-                    onClick={() => {
-                      if (workspaceId) void runWrite(() => client.stage(workspaceId, status.untracked.map(file => file.path)))
-                    }}
-                  >
-                    <IconPlus />
-                  </IconButton>
-                </div>
-                <ul className={css.files}>
-                  {status.untracked.map(file => (
-                    <FileRow
-                      key={`n:${file.path}`}
-                      file={file}
-                      active={selected?.path === file.path && !selected.staged}
-                      action="stage"
-                      actionLabel={t('action.stage')}
-                      disabled={writesDisabled}
-                      onSelect={() => { onOpenDiff(file.path, false) }}
-                      onAction={() => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [file.path])) }}
-                    />
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-            {log.length > 0 ? (
-              <section className={css.section}>
-                <div className={css.sectionTitle}>{t('log.title')}</div>
-                <ol className={css.log}>
-                  {log.map(entry => (
-                    <li key={entry.hash}>
-                      <span>{entry.subject}</span>
-                      <span className={css.hash}>{entry.shortHash} · {entry.author}</span>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            ) : null}
-          </>
-        ) : null}
-      </div>
+          </section>
+        </>
+      ) : null}
     </aside>
   )
 }

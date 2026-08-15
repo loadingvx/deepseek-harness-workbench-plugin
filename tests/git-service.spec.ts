@@ -16,7 +16,7 @@ async function tempDir(prefix: string): Promise<string> {
 }
 
 async function initRepo(): Promise<string> {
-  const root = await tempDir('dsh-git-')
+  const root = await tempDir('dsh-workbench-')
   await runGit({ cwd: root, args: ['init'] })
   await runGit({ cwd: root, args: ['config', 'user.name', 'Test User'] })
   await runGit({ cwd: root, args: ['config', 'user.email', 'test@example.com'] })
@@ -43,7 +43,7 @@ describe('assertSafeRepoPath', () => {
 
 describe('GitService', () => {
   it('reports a non-repo workspace without throwing', async () => {
-    const dir = await tempDir('dsh-git-empty-')
+    const dir = await tempDir('dsh-workbench-empty-')
     const probe = await git.probe(dir)
     expect(probe.gitAvailable).toBe(true)
     expect(probe.isRepo).toBe(false)
@@ -66,6 +66,24 @@ describe('GitService', () => {
     expect(clean.untracked).toHaveLength(0)
     const log = await git.log(root, 5)
     expect(log[0]?.subject).toBe('add readme')
+    expect(log[0]?.head).toBe(true)
+    expect(log[0]?.refs.length).toBeGreaterThan(0)
+  })
+
+  it('commits all dirty files when nothing is staged', async () => {
+    const root = await initRepo()
+    await writeFile(join(root, 'one.txt'), 'one\n')
+    await git.stage(root, ['one.txt'])
+    await git.commit(root, 'seed')
+    await writeFile(join(root, 'one.txt'), 'one changed\n')
+    await writeFile(join(root, 'two.txt'), 'two\n')
+    await expect(git.commit(root, 'should fail')).rejects.toMatchObject({ code: 'NOTHING_STAGED' })
+    const committed = await git.commit(root, 'chore: 一次提交全部', true)
+    expect(committed.subject).toBe('chore: 一次提交全部')
+    const clean = await git.status(root)
+    expect(clean.staged).toHaveLength(0)
+    expect(clean.unstaged).toHaveLength(0)
+    expect(clean.untracked).toHaveLength(0)
   })
 
   it('unstages a staged file', async () => {

@@ -11,7 +11,7 @@ export const inject = ['slots', 'locale']
 
 /** Browser half: native-chat split workbench and keyed git tool cards. */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-git: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workbench: dictionaries')
   const client = createGitClient()
 
   ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({

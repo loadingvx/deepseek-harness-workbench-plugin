@@ -6,7 +6,7 @@
   height: 100%;
   padding: 8px 0;
   border-left: 1px solid var(--dsw-alias-border-l1);
-  background: var(--dsw-alias-button-ghost-active-fill);
+  background: var(--dsw-alias-bg-base);
 }
 
 .rail[data-edge='start'] {

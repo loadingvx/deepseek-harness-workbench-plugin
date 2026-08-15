@@ -28,6 +28,15 @@ declare module '@deepseek-ai/cordis' {
         getSnapshot: () => { running?: boolean }
       } } | undefined
     }
+    llm: {
+      listProviders(): Array<{ id: string }>
+      listModels(provider: string): Promise<Array<{ id: string }>>
+      stream(options: Record<string, unknown>): AsyncIterable<{
+        type?: string
+        text?: string
+        reason?: { kind?: string; failure?: { message?: string } }
+      }>
+    }
     slots: {
       inject(name: string, factory: () => unknown | Generator<unknown>): () => void
       register(spec: Record<string, unknown>, component: unknown): () => void

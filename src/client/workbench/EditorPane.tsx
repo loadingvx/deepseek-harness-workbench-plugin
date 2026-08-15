@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { GitClient } from '../api.ts'
 import type { GitFail } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconClose, IconDiff, IconPanelOff, IconSave } from './icons.tsx'
+import { IconClose, IconDiff, IconMore, IconPanelOff, IconSave } from './icons.tsx'
 import type { FileBuffer, FileTab, Translate } from './types.ts'
 import css from './EditorPane.module.css'
 
@@ -15,10 +15,12 @@ export interface EditorPaneProps {
   onOpenFile: (path: string) => void
   onActivate: (id: string) => void
   onClose: (id: string) => void
+  onCloseMany: (ids: string[]) => void
   onDraft: (path: string, draft: string) => void
   onSaved: (path: string, content: string) => void
   onCollapse?: () => void
   notice?: GitFail | null
+  leadingSash?: ReactNode
   t: Translate
 }
 
@@ -43,14 +45,15 @@ function parseDiff(text: string): Array<{ kind: 'add' | 'del' | 'hunk' | 'meta' 
 /** Center editor: explorer + tabs + text/diff, with unsaved-close confirmation. */
 export function EditorPane({
   client, workspaceId, tabs, activeId, buffers,
-  onOpenFile, onActivate, onClose, onDraft, onSaved, onCollapse, notice, t,
+  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, leadingSash, t,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.id === activeId) ?? null
   const buffer = active?.kind === 'file' ? buffers[active.path] : undefined
   const dirty = buffer !== undefined && buffer.draft !== buffer.original
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<GitFail | null>(null)
-  const [pendingClose, setPendingClose] = useState<string | null>(null)
+  const [pendingClose, setPendingClose] = useState<{ ids: string[]; names: string[] } | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [diffText, setDiffText] = useState('')
   const [diffLoading, setDiffLoading] = useState(false)
   const areaRef = useRef<HTMLTextAreaElement>(null)
@@ -79,11 +82,27 @@ export function EditorPane({
     if (tab?.kind === 'file') {
       const current = buffers[tab.path]
       if (current !== undefined && current.draft !== current.original) {
-        setPendingClose(id)
+        setPendingClose({ ids: [id], names: [fileName(tab.path)] })
         return
       }
     }
     onClose(id)
+  }
+
+  const requestCloseMany = (ids: string[]): void => {
+    if (ids.length === 0) return
+    const names: string[] = []
+    for (const id of ids) {
+      const tab = tabs.find(item => item.id === id)
+      if (tab?.kind !== 'file') continue
+      const current = buffers[tab.path]
+      if (current !== undefined && current.draft !== current.original) names.push(fileName(tab.path))
+    }
+    if (names.length > 0) {
+      setPendingClose({ ids, names })
+      return
+    }
+    onCloseMany(ids)
   }
 
   const save = async (): Promise<void> => {
@@ -100,6 +119,22 @@ export function EditorPane({
   }
 
   const lines = useMemo(() => (buffer?.draft.split(/\n/).length ?? 1), [buffer?.draft])
+
+  const activeIndex = activeId === null ? -1 : tabs.findIndex(tab => tab.id === activeId)
+  const tabIds = tabs.map(tab => tab.id)
+  const closeAllIds = tabIds
+  const closeOthersIds = activeIndex >= 0 ? tabIds.filter((_, index) => index !== activeIndex) : []
+  const closeLeftIds = activeIndex > 0 ? tabIds.slice(0, activeIndex) : []
+  const closeRightIds = activeIndex >= 0 && activeIndex < tabIds.length - 1 ? tabIds.slice(activeIndex + 1) : []
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setMenuOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('keydown', onKey) }
+  }, [menuOpen])
 
   let body: ReactNode
   if (active === null) {
@@ -162,25 +197,69 @@ export function EditorPane({
         ? t('editor.saveDisabledClean')
         : null
 
+  const menuItem = (
+    ids: string[],
+    label: string,
+    disabledReason: string,
+  ) => (
+    <button
+      type="button"
+      className={css.menuItem}
+      role="menuitem"
+      disabled={ids.length === 0}
+      title={ids.length === 0 ? disabledReason : undefined}
+      onClick={() => { setMenuOpen(false); requestCloseMany(ids) }}
+    >
+      {label}
+    </button>
+  )
+
   return (
     <section className={css.root} aria-label={t('editor.empty')} data-git-ide-panel="editor">
+      {leadingSash}
       <div className={css.main}>
-        <div className={css.tabs} role="tablist">
-          {tabs.map(tab => {
-            const tabDirty = tab.kind === 'file' && buffers[tab.path] !== undefined
-              && buffers[tab.path]!.draft !== buffers[tab.path]!.original
-            return (
-              <div key={tab.id} className={css.tab} data-active={tab.id === activeId || undefined} role="tab">
-                <button type="button" className={css.tabName} onClick={() => { onActivate(tab.id) }}>
-                  {tab.kind === 'diff' ? `${fileName(tab.path)} · ${t('editor.diffTab')}` : fileName(tab.path)}
-                </button>
-                {tabDirty ? <span className={css.dirtyDot} title={t('editor.dirty')} /> : null}
-                <IconButton label={t('editor.close')} onClick={() => { requestClose(tab.id) }}>
-                  <IconClose />
-                </IconButton>
-              </div>
-            )
-          })}
+        <div className={css.tabBar}>
+          <div className={css.tabs} role="tablist">
+            {tabs.map(tab => {
+              const tabDirty = tab.kind === 'file' && buffers[tab.path] !== undefined
+                && buffers[tab.path]!.draft !== buffers[tab.path]!.original
+              return (
+                <div key={tab.id} className={css.tab} data-active={tab.id === activeId || undefined} role="tab">
+                  <button type="button" className={css.tabName} onClick={() => { onActivate(tab.id) }}>
+                    {tab.kind === 'diff' ? `${fileName(tab.path)} · ${t('editor.diffTab')}` : fileName(tab.path)}
+                  </button>
+                  {tabDirty ? <span className={css.dirtyDot} title={t('editor.dirty')} /> : null}
+                  <IconButton label={t('editor.close')} onClick={() => { requestClose(tab.id) }}>
+                    <IconClose />
+                  </IconButton>
+                </div>
+              )
+            })}
+          </div>
+          <div className={css.tabActions}>
+            <div className={css.menuWrap}>
+              <IconButton
+                label={t('editor.tabsMenu')}
+                active={menuOpen}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => { setMenuOpen(open => !open) }}
+              >
+                <IconMore />
+              </IconButton>
+              {menuOpen ? (
+                <>
+                  <div className={css.menuBackdrop} onClick={() => { setMenuOpen(false) }} />
+                  <div className={css.menu} role="menu" aria-label={t('editor.tabsMenu')}>
+                    {menuItem(closeAllIds, t('editor.closeAll'), t('editor.closeAllDisabled'))}
+                    {menuItem(closeOthersIds, t('editor.closeOthers'), t('editor.closeOthersDisabled'))}
+                    {menuItem(closeLeftIds, t('editor.closeLeft'), t('editor.closeLeftDisabled'))}
+                    {menuItem(closeRightIds, t('editor.closeRight'), t('editor.closeRightDisabled'))}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
         </div>
         {active !== null ? (
           <div className={css.toolbar}>
@@ -217,7 +296,11 @@ export function EditorPane({
             <div className={css.dialogMask}>
               <div className={css.dialog} role="dialog" aria-labelledby="git-close-title">
                 <h2 id="git-close-title">{t('editor.closeDirtyTitle')}</h2>
-                <p>{t('editor.closeDirtyBody', { name: fileName(tabs.find(tab => tab.id === pendingClose)?.path ?? '') })}</p>
+                <p>
+                  {pendingClose.names.length === 1
+                    ? t('editor.closeDirtyBody', { name: pendingClose.names[0]! })
+                    : t('editor.closeDirtyBatchBody', { count: pendingClose.names.length })}
+                </p>
                 <div className={css.dialogRow}>
                   <button type="button" className={css.keep} onClick={() => { setPendingClose(null) }}>
                     {t('editor.keep')}
@@ -226,9 +309,9 @@ export function EditorPane({
                     type="button"
                     className={css.discard}
                     onClick={() => {
-                      const id = pendingClose
+                      const ids = pendingClose.ids
                       setPendingClose(null)
-                      onClose(id)
+                      onCloseMany(ids)
                     }}
                   >
                     {t('editor.discard')}

@@ -125,3 +125,46 @@ export function IconPanelOff() {
     </Icon>
   )
 }
+
+export function IconSparkle() {
+  return (
+    <Icon>
+      <path d="M8 1.6 9.1 6 13.6 7.2 9.1 8.4 8 12.8 6.9 8.4 2.4 7.2 6.9 6z" />
+      <path d="M12.2 10.2 12.7 12 14.6 12.5 12.7 13 12.2 14.8 11.7 13 9.8 12.5 11.7 12z" />
+    </Icon>
+  )
+}
+
+export function IconChevron({ open }: { open: boolean }) {
+  return (
+    <Icon size={12}>
+      <path
+        d={open ? 'M3 5.5 6 8.5 9 5.5' : 'M5 3.5 8 6.5 5 9.5'}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+    </Icon>
+  )
+}
+
+export function IconBranch() {
+  return (
+    <Icon>
+      <circle cx="4.2" cy="4" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="4.2" cy="12" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="11.8" cy="8" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M4.2 5.6v4.8M5.6 4.6c3.2 0 4.6 1.6 4.6 3.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
+export function IconMore() {
+  return (
+    <Icon>
+      <circle cx="2.6" cy="8" r="1.35" />
+      <circle cx="8" cy="8" r="1.35" />
+      <circle cx="13.4" cy="8" r="1.35" />
+    </Icon>
+  )
+}

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { GitClient } from '../api.ts'
 import { FileTree } from './FileTree.tsx'
 import { GitSidebar } from './GitSidebar.tsx'
@@ -9,7 +10,7 @@ import css from './SideDock.module.css'
 export type SideTab = 'files' | 'git'
 
 export function SideDock({
-  client, workspaceId, workspaceTitle, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onCollapse, t,
+  client, workspaceId, workspaceTitle, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onCollapse, leadingSash, t,
 }: {
   client: GitClient
   workspaceId?: string
@@ -21,10 +22,12 @@ export function SideDock({
   onOpenFile: (path: string) => void
   onOpenDiff: (path: string, staged: boolean) => void
   onCollapse: () => void
+  leadingSash?: ReactNode
   t: Translate
 }) {
   return (
     <aside className={css.root} data-git-ide-panel="side">
+      {leadingSash}
       <div className={css.tabs} role="tablist">
         <IconButton label={t('ide.files')} active={tab === 'files'} onClick={() => { onTab('files') }}>
           <IconFiles />

@@ -21,6 +21,9 @@ export type GitErrorCode =
   | 'FS_TOO_LARGE'
   | 'FS_BINARY'
   | 'FS_WRITE_FAILED'
+  | 'LLM_UNAVAILABLE'
+  | 'LLM_FAILED'
+  | 'NOTHING_TO_DESCRIBE'
 
 export interface GitFail {
   ok: false
@@ -77,6 +80,8 @@ export interface GitLogEntry {
   author: string
   date: string
   subject: string
+  head: boolean
+  refs: string[]
 }
 
 export interface GitBranchInfo {
@@ -87,6 +92,10 @@ export interface GitBranchInfo {
 export interface GitCommitResult {
   hash: string
   subject: string
+}
+
+export interface GitCommitMessage {
+  message: string
 }
 
 export interface GitSwitchResult {

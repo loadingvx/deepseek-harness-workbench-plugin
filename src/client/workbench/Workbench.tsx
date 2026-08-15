@@ -2,10 +2,16 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { GitFail } from '../../shared/types.ts'
+import { ColSash } from './ColSash.tsx'
+import {
+  CHAT_MIN, CHAT_RATIO, CHAT_W_KEY, EDITOR_MIN, RAIL_W,
+  SIDE_DEFAULT, SIDE_MAX, SIDE_MIN, SIDE_W_KEY,
+  clamp, clampLayout, readPx, writePx,
+} from './column-layout.ts'
 import { EditorPane } from './EditorPane.tsx'
 import { IconButton } from './IconButton.tsx'
 import { IconChat, IconEditor, IconFiles, IconGit, IconLayout } from './icons.tsx'
-import { columnSize, ensureIdeStyles } from './ide-host.css.ts'
+import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
 import { SideDock, type SideTab } from './SideDock.tsx'
 import type { FileBuffer, FileTab, WorkbenchInjected } from './types.ts'
@@ -15,7 +21,7 @@ import css from './Workbench.module.css'
 export type WorkbenchProps =
   PropsRuntime<'conversation.session.header.utilities'>
   & WorkbenchInjected
-  & PropsLocale<'git'>
+  & PropsLocale<'workbench'>
 
 function fileTabId(path: string): string {
   return `file:${path}`
@@ -51,6 +57,9 @@ export function Workbench(props: WorkbenchProps) {
   const [buffers, setBuffers] = useState<Record<string, FileBuffer>>({})
   const [selectedDiff, setSelectedDiff] = useState<{ path: string; staged: boolean } | null>(null)
   const [fileError, setFileError] = useState<GitFail | null>(null)
+  const [chatW, setChatW] = useState(() => readPx(CHAT_W_KEY, 0))
+  const [sideW, setSideW] = useState(() => readPx(SIDE_W_KEY, SIDE_DEFAULT))
+  const [dragging, setDragging] = useState<null | 'chat' | 'side'>(null)
   const buffersRef = useRef(buffers)
   buffersRef.current = buffers
 
@@ -100,6 +109,8 @@ export function Workbench(props: WorkbenchProps) {
     if (!split) {
       delete scroll.dataset.gitIde
       delete scroll.dataset.gitChat
+      delete scroll.dataset.gitEditor
+      delete scroll.dataset.gitSide
       scroll.style.removeProperty('--git-col-chat')
       scroll.style.removeProperty('--git-col-editor')
       scroll.style.removeProperty('--git-col-side')
@@ -107,14 +118,89 @@ export function Workbench(props: WorkbenchProps) {
     }
     scroll.dataset.gitIde = ''
     scroll.dataset.gitChat = chatOpen ? 'on' : 'off'
-    scroll.style.setProperty('--git-col-chat', columnSize(chatOpen, 'minmax(300px, 38%)'))
-    scroll.style.setProperty('--git-col-editor', columnSize(editorOpen, 'minmax(0, 1fr)'))
-    scroll.style.setProperty('--git-col-side', columnSize(sideOpen, '280px'))
+    scroll.dataset.gitEditor = editorOpen ? 'on' : 'off'
+    scroll.dataset.gitSide = sideOpen ? 'on' : 'off'
     return () => {
       delete scroll.dataset.gitIde
       delete scroll.dataset.gitChat
+      delete scroll.dataset.gitEditor
+      delete scroll.dataset.gitSide
     }
   }, [host, split, chatOpen, editorOpen, sideOpen])
+
+  useLayoutEffect(() => {
+    const scroll = host
+    if (scroll === null || !split) return
+    const apply = (): void => {
+      const hostW = scroll.clientWidth
+      if (chatW <= 0 && hostW > 0) {
+        setChatW(Math.round(hostW * CHAT_RATIO))
+        return
+      }
+      const next = clampLayout(hostW, chatW, sideW, { chat: chatOpen, editor: editorOpen, side: sideOpen })
+      scroll.style.setProperty('--git-col-chat', `${next.chat}px`)
+      scroll.style.setProperty('--git-col-side', `${next.side}px`)
+    }
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(scroll)
+    return () => { observer.disconnect() }
+  }, [host, split, chatOpen, editorOpen, sideOpen, chatW, sideW])
+
+  const beginResize = (which: 'chat' | 'side', event: React.PointerEvent<HTMLButtonElement>): void => {
+    event.preventDefault()
+    const startX = event.clientX
+    const startChat = chatW
+    const startSide = sideW
+    const hostW = host?.clientWidth ?? 0
+    let latestChat = startChat
+    let latestSide = startSide
+    setDragging(which)
+    const previousCursor = document.body.style.cursor
+    const previousSelect = document.body.style.userSelect
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    const move = (next: PointerEvent): void => {
+      if (which === 'chat') {
+        const maxChat = hostW - (editorOpen ? EDITOR_MIN : RAIL_W) - (sideOpen ? startSide : RAIL_W)
+        latestChat = clamp(startChat + (next.clientX - startX), CHAT_MIN, maxChat)
+        setChatW(latestChat)
+      } else {
+        const maxSide = Math.min(SIDE_MAX, hostW - (chatOpen ? startChat : RAIL_W) - (editorOpen ? EDITOR_MIN : RAIL_W))
+        latestSide = clamp(startSide - (next.clientX - startX), SIDE_MIN, maxSide)
+        setSideW(latestSide)
+      }
+    }
+    const up = (): void => {
+      setDragging(null)
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousSelect
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      if (which === 'chat') writePx(CHAT_W_KEY, latestChat)
+      else writePx(SIDE_W_KEY, latestSide)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  const resetChatWidth = (): void => {
+    const hostW = host?.clientWidth ?? 0
+    const next = clampLayout(hostW, Math.round(hostW * CHAT_RATIO), sideW, {
+      chat: chatOpen, editor: editorOpen, side: sideOpen,
+    })
+    setChatW(next.chat)
+    writePx(CHAT_W_KEY, next.chat)
+  }
+
+  const resetSideWidth = (): void => {
+    const hostW = host?.clientWidth ?? 0
+    const next = clampLayout(hostW, chatW, SIDE_DEFAULT, {
+      chat: chatOpen, editor: editorOpen, side: sideOpen,
+    })
+    setSideW(next.side)
+    writePx(SIDE_W_KEY, next.side)
+  }
 
   const openFile = useCallback(async (path: string): Promise<void> => {
     if (workspaceId === undefined) return
@@ -150,27 +236,36 @@ export function Workbench(props: WorkbenchProps) {
   }
 
   const closeTab = (id: string): void => {
+    closeTabs([id])
+  }
+
+  const closeTabs = (ids: string[]): void => {
+    if (ids.length === 0) return
     setTabs((current) => {
-      const closing = current.find(tab => tab.id === id)
-      if (closing?.kind === 'file') {
-        setBuffers((buffersNow) => {
-          if (buffersNow[closing.path] === undefined) return buffersNow
-          const nextBuffers = { ...buffersNow }
-          delete nextBuffers[closing.path]
-          return nextBuffers
-        })
+      const closing = new Set(ids)
+      for (const tab of current) {
+        if (tab.kind === 'file' && closing.has(tab.id)) {
+          setBuffers((buffersNow) => {
+            if (buffersNow[tab.path] === undefined) return buffersNow
+            const nextBuffers = { ...buffersNow }
+            delete nextBuffers[tab.path]
+            return nextBuffers
+          })
+        }
       }
-      const next = current.filter(tab => tab.id !== id)
+      const next = current.filter(tab => !closing.has(tab.id))
       setActiveId((active) => {
-        if (active !== id) return active
-        const index = current.findIndex(tab => tab.id === id)
+        if (active === null || !closing.has(active)) return active
+        const index = current.findIndex(tab => tab.id === active)
         return next[index]?.id ?? next[index - 1]?.id ?? null
       })
       return next
     })
   }
 
-  const panels = split && host !== null ? createPortal(
+  let panels: ReturnType<typeof createPortal> | null = null
+  try {
+    panels = split && host !== null ? createPortal(
     <>
       {chatOpen ? null : (
         <div className={railCss.rail} data-edge="start" data-git-ide-panel="rail-chat">
@@ -189,6 +284,7 @@ export function Workbench(props: WorkbenchProps) {
           onOpenFile={(path) => { void openFile(path) }}
           onActivate={setActiveId}
           onClose={closeTab}
+          onCloseMany={closeTabs}
           onDraft={(path, draft) => {
             setBuffers(current => current[path] === undefined ? current : { ...current, [path]: { ...current[path]!, draft } })
           }}
@@ -199,6 +295,14 @@ export function Workbench(props: WorkbenchProps) {
           }}
           onCollapse={() => { setEditorOpen(false) }}
           notice={fileError}
+          leadingSash={chatOpen ? (
+            <ColSash
+              label={t('ide.resizeChat')}
+              active={dragging === 'chat'}
+              onPointerDown={(event) => { beginResize('chat', event) }}
+              onReset={resetChatWidth}
+            />
+          ) : null}
           t={t}
         />
       ) : (
@@ -220,6 +324,14 @@ export function Workbench(props: WorkbenchProps) {
           onOpenFile={(path) => { void openFile(path) }}
           onOpenDiff={openDiff}
           onCollapse={() => { setSideOpen(false) }}
+          leadingSash={
+            <ColSash
+              label={t('ide.resizeSide')}
+              active={dragging === 'side'}
+              onPointerDown={(event) => { beginResize('side', event) }}
+              onReset={resetSideWidth}
+            />
+          }
           t={t}
         />
       ) : (
@@ -235,16 +347,24 @@ export function Workbench(props: WorkbenchProps) {
     </>,
     host,
   ) : null
+  } catch {
+    panels = null
+  }
 
   return (
     <div className={css.host}>
-      <IconButton
-        label={t('ide.toggle')}
-        active={enabled}
+      <button
+        type="button"
+        className={css.toggle}
+        data-active={enabled || undefined}
+        title={t('ide.toggle')}
+        aria-label={t('ide.toggle')}
+        aria-pressed={enabled}
         onClick={() => { setEnabled(value => !value) }}
       >
         <IconLayout />
-      </IconButton>
+        <span>{t('ide.toggleLabel')}</span>
+      </button>
       {chatOpen ? null : (
         <IconButton label={t('ide.showChat')} onClick={() => { setChatOpen(true) }}>
           <IconChat />

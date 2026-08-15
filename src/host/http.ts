@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { fail, toFail } from '../shared/errors.ts'
 import type { GitResult } from '../shared/types.ts'
+import { generateCommitMessage } from './commit-message.ts'
 import type { GitService } from './git-service.ts'
 import { resolveWorkspacePath } from './workspace.ts'
 import type { WorkspaceFs } from './workspace-fs.ts'
@@ -64,7 +65,7 @@ async function wrap<T>(run: () => Promise<T>): Promise<GitResult<T>> {
 export function registerGitHttp(ctx: Context, git: GitService, fs: WorkspaceFs): () => void {
   const server = ctx.webServer
   if (server === undefined) {
-    throw new Error('dsh-git-plugin: 需要 webServer 才能提供 Git 面板接口，请把本插件装到 web profile。')
+    throw new Error('dsh-workbench-plugin: 需要 webServer 才能提供工作台接口，请把本插件装到 web profile。')
   }
 
   const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -115,7 +116,14 @@ export function registerGitHttp(ctx: Context, git: GitService, fs: WorkspaceFs):
       } else if (method === 'POST' && route === '/git/commit') {
         const body = await readJson(req)
         const message = typeof body.message === 'string' ? body.message : ''
-        result = await wrap(() => git.commit(rootOf(body), message))
+        const all = body.all === true
+        result = await wrap(() => git.commit(rootOf(body), message, all))
+      } else if (method === 'POST' && route === '/git/commit-message') {
+        const body = await readJson(req)
+        result = await wrap(async () => {
+          const message = await generateCommitMessage(ctx, git, rootOf(body))
+          return { message }
+        })
       } else if (method === 'POST' && route === '/git/switch') {
         const body = await readJson(req)
         const name = typeof body.name === 'string' ? body.name : ''

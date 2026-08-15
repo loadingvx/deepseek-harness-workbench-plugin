@@ -1,7 +1,7 @@
 import { fail } from '../shared/errors.ts'
 import type {
   FsFileSnapshot, FsListSnapshot, FsWriteResult,
-  GitBranchInfo, GitCommitResult, GitDiffSnapshot, GitLogEntry, GitResult,
+  GitBranchInfo, GitCommitMessage, GitCommitResult, GitDiffSnapshot, GitLogEntry, GitResult,
   GitStatusSnapshot, GitSwitchResult,
 } from '../shared/types.ts'
 
@@ -32,7 +32,8 @@ export interface GitClient {
   branches(workspaceId: string): Promise<GitResult<GitBranchInfo[]>>
   stage(workspaceId: string, paths: string[]): Promise<GitResult<{ done: boolean }>>
   unstage(workspaceId: string, paths: string[]): Promise<GitResult<{ done: boolean }>>
-  commit(workspaceId: string, message: string): Promise<GitResult<GitCommitResult>>
+  commit(workspaceId: string, message: string, all?: boolean): Promise<GitResult<GitCommitResult>>
+  generateCommitMessage(workspaceId: string): Promise<GitResult<GitCommitMessage>>
   switchBranch(workspaceId: string, name: string): Promise<GitResult<GitSwitchResult>>
   listDir(workspaceId: string, path?: string): Promise<GitResult<FsListSnapshot>>
   readFile(workspaceId: string, path: string): Promise<GitResult<FsFileSnapshot>>
@@ -48,7 +49,7 @@ export function createGitClient(): GitClient {
       if (staged) query.set('staged', '1')
       return request(`/git/diff?${query.toString()}`)
     },
-    log: workspaceId => request(`/git/log?workspaceId=${encodeURIComponent(workspaceId)}&limit=12`),
+    log: workspaceId => request(`/git/log?workspaceId=${encodeURIComponent(workspaceId)}&limit=40`),
     branches: workspaceId => request(`/git/branches?workspaceId=${encodeURIComponent(workspaceId)}`),
     stage: (workspaceId, paths) => request('/git/stage', {
       method: 'POST', body: JSON.stringify({ workspaceId, paths }),
@@ -56,8 +57,11 @@ export function createGitClient(): GitClient {
     unstage: (workspaceId, paths) => request('/git/unstage', {
       method: 'POST', body: JSON.stringify({ workspaceId, paths }),
     }),
-    commit: (workspaceId, message) => request('/git/commit', {
-      method: 'POST', body: JSON.stringify({ workspaceId, message }),
+    commit: (workspaceId, message, all) => request('/git/commit', {
+      method: 'POST', body: JSON.stringify({ workspaceId, message, all: all === true }),
+    }),
+    generateCommitMessage: workspaceId => request('/git/commit-message', {
+      method: 'POST', body: JSON.stringify({ workspaceId }),
     }),
     switchBranch: (workspaceId, name) => request('/git/switch', {
       method: 'POST', body: JSON.stringify({ workspaceId, name }),
