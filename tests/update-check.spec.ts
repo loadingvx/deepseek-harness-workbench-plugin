@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { checkPluginUpdate, readInstalledVersion, resetUpdateCache } from '../src/host/update-check.ts'
-import { isNewer, PLUGIN_NAME, PLUGIN_PAGE_URL, updateTermSeed, upgradeCommand } from '../src/shared/version.ts'
+import { isNewer, PLUGIN_NAME, PLUGIN_PAGE_URL, PLUGIN_REPO_URL, updateTermSeed, upgradeCommand } from '../src/shared/version.ts'
 
 afterEach(() => {
   resetUpdateCache()
@@ -27,6 +27,12 @@ describe('upgradeCommand', () => {
 describe('PLUGIN_PAGE_URL', () => {
   it('points at the public npm page', () => {
     expect(PLUGIN_PAGE_URL).toBe('https://www.npmjs.com/package/dsh-workbench-plugin')
+  })
+})
+
+describe('PLUGIN_REPO_URL', () => {
+  it('points at the GitHub project page', () => {
+    expect(PLUGIN_REPO_URL).toBe('https://github.com/loadingvx/deepseek-harness-workbench-plugin')
   })
 })
 

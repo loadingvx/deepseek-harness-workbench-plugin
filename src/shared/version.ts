@@ -1,5 +1,6 @@
 export const PLUGIN_NAME = 'dsh-workbench-plugin'
 export const PLUGIN_PAGE_URL = `https://www.npmjs.com/package/${PLUGIN_NAME}`
+export const PLUGIN_REPO_URL = 'https://github.com/loadingvx/deepseek-harness-workbench-plugin'
 
 export function parseSemver(version: string): [number, number, number] | null {
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version.trim())

@@ -53,6 +53,70 @@ export function buildCommitUserPrompt(input: {
   return body
 }
 
+export type CommitMessageStreamEvent =
+  | { type: 'delta'; text: string }
+  | { type: 'done'; message: string }
+
+export type CommitAssembleState = {
+  parts: Map<number, { text: string; closed: boolean }>
+  types: string[]
+  sawReasoning: boolean
+  fail: string
+  finishKind: string
+  failCode: string
+}
+
+export function createCommitAssemble(): CommitAssembleState {
+  return {
+    parts: new Map(),
+    types: [],
+    sawReasoning: false,
+    fail: '',
+    finishKind: '',
+    failCode: '',
+  }
+}
+
+export function applyCommitChunk(state: CommitAssembleState, chunk: LlmStreamChunk): void {
+  state.types.push(chunk.type ?? 'unknown')
+  if (chunk.type === 'text-delta' && typeof chunk.text === 'string') {
+    const index = typeof chunk.index === 'number' ? chunk.index : 0
+    const part = state.parts.get(index) ?? { text: '', closed: false }
+    if (!part.closed) state.parts.set(index, { text: part.text + chunk.text, closed: false })
+  }
+  if (chunk.type === 'reasoning-delta' || chunk.block?.type === 'reasoning') {
+    state.sawReasoning = true
+  }
+  if (chunk.type === 'block-end' && chunk.block?.type === 'text' && typeof chunk.block.text === 'string') {
+    const index = typeof chunk.index === 'number' ? chunk.index : 0
+    state.parts.set(index, { text: chunk.block.text, closed: true })
+  }
+  if (chunk.type === 'finish') {
+    state.finishKind = chunk.reason?.kind ?? ''
+    state.failCode = chunk.reason?.failure?.code ?? ''
+    if (state.finishKind === 'error' || state.finishKind === 'aborted') {
+      state.fail = chunk.reason?.failure?.message
+        ?? (state.finishKind === 'aborted' ? '生成已取消或超时。' : '模型没有返回可用结果。')
+    }
+  }
+}
+
+export function commitAssembleText(state: CommitAssembleState): string {
+  return [...state.parts.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([, part]) => part.text)
+    .join('')
+}
+
+/** Live preview: hide unfinished markdown fences so the textarea fills with real words. */
+export function previewCommitMessage(raw: string): string {
+  let text = raw.replace(/\r\n/g, '\n')
+  text = text.replace(/^```(?:\w+)?\r?\n?/, '')
+  text = text.replace(/\n```[ \t]*$/, '')
+  if (text.length > 4000) text = text.slice(0, 4000)
+  return text
+}
+
 export function summarizeCommitChunks(chunks: readonly LlmStreamChunk[]): string {
   if (chunks.length === 0) return '没有任何数据'
   const counts = new Map<string, number>()
@@ -63,69 +127,49 @@ export function summarizeCommitChunks(chunks: readonly LlmStreamChunk[]): string
   return [...counts.entries()].map(([type, count]) => `${type}×${count}`).join('，')
 }
 
+function summarizeTypes(types: readonly string[]): string {
+  if (types.length === 0) return '没有任何数据'
+  const counts = new Map<string, number>()
+  for (const type of types) counts.set(type, (counts.get(type) ?? 0) + 1)
+  return [...counts.entries()].map(([type, count]) => `${type}×${count}`).join('，')
+}
+
+export function commitAssembleResult(state: CommitAssembleState): { text: string; fail: string } {
+  const text = commitAssembleText(state)
+  const trace = summarizeTypes(state.types)
+  if (state.fail !== '') {
+    const code = state.failCode === '' ? '' : ` [${state.failCode}]`
+    return { text, fail: `${state.fail}${code}（${trace}）` }
+  }
+  if (sanitizeCommitMessage(text) !== '') return { text, fail: '' }
+  if (state.types.length === 0) {
+    return { text, fail: '模型接口没有返回任何数据。请确认「模型」已配置，然后重试。' }
+  }
+  if (state.finishKind === 'max-tokens') {
+    return {
+      text,
+      fail: state.sawReasoning
+        ? `模型把输出额度用在了思考过程上，没有写出提交说明。（${trace}）`
+        : `模型输出被截断，没有完整提交说明。（${trace}）`,
+    }
+  }
+  if (state.sawReasoning) {
+    return { text, fail: `模型只返回了思考过程，没有写出提交说明。（${trace}）` }
+  }
+  if (state.finishKind === '') {
+    return { text, fail: `模型调用没有正常结束。（${trace}）` }
+  }
+  return { text, fail: `模型没有返回提交说明。（${trace}）` }
+}
+
 /**
  * Assemble visible commit text the same way harness BlockAssembler does:
  * text-delta plus authoritative block-end text. Reasoning is never the answer.
  */
 export function collectCommitText(chunks: readonly LlmStreamChunk[]): { text: string; fail: string } {
-  const parts = new Map<number, { text: string; closed: boolean }>()
-  let sawReasoning = false
-  let fail = ''
-  let finishKind = ''
-  let failCode = ''
-
-  for (const chunk of chunks) {
-    if (chunk.type === 'text-delta' && typeof chunk.text === 'string') {
-      const index = typeof chunk.index === 'number' ? chunk.index : 0
-      const part = parts.get(index) ?? { text: '', closed: false }
-      if (!part.closed) part.text += chunk.text
-      parts.set(index, part)
-    }
-    if (chunk.type === 'reasoning-delta' || chunk.block?.type === 'reasoning') {
-      sawReasoning = true
-    }
-    if (chunk.type === 'block-end' && chunk.block?.type === 'text' && typeof chunk.block.text === 'string') {
-      const index = typeof chunk.index === 'number' ? chunk.index : 0
-      parts.set(index, { text: chunk.block.text, closed: true })
-    }
-    if (chunk.type === 'finish') {
-      finishKind = chunk.reason?.kind ?? ''
-      failCode = chunk.reason?.failure?.code ?? ''
-      if (finishKind === 'error' || finishKind === 'aborted') {
-        fail = chunk.reason?.failure?.message
-          ?? (finishKind === 'aborted' ? '生成已取消或超时。' : '模型没有返回可用结果。')
-      }
-    }
-  }
-
-  const text = [...parts.entries()]
-    .sort((left, right) => left[0] - right[0])
-    .map(([, part]) => part.text)
-    .join('')
-  const trace = summarizeCommitChunks(chunks)
-  if (fail !== '') {
-    const code = failCode === '' ? '' : ` [${failCode}]`
-    return { text, fail: `${fail}${code}（${trace}）` }
-  }
-  if (sanitizeCommitMessage(text) !== '') return { text, fail: '' }
-  if (chunks.length === 0) {
-    return { text, fail: '模型接口没有返回任何数据。请确认「模型」已配置，然后重试。' }
-  }
-  if (finishKind === 'max-tokens') {
-    return {
-      text,
-      fail: sawReasoning
-        ? `模型把输出额度用在了思考过程上，没有写出提交说明。（${trace}）`
-        : `模型输出被截断，没有完整提交说明。（${trace}）`,
-    }
-  }
-  if (sawReasoning) {
-    return { text, fail: `模型只返回了思考过程，没有写出提交说明。（${trace}）` }
-  }
-  if (finishKind === '') {
-    return { text, fail: `模型调用没有正常结束。（${trace}）` }
-  }
-  return { text, fail: `模型没有返回提交说明。（${trace}）` }
+  const state = createCommitAssemble()
+  for (const chunk of chunks) applyCommitChunk(state, chunk)
+  return commitAssembleResult(state)
 }
 
 export function pickCommitRoute(
@@ -249,13 +293,13 @@ function buildUserMessage(text: string): Record<string, unknown> {
   }
 }
 
-/** One-shot auxiliary LLM call: fixed prompt + current diff → commit message. */
-export async function generateCommitMessage(
+/** Stream commit text as the model writes it. Throws GitError when the call fails. */
+export async function* streamCommitMessage(
   ctx: Context,
   git: GitService,
   root: string,
   options?: { signal?: AbortSignal; template?: string },
-): Promise<string> {
+): AsyncGenerator<CommitMessageStreamEvent> {
   const signal = options?.signal
   const system = resolveCommitTemplate(options?.template)
   const payload = await collectChangePayload(git, root, signal)
@@ -267,7 +311,8 @@ export async function generateCommitMessage(
   const onAbort = (): void => { controller.abort() }
   signal?.addEventListener('abort', onAbort)
   try {
-    const chunks: LlmStreamChunk[] = []
+    const state = createCommitAssemble()
+    let last = ''
     for await (const chunk of llm.stream({
       provider: route.provider,
       model: route.model,
@@ -281,21 +326,44 @@ export async function generateCommitMessage(
       ...reasoningEffort === undefined ? {} : { reasoningEffort },
       signal: controller.signal,
     })) {
-      chunks.push(chunk)
+      if (controller.signal.aborted) break
+      applyCommitChunk(state, chunk)
+      const visible = previewCommitMessage(commitAssembleText(state))
+      if (visible !== last) {
+        last = visible
+        yield { type: 'delta', text: visible }
+      }
     }
-    const assembled = collectCommitText(chunks)
+    if (signal?.aborted) {
+      throw new GitError('LLM_FAILED', '生成已取消。')
+    }
+    const assembled = commitAssembleResult(state)
     if (assembled.fail !== '') {
       throw new GitError('LLM_FAILED', `${assembled.fail} 路由：${route.provider} / ${route.model}`)
     }
-    return sanitizeCommitMessage(assembled.text)
+    yield { type: 'done', message: sanitizeCommitMessage(assembled.text) }
   } catch (error) {
     if (error instanceof GitError) throw error
     if (controller.signal.aborted) {
-      throw new GitError('LLM_FAILED', '生成超时或已取消，请稍后重试。')
+      throw new GitError('LLM_FAILED', signal?.aborted ? '生成已取消。' : '生成超时或已取消，请稍后重试。')
     }
     throw new GitError('LLM_FAILED', error instanceof Error ? error.message : String(error))
   } finally {
     clearTimeout(timer)
     signal?.removeEventListener('abort', onAbort)
   }
+}
+
+/** One-shot auxiliary LLM call: fixed prompt + current diff → commit message. */
+export async function generateCommitMessage(
+  ctx: Context,
+  git: GitService,
+  root: string,
+  options?: { signal?: AbortSignal; template?: string },
+): Promise<string> {
+  let message = ''
+  for await (const event of streamCommitMessage(ctx, git, root, options)) {
+    if (event.type === 'done') message = event.message
+  }
+  return message
 }

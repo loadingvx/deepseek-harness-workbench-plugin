@@ -2,10 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitClient } from '../api.ts'
 import type { GitStatusSnapshot, PluginUpdateSnapshot } from '../../shared/types.ts'
 import { redactSecrets } from '../../shared/redact.ts'
-import { PLUGIN_PAGE_URL } from '../../shared/version.ts'
+import { PLUGIN_PAGE_URL, PLUGIN_REPO_URL } from '../../shared/version.ts'
+import { IconChevron, IconGithub, IconNpm } from './icons.tsx'
 import { fileName, shortPath, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
 import { terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import css from './StatusBar.module.css'
+
+function openExternal(url: string): void {
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
 
 export function StatusBar({
   client,
@@ -74,20 +79,40 @@ export function StatusBar({
     >
       <StatusTabs tabs={openTabs} activeId={active?.id} onActivate={onActivate} t={t} />
       <span className={css.grow} />
-      <span className={`${css.item} ${css.itemLead}`} title={t('status.versionTitle', { version })}>
-        {t('status.version', { version })}
+      <span className={`${css.item} ${css.itemLead}`}>
+        <button
+          type="button"
+          className={css.version}
+          title={t('status.versionTitle', { version })}
+          aria-label={t('status.versionTitle', { version })}
+          onClick={() => { openExternal(PLUGIN_REPO_URL) }}
+        >
+          <IconGithub size={12} />
+          {t('status.version', { version })}
+        </button>
         {plugin?.outdated && plugin.latest !== null ? (
           <span className={css.warnWrap}>
             <button
               type="button"
               className={css.warn}
+              title={updateNote ?? t('status.updateTitle', { latest: plugin.latest })}
+              aria-label={t('status.updateTitle', { latest: plugin.latest })}
+              onClick={() => { openExternal(PLUGIN_PAGE_URL) }}
+            >
+              <IconNpm size={12} />
+              {t('status.update', { latest: plugin.latest })}
+            </button>
+            <button
+              type="button"
+              className={css.warnMore}
               data-open={menuOpen || undefined}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              title={updateNote ?? t('status.updateMenu')}
+              title={t('status.updateMenu')}
+              aria-label={t('status.updateMenu')}
               onClick={() => { setMenuOpen(open => !open) }}
             >
-              {t('status.update', { latest: plugin.latest })}
+              <IconChevron open />
             </button>
             {menuOpen ? (
               <>
@@ -97,12 +122,13 @@ export function StatusBar({
                     type="button"
                     className={css.menuItem}
                     role="menuitem"
-                    title={t('status.updatePageHint')}
+                    title={t('status.updatePageHint', { latest: plugin.latest })}
                     onClick={() => {
                       setMenuOpen(false)
-                      window.open(PLUGIN_PAGE_URL, '_blank', 'noopener,noreferrer')
+                      openExternal(PLUGIN_PAGE_URL)
                     }}
                   >
+                    <IconNpm size={12} />
                     {t('status.updatePage')}
                   </button>
                   <button

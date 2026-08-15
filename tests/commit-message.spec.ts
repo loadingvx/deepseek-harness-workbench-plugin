@@ -12,8 +12,11 @@ import {
   generateCommitMessage,
   pickCommitReasoningEffort,
   pickCommitRoute,
+  previewCommitMessage,
   sanitizeCommitMessage,
+  streamCommitMessage,
 } from '../src/host/commit-message.ts'
+import { parseCommitStreamLine } from '../src/shared/commit-stream.ts'
 import { parseDecorations } from '../src/host/git-service.ts'
 
 describe('parseDecorations', () => {
@@ -166,6 +169,31 @@ describe('pickCommitReasoningEffort', () => {
   })
 })
 
+describe('previewCommitMessage', () => {
+  it('hides an opening fence while the model is still writing', () => {
+    expect(previewCommitMessage('```\nfeat: 修好')).toBe('feat: 修好')
+    expect(previewCommitMessage('```json\nfeat: 修好\n```')).toBe('feat: 修好')
+  })
+
+  it('leaves ordinary text alone', () => {
+    expect(previewCommitMessage('feat: 修好布局')).toBe('feat: 修好布局')
+  })
+})
+
+describe('parseCommitStreamLine', () => {
+  it('reads delta, done, and fail lines', () => {
+    expect(parseCommitStreamLine('{"type":"delta","text":"feat: "}')).toEqual({ type: 'delta', text: 'feat: ' })
+    expect(parseCommitStreamLine('{"type":"done","message":"feat: 修好"}')).toEqual({ type: 'done', message: 'feat: 修好' })
+    expect(parseCommitStreamLine('{"ok":false,"code":"LLM_FAILED","messageZh":"失败","hintZh":"重试"}'))
+      .toEqual({ ok: false, code: 'LLM_FAILED', messageZh: '失败', hintZh: '重试' })
+  })
+
+  it('ignores blank and junk lines', () => {
+    expect(parseCommitStreamLine('')).toBeNull()
+    expect(parseCommitStreamLine('not-json')).toBeNull()
+  })
+})
+
 describe('generateCommitMessage', () => {
   it('calls the host LLM with thinking off and returns assembled text', async () => {
     const seen: Record<string, unknown>[] = []
@@ -197,5 +225,33 @@ describe('generateCommitMessage', () => {
     expect(seen[0]?.reasoningEffort).toBe('off')
     expect(seen[0]?.purpose).toBe('session-title')
     expect(seen[0]?.maxTokens).toBe(1024)
+  })
+
+  it('yields text as the model streams it', async () => {
+    const ctx = {
+      llm: {
+        listProviders: () => [{ id: 'deepseek-official' }],
+        listModels: async () => [{ id: 'deepseek-v4-flash' }],
+        resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'off' }] } }),
+        stream: async function* () {
+          yield { type: 'text-delta', index: 0, text: 'feat: ' }
+          yield { type: 'text-delta', index: 0, text: '修好布局' }
+          yield { type: 'block-end', index: 0, block: { type: 'text', text: 'feat: 修好布局' } }
+          yield { type: 'finish', reason: { kind: 'stop' } }
+        },
+      },
+      get: () => undefined,
+    }
+    const git = {
+      status: async () => ({ staged: [{ path: 'a.ts' }], unstaged: [], untracked: [] }),
+      diff: async () => ({ text: 'diff --git a/a.ts' }),
+    }
+    const events: Array<{ type: string; text?: string; message?: string }> = []
+    for await (const event of streamCommitMessage(ctx as never, git as never, '/tmp/repo')) {
+      events.push(event)
+    }
+    expect(events.filter(event => event.type === 'delta').map(event => event.text))
+      .toEqual(['feat: ', 'feat: 修好布局'])
+    expect(events.at(-1)).toEqual({ type: 'done', message: 'feat: 修好布局' })
   })
 })

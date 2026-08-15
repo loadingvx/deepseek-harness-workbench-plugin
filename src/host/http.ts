@@ -3,7 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { fail, toFail } from '../shared/errors.ts'
 import { redactSecrets } from '../shared/redact.ts'
 import type { GitFail, GitResult } from '../shared/types.ts'
-import { generateCommitMessage } from './commit-message.ts'
+import { generateCommitMessage, streamCommitMessage } from './commit-message.ts'
 import type { GitService } from './git-service.ts'
 import { resolveWorkspacePath } from './workspace.ts'
 import { ExternalOpen } from './external-open.ts'
@@ -78,6 +78,46 @@ async function wrap<T>(run: () => Promise<T>): Promise<GitResult<T>> {
   }
 }
 
+async function writeCommitMessageStream(
+  res: ServerResponse,
+  run: (signal: AbortSignal) => AsyncIterable<{ type: 'delta'; text: string } | { type: 'done'; message: string }>,
+): Promise<void> {
+  const controller = new AbortController()
+  let closed = false
+  const abort = (): void => {
+    closed = true
+    controller.abort()
+  }
+  const onResponseClose = (): void => {
+    if (!res.writableEnded) abort()
+  }
+  res.on('close', onResponseClose)
+  res.statusCode = 200
+  res.setHeader('content-type', 'application/x-ndjson; charset=utf-8')
+  res.setHeader('cache-control', 'no-store')
+  res.setHeader('connection', 'keep-alive')
+  res.setHeader('x-accel-buffering', 'no')
+  const writeLine = (body: unknown): void => {
+    if (!res.writable || res.writableEnded) return
+    res.write(`${JSON.stringify(redactFail(body))}\n`)
+  }
+  try {
+    for await (const event of run(controller.signal)) {
+      if (controller.signal.aborted) break
+      if (event.type === 'delta') {
+        writeLine({ type: 'delta', text: redactSecrets(event.text) })
+      } else {
+        writeLine({ type: 'done', message: redactSecrets(event.message) })
+      }
+    }
+  } catch (error) {
+    if (!closed && !res.destroyed) writeLine(toFail(error))
+  } finally {
+    res.off('close', onResponseClose)
+    if (!res.writableEnded) res.end()
+  }
+}
+
 /** Register the `/git` JSON API used by the sidebar panel and workbench. */
 export function registerGitHttp(
   ctx: Context,
@@ -141,6 +181,13 @@ export function registerGitHttp(
         const message = typeof body.message === 'string' ? body.message : ''
         const all = body.all === true
         result = await wrap(() => git.commit(rootOf(body), message, all))
+      } else if (method === 'POST' && route === '/git/commit-message/stream') {
+        const body = await readJson(req)
+        await writeCommitMessageStream(res, (signal) => streamCommitMessage(ctx, git, rootOf(body), {
+          signal,
+          template: typeof body.template === 'string' ? body.template : undefined,
+        }))
+        return
       } else if (method === 'POST' && route === '/git/commit-message') {
         const body = await readJson(req)
         result = await wrap(async () => {

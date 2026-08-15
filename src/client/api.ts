@@ -1,9 +1,10 @@
 import { fail } from '../shared/errors.ts'
+import { parseCommitStreamLine } from '../shared/commit-stream.ts'
 import type {
   ExternalEditorId, ExternalEditorsSnapshot, ExternalOpenResult,
   FsFileSnapshot, FsListSnapshot, FsSearchSnapshot, FsWriteResult,
   GitBranchInfo, GitCommitMessage, GitCommitResult, GitCreateBranchResult, GitDiffSnapshot,
-  GitFetchResult, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
+  GitFail, GitFetchResult, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
   GitStatusSnapshot, GitSwitchResult, PluginUpdateSnapshot,
 } from '../shared/types.ts'
 
@@ -27,6 +28,75 @@ async function request<T>(path: string, init?: RequestInit): Promise<GitResult<T
   }
 }
 
+async function readCommitMessageStream(
+  workspaceId: string,
+  template?: string,
+  options?: { signal?: AbortSignal; onDelta?: (text: string) => void },
+): Promise<GitResult<GitCommitMessage>> {
+  try {
+    const response = await fetch('/git/commit-message/stream', {
+      method: 'POST',
+      signal: options?.signal,
+      headers: {
+        accept: 'application/x-ndjson, application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ workspaceId, template }),
+    })
+    const ctype = response.headers.get('content-type') ?? ''
+    if (response.body === null || (ctype.includes('application/json') && !ctype.includes('ndjson'))) {
+      const data: unknown = await response.json()
+      if (typeof data === 'object' && data !== null && 'ok' in data) {
+        const result = data as GitResult<GitCommitMessage>
+        if (result.ok) options?.onDelta?.(result.value.message)
+        return result
+      }
+      return fail('GIT_FAILED', '服务返回了无法识别的内容。')
+    }
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    let last = ''
+    let doneMessage: string | null = null
+    let failResult: GitFail | null = null
+    const consume = (line: string): void => {
+      const parsed = parseCommitStreamLine(line)
+      if (parsed === null) return
+      if ('ok' in parsed && parsed.ok === false) {
+        failResult = parsed
+        return
+      }
+      if (!('type' in parsed)) return
+      if (parsed.type === 'delta') {
+        last = parsed.text
+        options?.onDelta?.(parsed.text)
+      } else {
+        doneMessage = parsed.message
+      }
+    }
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      let nl = buf.indexOf('\n')
+      while (nl !== -1) {
+        consume(buf.slice(0, nl))
+        buf = buf.slice(nl + 1)
+        nl = buf.indexOf('\n')
+      }
+    }
+    buf += decoder.decode()
+    if (buf.trim() !== '') consume(buf)
+    if (failResult !== null) return failResult
+    if (doneMessage !== null) return { ok: true, value: { message: doneMessage } }
+    if (last !== '') return { ok: true, value: { message: last } }
+    return fail('LLM_FAILED', '模型没有返回提交说明。')
+  } catch {
+    if (options?.signal?.aborted) return fail('LLM_FAILED', '生成已取消。')
+    return fail('NETWORK')
+  }
+}
+
 export interface GitClient {
   status(workspaceId: string): Promise<GitResult<GitStatusSnapshot>>
   diff(workspaceId: string, path?: string, staged?: boolean): Promise<GitResult<GitDiffSnapshot>>
@@ -35,7 +105,11 @@ export interface GitClient {
   stage(workspaceId: string, paths: string[]): Promise<GitResult<{ done: boolean }>>
   unstage(workspaceId: string, paths: string[]): Promise<GitResult<{ done: boolean }>>
   commit(workspaceId: string, message: string, all?: boolean): Promise<GitResult<GitCommitResult>>
-  generateCommitMessage(workspaceId: string, template?: string): Promise<GitResult<GitCommitMessage>>
+  generateCommitMessage(
+    workspaceId: string,
+    template?: string,
+    options?: { signal?: AbortSignal; onDelta?: (text: string) => void },
+  ): Promise<GitResult<GitCommitMessage>>
   push(workspaceId: string): Promise<GitResult<GitPushResult>>
   pull(workspaceId: string): Promise<GitResult<GitPullResult>>
   fetch(workspaceId: string): Promise<GitResult<GitFetchResult>>
@@ -76,9 +150,7 @@ export function createGitClient(): GitClient {
     commit: (workspaceId, message, all) => request('/git/commit', {
       method: 'POST', body: JSON.stringify({ workspaceId, message, all: all === true }),
     }),
-    generateCommitMessage: (workspaceId, template) => request('/git/commit-message', {
-      method: 'POST', body: JSON.stringify({ workspaceId, template }),
-    }),
+    generateCommitMessage: (workspaceId, template, options) => readCommitMessageStream(workspaceId, template, options),
     push: workspaceId => request('/git/push', {
       method: 'POST', body: JSON.stringify({ workspaceId }),
     }),

@@ -254,6 +254,10 @@
   outline: 2px solid var(--dsw-alias-border-l1);
 }
 
+.textarea[readonly] {
+  cursor: wait;
+}
+
 .textarea[data-overflow] {
   overflow-y: auto;
   padding-right: 42px;

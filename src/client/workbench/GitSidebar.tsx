@@ -156,6 +156,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   const busyLock = useRef(false)
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const generateAbort = useRef<AbortController | null>(null)
   const [error, setError] = useState<GitFail | null>(null)
   const [status, setStatus] = useState<GitStatusSnapshot | null>(null)
   const [branches, setBranches] = useState<GitBranchInfo[]>([])
@@ -213,7 +214,11 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   useEffect(() => {
     void refresh()
     const timer = window.setInterval(() => { void refresh() }, 8000)
-    return () => { window.clearInterval(timer) }
+    return () => {
+      window.clearInterval(timer)
+      generateAbort.current?.abort()
+      generateAbort.current = null
+    }
   }, [workspaceId])
 
   useLayoutEffect(() => {
@@ -280,13 +285,15 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   const stageAllPaths = [...(status?.unstaged ?? []), ...(status?.untracked ?? [])].map(file => file.path)
   const branchName = status?.probe.detached ? t('panel.detached') : (status?.probe.branch ?? t('panel.title'))
   const commitAll = stagedCount === 0 && dirtyCount > 0
-  const commitDisabledReason = message.trim() === ''
-    ? t('commit.disabledEmpty')
-    : dirtyCount === 0
-      ? t('commit.disabledNothing')
-      : busy
-        ? t('action.disabledBusy')
-        : null
+  const commitDisabledReason = generating
+    ? t('commit.generating')
+    : message.trim() === ''
+      ? t('commit.disabledEmpty')
+      : dirtyCount === 0
+        ? t('commit.disabledNothing')
+        : busy
+          ? t('action.disabledBusy')
+          : null
   const probe = status?.probe
   const actions = visibleSyncActions({
     dirtyCount,
@@ -467,9 +474,24 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
 
   const generate = (): void => {
     if (workspaceId === undefined || generateDisabled || generating) return
+    generateAbort.current?.abort()
+    const controller = new AbortController()
+    generateAbort.current = controller
     setGenerating(true)
-    void client.generateCommitMessage(workspaceId, template).then((result) => {
+    setError(null)
+    void client.generateCommitMessage(workspaceId, template, {
+      signal: controller.signal,
+      onDelta: (text) => {
+        if (controller.signal.aborted) return
+        setMessage(text)
+      },
+    }).then((result) => {
+      if (controller.signal.aborted) {
+        setGenerating(false)
+        return
+      }
       setGenerating(false)
+      if (generateAbort.current === controller) generateAbort.current = null
       if (!result.ok) {
         setError(result)
         return
@@ -546,8 +568,9 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                 className={css.textarea}
                 rows={1}
                 value={message}
-                placeholder={t('commit.placeholder', { branch: branchName })}
-                disabled={writesDisabled || generating}
+                placeholder={generating && message === '' ? t('commit.generating') : t('commit.placeholder', { branch: branchName })}
+                disabled={writesDisabled}
+                readOnly={generating}
                 onChange={(event) => { setMessage(event.target.value) }}
                 onKeyDown={(event) => {
                   if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
