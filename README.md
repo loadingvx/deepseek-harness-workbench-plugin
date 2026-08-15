@@ -4,9 +4,9 @@
 
 A workbench UI plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. Open **Workbench** in Conversation to get a Cursor-style three-column layout: chat / editor / files & Git.
 
-![Workbench: chat / editor / files & Git](docs/img/workbench.png)
+![Workbench: chat / terminal / files & Git](docs/img/workbench.png)
 
-![Workspace terminal](docs/img/terminal.png)
+![Editor and file tree](docs/img/terminal.png)
 
 ## Release
 

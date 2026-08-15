@@ -4,9 +4,9 @@
 
 DeepSeek Harness Web UI 的工作台界面插件：在「对话」里打开 Cursor 风格三栏（对话 / 编辑器 / 文件与 Git）。
 
-![工作台：对话 / 编辑器 / 文件与 Git](docs/img/workbench.png)
+![工作台：对话 / 终端 / 文件与 Git](docs/img/workbench.png)
 
-![工作区终端](docs/img/terminal.png)
+![编辑器与文件树](docs/img/terminal.png)
 
 ## 发版状态
 
