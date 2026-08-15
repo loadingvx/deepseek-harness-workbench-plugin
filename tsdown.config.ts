@@ -51,12 +51,27 @@ const client: UserConfig = {
   clean: false,
   external: [...CLIENT_EXTERNALS],
   noExternal: (id: string) => (CLIENT_EXTERNALS.includes(id as (typeof CLIENT_EXTERNALS)[number]) ? undefined : true),
+  alias: {
+    'node:process': resolvePath('src/client/shims/node-process.ts'),
+    'node:path': resolvePath('src/client/shims/node-path.ts'),
+    'node:url': resolvePath('src/client/shims/node-url.ts'),
+  },
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
     'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),
     'import.meta.env': JSON.stringify({ MODE: process.env.NODE_ENV ?? 'production' }),
   },
   plugins: [{
+    name: 'dsh-forbid-node-require',
+    generateBundle(_opts: unknown, bundle: Record<string, { type: string; code?: string }>) {
+      for (const [fileName, chunk] of Object.entries(bundle)) {
+        if (chunk.type !== 'chunk' || chunk.code === undefined) continue
+        if (/require\(["']node:/.test(chunk.code)) {
+          throw new Error(`${fileName} must not require("node:…"); DSH web ModuleLoader cannot load Node builtins`)
+        }
+      }
+    },
+  }, {
     name: 'dsh-css-modules-inline',
     resolveId(source: string, importer: string | undefined) {
       if (!source.endsWith('.css')) return null

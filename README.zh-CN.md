@@ -22,11 +22,11 @@ DeepSeek Harness Web UI 工作台插件。在「对话」视图中提供三栏�
 | 项目 | 说明 |
 | --- | --- |
 | 包名 | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| 当前版本 | **0.1.6**（npm 标签 `latest`） |
+| 当前版本 | **0.1.7**（npm 标签 `latest`） |
 | 软件源 | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.6
++ dsh-workbench-plugin@0.1.7
 ```
 
 维护者发布请执行 `bash devops/release.sh`。该脚本使用本机已有的 `npm login` 会话；不得将账号或凭据写入仓库。
@@ -62,7 +62,7 @@ dsh plugin --profile web add dsh-workbench-plugin
 
 ### 从 0.1.1 升级
 
-**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.6；此后版本将通过界面提示。
+**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.7；此后版本将通过界面提示。
 
 ## 工作区终端
 

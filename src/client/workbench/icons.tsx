@@ -142,6 +142,14 @@ export function IconDiff() {
   )
 }
 
+export function IconSplit() {
+  return (
+    <Icon>
+      <path d="M2 3h5.2v10H2zM8.8 3H14v10H8.8z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
 export function IconPanelOff() {
   return (
     <Icon>

@@ -317,6 +317,43 @@
   overflow: hidden;
 }
 
+.mdModes {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 2px;
+  padding-right: 2px;
+  border-right: 1px solid var(--dsw-alias-border-l2);
+}
+
+.mdShell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mdShell[data-mode='split'] .mdEdit {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--dsw-alias-border-l2);
+}
+
+.mdShell[data-mode='edit'] .mdEdit,
+.mdShell[data-mode='preview'] {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.mdEdit {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 .cmHost {
   flex: 1;
   min-width: 0;

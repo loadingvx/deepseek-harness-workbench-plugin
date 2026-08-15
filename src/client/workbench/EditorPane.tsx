@@ -3,11 +3,13 @@ import type { GitClient } from '../api.ts'
 import type { GitFail } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
 import { joinWorkspaceFile, suggestNewFileDir, termIdFromTabId } from '../../shared/new-file-path.ts'
-import { IconClose, IconDiff, IconMore, IconPanelOff, IconPlus, IconSave, IconTerminal } from './icons.tsx'
+import { IconClose, IconDiff, IconEditor, IconEye, IconMore, IconPanelOff, IconPlus, IconSave, IconSplit, IconTerminal } from './icons.tsx'
 import { PathBreadcrumb } from './PathBreadcrumb.tsx'
 import { TerminalView } from './TerminalView.tsx'
 import { TERMINAL_TAB_ID, terminalTabLabel, type FileBuffer, type FileTab, type Translate } from './types.ts'
 import { CodeEditor } from './CodeEditor.tsx'
+import { isMarkdownPath } from './code-language.ts'
+import { MarkdownPreview } from './MarkdownPreview.tsx'
 import css from './EditorPane.module.css'
 
 export interface EditorPaneProps {
@@ -71,6 +73,8 @@ function isNewEmptyDiff(
   return /^new file /m.test(text) || /^--- \/dev\/null$/m.test(text)
 }
 
+type MdViewMode = 'edit' | 'preview' | 'split'
+
 /** Center editor: explorer + tabs + text/diff, with unsaved-close confirmation. */
 export function EditorPane({
   client, workspaceId, tabs, activeId, buffers,
@@ -91,6 +95,7 @@ export function EditorPane({
   const [newFileError, setNewFileError] = useState<string | null>(null)
   const [diffText, setDiffText] = useState('')
   const [diffLoading, setDiffLoading] = useState(false)
+  const [mdView, setMdView] = useState<Record<string, MdViewMode>>({})
 
   useEffect(() => {
     if (active?.kind !== 'diff' || workspaceId === undefined) {
@@ -154,6 +159,20 @@ export function EditorPane({
     setError(null)
     onSaved(active.path, buffer.draft)
   }
+
+  const markdownOpen = active?.kind === 'file' && buffer !== undefined && isMarkdownPath(active.path)
+  const mdMode: MdViewMode = markdownOpen && active !== null ? (mdView[active.path] ?? 'edit') : 'edit'
+
+  useEffect(() => {
+    if (mdMode !== 'preview') return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 's' || !(event.ctrlKey || event.metaKey) || event.altKey) return
+      event.preventDefault()
+      void save()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('keydown', onKey) }
+  }, [mdMode, active, buffer, dirty, saving, workspaceId])
 
   const submitNewFile = async (): Promise<void> => {
     if (onCreateFile === undefined) return
@@ -248,7 +267,7 @@ export function EditorPane({
   } else if (buffer === undefined) {
     body = <p className={css.hint}>{t('panel.loading')}</p>
   } else {
-    body = (
+    const editor = (
       <CodeEditor
         path={active.path}
         value={buffer.draft}
@@ -257,6 +276,23 @@ export function EditorPane({
         onSave={() => { void save() }}
       />
     )
+    if (!markdownOpen) {
+      body = editor
+    } else {
+      body = (
+        <div className={css.mdShell} data-mode={mdMode}>
+          {mdMode !== 'preview' ? <div className={css.mdEdit}>{editor}</div> : null}
+          {mdMode !== 'edit' ? (
+            <MarkdownPreview
+              path={active.path}
+              markdown={buffer.draft}
+              onOpenFile={onOpenFile}
+              t={t}
+            />
+          ) : null}
+        </div>
+      )
+    }
   }
 
   const saveReason = workspaceId === undefined
@@ -298,6 +334,31 @@ export function EditorPane({
             t={t}
           />
           <div className={css.crumbActions}>
+            {markdownOpen && active?.kind === 'file' ? (
+              <span className={css.mdModes} role="group" aria-label={t('editor.mdPreview')}>
+                <IconButton
+                  label={t('editor.mdEdit')}
+                  active={mdMode === 'edit'}
+                  onClick={() => { setMdView(current => ({ ...current, [active.path]: 'edit' })) }}
+                >
+                  <IconEditor />
+                </IconButton>
+                <IconButton
+                  label={t('editor.mdSplit')}
+                  active={mdMode === 'split'}
+                  onClick={() => { setMdView(current => ({ ...current, [active.path]: 'split' })) }}
+                >
+                  <IconSplit />
+                </IconButton>
+                <IconButton
+                  label={t('editor.mdPreview')}
+                  active={mdMode === 'preview'}
+                  onClick={() => { setMdView(current => ({ ...current, [active.path]: 'preview' })) }}
+                >
+                  <IconEye />
+                </IconButton>
+              </span>
+            ) : null}
             {active?.kind === 'file' ? (
               <IconButton
                 label={saveReason ?? (dirty ? t('editor.save') : t('editor.saved'))}

@@ -58,6 +58,10 @@ export function languageIdFromPath(path: string): EditorLanguage {
   return EXT_TO_LANG[ext] ?? 'plain'
 }
 
+export function isMarkdownPath(path: string): boolean {
+  return languageIdFromPath(path) === 'markdown'
+}
+
 export function languageExtension(id: EditorLanguage): Extension {
   switch (id) {
     case 'javascript': return javascript()
