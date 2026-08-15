@@ -130,6 +130,8 @@ function FileGroup({
 export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: GitSidebarProps) {
   const rootRef = useRef<HTMLElement>(null)
   const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState<'commit' | 'push' | 'pull' | null>(null)
+  const busyLock = useRef(false)
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<GitFail | null>(null)
@@ -186,17 +188,27 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
     return () => { window.clearInterval(timer) }
   }, [workspaceId])
 
-  const runWrite = async (action: () => Promise<GitResult<unknown>>): Promise<void> => {
-    if (busy) return
+  const runWrite = async (
+    action: () => Promise<GitResult<unknown>>,
+    kind: 'commit' | 'push' | 'pull' | null = null,
+  ): Promise<void> => {
+    if (busy || busyLock.current) return
+    busyLock.current = true
     setBusy(true)
-    const result = await action()
-    setBusy(false)
-    if (!result.ok) {
-      setError(result as GitFail)
-      return
+    setPending(kind)
+    try {
+      const result = await action()
+      if (!result.ok) {
+        setError(result as GitFail)
+        return
+      }
+      setError(null)
+      await refresh()
+    } finally {
+      busyLock.current = false
+      setBusy(false)
+      setPending(null)
     }
-    setError(null)
-    await refresh()
   }
 
   const beginResize = (event: React.PointerEvent<HTMLButtonElement>): void => {
@@ -345,17 +357,17 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
       const result = await client.commit(workspaceId, message, commitAll)
       if (result.ok) setMessage('')
       return result
-    })
+    }, 'commit')
   }
 
   const push = (): void => {
     if (workspaceId === undefined || pushDisabledReason !== null) return
-    void runWrite(() => client.push(workspaceId))
+    void runWrite(() => client.push(workspaceId), 'push')
   }
 
   const pull = (): void => {
     if (workspaceId === undefined || pullDisabledReason !== null) return
-    void runWrite(() => client.pull(workspaceId))
+    void runWrite(() => client.pull(workspaceId), 'pull')
   }
 
   const fetchRemote = (): void => {
@@ -507,13 +519,19 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                   <button
                     type="button"
                     className={css.actionBtn}
+                    data-pending={pending === 'commit' || undefined}
+                    aria-busy={pending === 'commit' || undefined}
                     disabled={commitDisabledReason !== null || writesDisabled}
-                    title={commitDisabledReason ?? undefined}
+                    title={pending === 'commit'
+                      ? (commitAll ? t('action.committingAll') : t('action.committingOn', { branch: branchName }))
+                      : (commitDisabledReason ?? undefined)}
                     onClick={commit}
                   >
-                    <IconCheck />
+                    {pending === 'commit' ? <span className={css.spinner} aria-hidden /> : <IconCheck />}
                     <span className={css.commitLabel}>
-                      {commitAll ? t('action.commitAll') : t('action.commitOn', { branch: branchName })}
+                      {pending === 'commit'
+                        ? (commitAll ? t('action.committingAll') : t('action.committingOn', { branch: branchName }))
+                        : (commitAll ? t('action.commitAll') : t('action.commitOn', { branch: branchName }))}
                     </span>
                   </button>
                 ) : null}
@@ -521,24 +539,36 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                   <button
                     type="button"
                     className={css.actionBtn}
+                    data-pending={pending === 'push' || undefined}
+                    aria-busy={pending === 'push' || undefined}
                     disabled={pushDisabledReason !== null || writesDisabled}
-                    title={pushDisabledReason ?? undefined}
+                    title={pending === 'push'
+                      ? t('action.pushingOn', { remote: remoteLabel })
+                      : (pushDisabledReason ?? undefined)}
                     onClick={push}
                   >
-                    <IconPush />
-                    <span className={css.commitLabel}>{t('action.pushOn', { remote: remoteLabel })}</span>
+                    {pending === 'push' ? <span className={css.spinner} aria-hidden /> : <IconPush />}
+                    <span className={css.commitLabel}>
+                      {pending === 'push' ? t('action.pushingOn', { remote: remoteLabel }) : t('action.pushOn', { remote: remoteLabel })}
+                    </span>
                   </button>
                 ) : null}
                 {actions.pull ? (
                   <button
                     type="button"
                     className={css.actionBtn}
+                    data-pending={pending === 'pull' || undefined}
+                    aria-busy={pending === 'pull' || undefined}
                     disabled={pullDisabledReason !== null || writesDisabled}
-                    title={pullDisabledReason ?? undefined}
+                    title={pending === 'pull'
+                      ? t('action.pullingOn', { remote: remoteLabel })
+                      : (pullDisabledReason ?? undefined)}
                     onClick={pull}
                   >
-                    <IconPull />
-                    <span className={css.commitLabel}>{t('action.pullOn', { remote: remoteLabel })}</span>
+                    {pending === 'pull' ? <span className={css.spinner} aria-hidden /> : <IconPull />}
+                    <span className={css.commitLabel}>
+                      {pending === 'pull' ? t('action.pullingOn', { remote: remoteLabel }) : t('action.pullOn', { remote: remoteLabel })}
+                    </span>
                   </button>
                 ) : null}
               </div>
