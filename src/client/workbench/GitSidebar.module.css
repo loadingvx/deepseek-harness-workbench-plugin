@@ -265,8 +265,9 @@
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
-  background: var(--dsw-alias-button-primary-fill);
+  background: var(--dsw-alias-button-elevated-fill, var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-base)));
 }
 
 .actionBtn {
@@ -282,7 +283,7 @@
   padding: 6px 8px;
   border: none;
   background: transparent;
-  color: var(--dsw-alias-label-primary-foreground);
+  color: var(--dsw-alias-label-primary);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -291,7 +292,7 @@
 }
 
 .actionBtn + .actionBtn {
-  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--dsw-alias-label-primary-foreground) 22%, transparent);
+  box-shadow: inset 1px 0 0 var(--dsw-alias-border-l2);
 }
 
 .commitLabel {
@@ -302,7 +303,7 @@
 }
 
 .actionBtn:hover:not(:disabled) {
-  background: var(--dsw-alias-button-primary-hover);
+  background: var(--dsw-alias-button-floating-hover, var(--dsw-alias-interactive-bg-hover));
 }
 
 .actionBtn:disabled {
@@ -490,15 +491,25 @@
 
 .graphMeta {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-top: 2px;
+  min-width: 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
 }
 
+.graphAuthor {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .graphWhen {
   flex: none;
+  margin-left: auto;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
@@ -535,8 +546,27 @@
 }
 
 .hash {
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
   font-family: var(--dsw-font-markdown-code-block-font-family, var(--ds-font-family-code));
-  font-size: var(--dsw-font-markdown-code-block-font-size, 13px);
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.hash:hover {
+  color: var(--dsw-alias-label-primary);
+  text-decoration: underline;
+}
+
+.hash[data-copied] {
+  color: var(--dsw-alias-state-success-primary, #3d9a5b);
+  text-decoration: none;
+  cursor: default;
 }
 
 .dialogMask {

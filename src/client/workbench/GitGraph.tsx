@@ -1,8 +1,31 @@
+import { useEffect, useRef, useState } from 'react'
 import type { GitLogEntry } from '../../shared/types.ts'
 import { formatCommitStamp, formatCommitTooltip } from './commit-stamp.ts'
 import { toRefMark } from './git-refs.ts'
 import type { Translate } from './types.ts'
 import css from './GitSidebar.module.css'
+
+async function writeClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    try {
+      const area = document.createElement('textarea')
+      area.value = text
+      area.setAttribute('readonly', '')
+      area.style.position = 'fixed'
+      area.style.left = '-9999px'
+      document.body.appendChild(area)
+      area.select()
+      const ok = document.execCommand('copy')
+      area.remove()
+      return ok
+    } catch {
+      return false
+    }
+  }
+}
 
 export function GitGraph({
   entries, emptyLabel, compact, t,
@@ -12,6 +35,21 @@ export function GitGraph({
   compact?: boolean
   t: Translate
 }) {
+  const [flash, setFlash] = useState<{ hash: string; ok: boolean } | null>(null)
+  const timerRef = useRef<number | null>(null)
+
+  useEffect(() => () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+  }, [])
+
+  const copyHash = (hash: string): void => {
+    void writeClipboard(hash).then((ok) => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+      setFlash({ hash, ok })
+      timerRef.current = window.setTimeout(() => { setFlash(null) }, 1600)
+    })
+  }
+
   if (entries.length === 0) {
     return <p className={css.hint}>{emptyLabel}</p>
   }
@@ -20,6 +58,8 @@ export function GitGraph({
       {entries.map((entry, index) => {
         const stamp = formatCommitStamp(entry.date)
         const when = formatCommitTooltip(entry.date)
+        const justCopied = flash?.hash === entry.hash && flash.ok
+        const justFailed = flash?.hash === entry.hash && !flash.ok
         return (
           <li key={entry.hash} className={css.graphRow} data-head={entry.head || undefined}>
             <span className={css.graphRail} aria-hidden>
@@ -51,8 +91,16 @@ export function GitGraph({
               </div>
               {compact ? null : (
                 <div className={css.graphMeta}>
-                  <span>{entry.author}</span>
-                  <span className={css.hash}>{entry.shortHash}</span>
+                  <span className={css.graphAuthor} title={entry.author}>{entry.author}</span>
+                  <button
+                    type="button"
+                    className={css.hash}
+                    data-copied={justCopied || undefined}
+                    title={justCopied ? t('graph.hashCopied') : justFailed ? t('graph.hashCopyFailed') : t('graph.hashCopy')}
+                    onClick={() => { copyHash(entry.hash) }}
+                  >
+                    {justCopied ? t('graph.hashCopied') : justFailed ? t('graph.hashCopyFailed') : entry.shortHash}
+                  </button>
                   {stamp !== '' ? <span className={css.graphWhen} title={when}>{stamp}</span> : null}
                 </div>
               )}
