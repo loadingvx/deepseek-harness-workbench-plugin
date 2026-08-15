@@ -3,7 +3,8 @@ import { join, normalize, relative, resolve as resolvePath, sep } from 'node:pat
 import { GitError } from '../shared/errors.ts'
 import type {
   FileStatusKind, GitBranchInfo, GitCommitResult, GitDiffSnapshot, GitFileChange,
-  GitLogEntry, GitProbe, GitRefMark, GitStatusSnapshot, GitSwitchResult,
+  GitLogEntry, GitProbe, GitPullResult, GitPushResult, GitRefMark, GitStatusSnapshot,
+  GitSwitchResult,
 } from '../shared/types.ts'
 import { gitAvailable, runGit } from './git-exec.ts'
 import { GitMutex } from './mutex.ts'
@@ -144,19 +145,22 @@ export class GitService {
   async probe(root: string, signal?: AbortSignal): Promise<GitProbe> {
     const available = await gitAvailable(signal)
     if (!available.ok) {
-      return { gitAvailable: false, isRepo: false, detached: false, ahead: 0, behind: 0 }
+      return { gitAvailable: false, isRepo: false, detached: false, ahead: 0, behind: 0, hasHead: false }
     }
     try {
       const inside = await runGit({
         cwd: root, args: ['rev-parse', '--is-inside-work-tree'], signal, allowNonZero: true,
       })
       if (inside.exitCode !== 0 || inside.stdout.trim() !== 'true') {
-        return { gitAvailable: true, gitVersion: available.version, isRepo: false, detached: false, ahead: 0, behind: 0 }
+        return { gitAvailable: true, gitVersion: available.version, isRepo: false, detached: false, ahead: 0, behind: 0, hasHead: false }
       }
       const top = await runGit({ cwd: root, args: ['rev-parse', '--show-toplevel'], signal })
       const status = await runGit({ cwd: root, args: ['status', '--porcelain=v1', '-b'], signal })
+      const remotes = await runGit({ cwd: root, args: ['remote'], signal, allowNonZero: true })
+      const head = await runGit({ cwd: root, args: ['rev-parse', '--verify', 'HEAD'], signal, allowNonZero: true })
       const { header } = parsePorcelain(status.stdout)
       const branch = parseBranchLine(header)
+      const remote = remotes.stdout.split(/\r?\n/).map(item => item.trim()).find(Boolean)
       return {
         gitAvailable: true,
         gitVersion: available.version,
@@ -165,12 +169,14 @@ export class GitService {
         detached: branch.detached,
         ahead: branch.ahead,
         behind: branch.behind,
+        hasHead: head.exitCode === 0,
         ...branch.branch !== undefined ? { branch: branch.branch } : {},
+        ...remote !== undefined ? { remote } : {},
         ...branch.upstream !== undefined ? { upstream: branch.upstream } : {},
       }
     } catch (error) {
       if (error instanceof GitError && error.code === 'NOT_A_REPO') {
-        return { gitAvailable: true, gitVersion: available.version, isRepo: false, detached: false, ahead: 0, behind: 0 }
+        return { gitAvailable: true, gitVersion: available.version, isRepo: false, detached: false, ahead: 0, behind: 0, hasHead: false }
       }
       throw error
     }
@@ -275,6 +281,44 @@ export class GitService {
       const log = await this.log(root, 1, signal)
       const head = log[0]
       return { hash: head?.hash ?? '', subject: trimmed }
+    })
+  }
+
+  async push(root: string, signal?: AbortSignal): Promise<GitPushResult> {
+    return this.mutex.run(async () => {
+      await this.requireRepo(root, signal)
+      const probe = await this.probe(root, signal)
+      if (probe.detached) throw new GitError('DETACHED_HEAD')
+      if (probe.remote === undefined) throw new GitError('NO_REMOTE')
+      if (!probe.hasHead) throw new GitError('NOTHING_TO_PUSH')
+      if (probe.behind > 0) throw new GitError('REMOTE_AHEAD')
+      if (probe.ahead === 0 && probe.upstream !== undefined) throw new GitError('NOTHING_TO_PUSH')
+      const branch = probe.branch
+      if (branch === undefined || branch.trim() === '') throw new GitError('BRANCH_MISSING')
+      if (probe.upstream !== undefined) {
+        await runGit({ cwd: root, args: ['push'], signal, timeoutMs: 90_000 })
+        return { remote: probe.remote, branch, setUpstream: false }
+      }
+      await runGit({ cwd: root, args: ['push', '-u', probe.remote, 'HEAD'], signal, timeoutMs: 90_000 })
+      return { remote: probe.remote, branch, setUpstream: true }
+    })
+  }
+
+  async pull(root: string, signal?: AbortSignal): Promise<GitPullResult> {
+    return this.mutex.run(async () => {
+      await this.requireRepo(root, signal)
+      const probe = await this.probe(root, signal)
+      if (probe.detached) throw new GitError('DETACHED_HEAD')
+      if (probe.remote === undefined) throw new GitError('NO_REMOTE')
+      if (probe.upstream === undefined) throw new GitError('NO_UPSTREAM')
+      const snapshot = await this.status(root, signal)
+      const dirty = snapshot.staged.length + snapshot.unstaged.length + snapshot.untracked.length
+      if (dirty > 0) throw new GitError('DIRTY_WORKTREE')
+      if (probe.behind === 0) throw new GitError('NOTHING_TO_PULL')
+      const branch = probe.branch
+      if (branch === undefined || branch.trim() === '') throw new GitError('BRANCH_MISSING')
+      await runGit({ cwd: root, args: ['pull', '--ff-only'], signal, timeoutMs: 90_000 })
+      return { remote: probe.remote, branch }
     })
   }
 

@@ -240,27 +240,40 @@
   right: 6px;
 }
 
-.commitButton {
+.actionRow {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  box-sizing: border-box;
+  align-items: stretch;
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  min-height: 32px;
-  height: auto;
-  padding: 6px 12px;
-  border: none;
+  overflow: hidden;
   border-radius: 8px;
   background: var(--dsw-alias-button-primary-fill);
+}
+
+.actionBtn {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 32px;
+  height: auto;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
   color: var(--dsw-alias-label-primary-foreground);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
   line-height: 16px;
   cursor: pointer;
+}
+
+.actionBtn + .actionBtn {
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--dsw-alias-label-primary-foreground) 22%, transparent);
 }
 
 .commitLabel {
@@ -270,11 +283,11 @@
   overflow-wrap: anywhere;
 }
 
-.commitButton:hover:not(:disabled) {
+.actionBtn:hover:not(:disabled) {
   background: var(--dsw-alias-button-primary-hover);
 }
 
-.commitButton:disabled {
+.actionBtn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }

@@ -5,7 +5,8 @@ import type {
 } from '../../shared/types.ts'
 import { GitGraph } from './GitGraph.tsx'
 import { IconButton } from './IconButton.tsx'
-import { IconBranch, IconCheck, IconChevron, IconMinus, IconPlus, IconRefresh, IconSparkle } from './icons.tsx'
+import { visibleSyncActions } from '../../shared/sync-actions.ts'
+import { IconBranch, IconCheck, IconChevron, IconMinus, IconPlus, IconPull, IconPush, IconRefresh, IconSparkle } from './icons.tsx'
 import type { Translate } from './types.ts'
 import css from './GitSidebar.module.css'
 
@@ -216,8 +217,29 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
     : dirtyCount === 0
       ? t('commit.disabledNothing')
       : busy
-        ? t('commit.disabledBusy')
+        ? t('action.disabledBusy')
         : null
+  const probe = status?.probe
+  const actions = visibleSyncActions({
+    dirtyCount,
+    detached: probe?.detached === true,
+    ahead: probe?.ahead ?? 0,
+    behind: probe?.behind ?? 0,
+    hasRemote: probe?.remote !== undefined,
+    hasUpstream: probe?.upstream !== undefined,
+    hasHead: probe?.hasHead === true,
+  })
+  const remoteLabel = probe?.upstream ?? (probe?.remote !== undefined ? `${probe.remote}/${branchName}` : branchName)
+  const pushDisabledReason = busy
+    ? t('action.disabledBusy')
+    : (probe?.behind ?? 0) > 0
+      ? t('push.disabledBehind')
+      : null
+  const pullDisabledReason = busy
+    ? t('action.disabledBusy')
+    : dirtyCount > 0
+      ? t('pull.disabledDirty')
+      : null
   const writesDisabled = busy || status === null || !status.probe.gitAvailable || !status.probe.isRepo
   const generateDisabled = writesDisabled || generating || dirtyCount === 0
   const graphFills = changesOpen === false && graphOpen
@@ -242,6 +264,16 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
       if (result.ok) setMessage('')
       return result
     })
+  }
+
+  const push = (): void => {
+    if (workspaceId === undefined || pushDisabledReason !== null) return
+    void runWrite(() => client.push(workspaceId))
+  }
+
+  const pull = (): void => {
+    if (workspaceId === undefined || pullDisabledReason !== null) return
+    void runWrite(() => client.pull(workspaceId))
   }
 
   const generate = (): void => {
@@ -325,18 +357,50 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                 </span>
               ) : null}
             </div>
-            <button
-              type="button"
-              className={css.commitButton}
-              disabled={commitDisabledReason !== null || writesDisabled}
-              title={commitDisabledReason ?? undefined}
-              onClick={commit}
-            >
-              <IconCheck />
-              <span className={css.commitLabel}>
-                {commitAll ? t('action.commitAll') : t('action.commitOn', { branch: branchName })}
-              </span>
-            </button>
+            {actions.commit || actions.push || actions.pull ? (
+              <div className={css.actionRow} role="group" aria-label={t('section.commit')}>
+                {actions.commit ? (
+                  <button
+                    type="button"
+                    className={css.actionBtn}
+                    disabled={commitDisabledReason !== null || writesDisabled}
+                    title={commitDisabledReason ?? undefined}
+                    onClick={commit}
+                  >
+                    <IconCheck />
+                    <span className={css.commitLabel}>
+                      {commitAll ? t('action.commitAll') : t('action.commitOn', { branch: branchName })}
+                    </span>
+                  </button>
+                ) : null}
+                {actions.push ? (
+                  <button
+                    type="button"
+                    className={css.actionBtn}
+                    disabled={pushDisabledReason !== null || writesDisabled}
+                    title={pushDisabledReason ?? undefined}
+                    onClick={push}
+                  >
+                    <IconPush />
+                    <span className={css.commitLabel}>{t('action.pushOn', { remote: remoteLabel })}</span>
+                  </button>
+                ) : null}
+                {actions.pull ? (
+                  <button
+                    type="button"
+                    className={css.actionBtn}
+                    disabled={pullDisabledReason !== null || writesDisabled}
+                    title={pullDisabledReason ?? undefined}
+                    onClick={pull}
+                  >
+                    <IconPull />
+                    <span className={css.commitLabel}>{t('action.pullOn', { remote: remoteLabel })}</span>
+                  </button>
+                ) : null}
+              </div>
+            ) : probe?.remote !== undefined && !probe.detached && dirtyCount === 0 ? (
+              <p className={css.hint}>{t('sync.clean')}</p>
+            ) : null}
           </div>
 
           <section className={css.pane} data-kind="changes" data-open={changesOpen || undefined}>

@@ -24,6 +24,15 @@ export type GitErrorCode =
   | 'LLM_UNAVAILABLE'
   | 'LLM_FAILED'
   | 'NOTHING_TO_DESCRIBE'
+  | 'NO_REMOTE'
+  | 'NO_UPSTREAM'
+  | 'NOTHING_TO_PUSH'
+  | 'NOTHING_TO_PULL'
+  | 'REMOTE_AHEAD'
+  | 'DIVERGED'
+  | 'AUTH_FAILED'
+  | 'REMOTE_UNREACHABLE'
+  | 'DETACHED_HEAD'
 
 export interface GitFail {
   ok: false
@@ -57,6 +66,8 @@ export interface GitProbe {
   detached: boolean
   ahead: number
   behind: number
+  hasHead: boolean
+  remote?: string
   upstream?: string
 }
 
@@ -106,6 +117,17 @@ export interface GitCommitMessage {
 }
 
 export interface GitSwitchResult {
+  branch: string
+}
+
+export interface GitPushResult {
+  remote: string
+  branch: string
+  setUpstream: boolean
+}
+
+export interface GitPullResult {
+  remote: string
   branch: string
 }
 

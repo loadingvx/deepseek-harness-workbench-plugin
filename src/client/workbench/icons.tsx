@@ -83,6 +83,22 @@ export function IconMinus() {
   )
 }
 
+export function IconPush() {
+  return (
+    <Icon>
+      <path d="M8 12.5V3.8M4.6 6.6 8 3.2 11.4 6.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </Icon>
+  )
+}
+
+export function IconPull() {
+  return (
+    <Icon>
+      <path d="M8 3.5v8.7M4.6 9.4 8 12.8 11.4 9.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </Icon>
+  )
+}
+
 export function IconCheck() {
   return (
     <Icon>

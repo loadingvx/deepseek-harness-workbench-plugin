@@ -1,8 +1,8 @@
 import { fail } from '../shared/errors.ts'
 import type {
   FsFileSnapshot, FsListSnapshot, FsWriteResult,
-  GitBranchInfo, GitCommitMessage, GitCommitResult, GitDiffSnapshot, GitLogEntry, GitResult,
-  GitStatusSnapshot, GitSwitchResult,
+  GitBranchInfo, GitCommitMessage, GitCommitResult, GitDiffSnapshot, GitLogEntry, GitPullResult,
+  GitPushResult, GitResult, GitStatusSnapshot, GitSwitchResult,
 } from '../shared/types.ts'
 
 async function request<T>(path: string, init?: RequestInit): Promise<GitResult<T>> {
@@ -34,6 +34,8 @@ export interface GitClient {
   unstage(workspaceId: string, paths: string[]): Promise<GitResult<{ done: boolean }>>
   commit(workspaceId: string, message: string, all?: boolean): Promise<GitResult<GitCommitResult>>
   generateCommitMessage(workspaceId: string): Promise<GitResult<GitCommitMessage>>
+  push(workspaceId: string): Promise<GitResult<GitPushResult>>
+  pull(workspaceId: string): Promise<GitResult<GitPullResult>>
   switchBranch(workspaceId: string, name: string): Promise<GitResult<GitSwitchResult>>
   listDir(workspaceId: string, path?: string): Promise<GitResult<FsListSnapshot>>
   readFile(workspaceId: string, path: string): Promise<GitResult<FsFileSnapshot>>
@@ -61,6 +63,12 @@ export function createGitClient(): GitClient {
       method: 'POST', body: JSON.stringify({ workspaceId, message, all: all === true }),
     }),
     generateCommitMessage: workspaceId => request('/git/commit-message', {
+      method: 'POST', body: JSON.stringify({ workspaceId }),
+    }),
+    push: workspaceId => request('/git/push', {
+      method: 'POST', body: JSON.stringify({ workspaceId }),
+    }),
+    pull: workspaceId => request('/git/pull', {
       method: 'POST', body: JSON.stringify({ workspaceId }),
     }),
     switchBranch: (workspaceId, name) => request('/git/switch', {

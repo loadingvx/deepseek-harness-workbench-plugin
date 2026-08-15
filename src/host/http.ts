@@ -124,6 +124,12 @@ export function registerGitHttp(ctx: Context, git: GitService, fs: WorkspaceFs):
           const message = await generateCommitMessage(ctx, git, rootOf(body))
           return { message }
         })
+      } else if (method === 'POST' && route === '/git/push') {
+        const body = await readJson(req)
+        result = await wrap(() => git.push(rootOf(body)))
+      } else if (method === 'POST' && route === '/git/pull') {
+        const body = await readJson(req)
+        result = await wrap(() => git.pull(rootOf(body)))
       } else if (method === 'POST' && route === '/git/switch') {
         const body = await readJson(req)
         const name = typeof body.name === 'string' ? body.name : ''

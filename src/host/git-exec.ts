@@ -27,6 +27,21 @@ function classifyFailure(stderr: string, exitCode: number): GitError {
   }
   if (/your local changes/i.test(text) || /would be overwritten/i.test(text)) return new GitError('DIRTY_WORKTREE')
   if (/pathspec '.*' did not match/i.test(text)) return new GitError('BRANCH_MISSING')
+  if (/authentication failed|could not read username|terminal prompts disabled|permission denied \(publickey\)|403 forbidden|401 unauthorized/i.test(text)) {
+    return new GitError('AUTH_FAILED')
+  }
+  if (/could not resolve host|unable to access|failed to connect|connection refused|network is unreachable|timed out/i.test(text)) {
+    return new GitError('REMOTE_UNREACHABLE')
+  }
+  if (/not possible to fast-forward|diverging branches|need to specify how to reconcile/i.test(text)) {
+    return new GitError('DIVERGED')
+  }
+  if (/rejected.*non-fast-forward|failed to push some refs|updates were rejected/i.test(text)) {
+    return new GitError('REMOTE_AHEAD')
+  }
+  if (/no upstream|no tracking information|does not have a corresponding remote/i.test(text)) {
+    return new GitError('NO_UPSTREAM')
+  }
   const detail = text.trim() || `退出码 ${exitCode}`
   return new GitError('GIT_FAILED', detail.slice(0, 400))
 }

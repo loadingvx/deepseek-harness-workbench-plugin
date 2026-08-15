@@ -30,8 +30,8 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     hintZh: '请等当前 Git 操作结束。若确认没有其他 Git 窗口，再检查仓库里的 `.git/index.lock`。',
   },
   DIRTY_WORKTREE: {
-    messageZh: '工作区还有未提交的改动，不能切换分支。',
-    hintZh: '请先提交或处理这些文件，再切换分支，以免改动丢失。',
+    messageZh: '工作区还有未提交的改动。',
+    hintZh: '请先提交或处理这些文件，再切换分支、拉取或推送，以免改动丢失。',
   },
   BUSY: {
     messageZh: '上一次 Git 操作还在进行。',
@@ -92,6 +92,42 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
   NOTHING_TO_DESCRIBE: {
     messageZh: '没有可描述的改动。',
     hintZh: '请先修改或暂存文件，再点自动生成。工作区是干净的时候无法生成提交说明。',
+  },
+  NO_REMOTE: {
+    messageZh: '这个仓库还没有配置远程地址。',
+    hintZh: '请先添加远程，例如：git remote add origin <仓库地址>。没有远程时不能推送或拉取。',
+  },
+  NO_UPSTREAM: {
+    messageZh: '当前分支还没有对应的远端分支。',
+    hintZh: '第一次推送会自动设置跟踪。若要拉取，请先推送一次，或确认远程已有同名分支。',
+  },
+  NOTHING_TO_PUSH: {
+    messageZh: '没有需要推送的新提交。',
+    hintZh: '本地已经和远端同步，或还没有任何提交。提交之后才会出现推送按钮。',
+  },
+  NOTHING_TO_PULL: {
+    messageZh: '远端没有可拉取的新提交。',
+    hintZh: '当前分支没有落后远端。只有远端有更新时才会出现拉取按钮。',
+  },
+  REMOTE_AHEAD: {
+    messageZh: '远端有新提交，不能直接推送。',
+    hintZh: '请先点「拉取」，把远端更新接到本地，确认没有冲突后再推送。',
+  },
+  DIVERGED: {
+    messageZh: '本地和远端都有对方没有的提交，无法快进拉取。',
+    hintZh: '为避免自动合并出乱子，这里只做快进拉取。请在本机终端处理分叉后再试。',
+  },
+  AUTH_FAILED: {
+    messageZh: '远程仓库拒绝了身份验证。',
+    hintZh: '请检查 SSH 密钥或 HTTPS 凭据是否有效。本插件不会弹出密码框，需要本机已经配置好认证。',
+  },
+  REMOTE_UNREACHABLE: {
+    messageZh: '连不上远程仓库。',
+    hintZh: '请检查网络、远程地址，以及本机能否访问该 Git 服务，然后重试。',
+  },
+  DETACHED_HEAD: {
+    messageZh: '当前处于分离 HEAD，不能推送或拉取。',
+    hintZh: '请先切换到一个普通分支，再同步远端。',
   },
 }
 
