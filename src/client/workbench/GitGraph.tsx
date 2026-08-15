@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GitLogEntry } from '../../shared/types.ts'
-import { formatCommitStamp, formatCommitTooltip } from './commit-stamp.ts'
+import { formatCommitTooltip } from './commit-stamp.ts'
 import { toRefMark } from './git-refs.ts'
 import type { Translate } from './types.ts'
 import css from './GitSidebar.module.css'
@@ -56,7 +56,6 @@ export function GitGraph({
   return (
     <ol className={css.graph} data-compact={compact || undefined} aria-label={t('section.graph')}>
       {entries.map((entry, index) => {
-        const stamp = formatCommitStamp(entry.date)
         const when = formatCommitTooltip(entry.date)
         const justCopied = flash?.hash === entry.hash && flash.ok
         const justFailed = flash?.hash === entry.hash && !flash.ok
@@ -66,11 +65,11 @@ export function GitGraph({
               {index < entries.length - 1 ? <span className={css.graphLine} /> : null}
               <span className={css.graphDot} data-head={entry.head || undefined} title={entry.head ? t('graph.head') : entry.shortHash} />
             </span>
-            <div className={css.graphBody}>
+            <div className={css.graphBody} title={when || undefined}>
               <div className={css.graphTop}>
                 <span
                   className={css.graphSubject}
-                  title={compact ? compactTitle(entry, stamp) : entry.subject}
+                  title={compact ? compactTitle(entry, when) : entry.subject}
                 >
                   {entry.subject}
                 </span>
@@ -101,7 +100,6 @@ export function GitGraph({
                   >
                     {justCopied ? t('graph.hashCopied') : justFailed ? t('graph.hashCopyFailed') : entry.shortHash}
                   </button>
-                  {stamp !== '' ? <span className={css.graphWhen} title={when}>{stamp}</span> : null}
                 </div>
               )}
             </div>
@@ -112,6 +110,6 @@ export function GitGraph({
   )
 }
 
-function compactTitle(entry: GitLogEntry, stamp: string): string {
-  return [entry.subject, entry.author, entry.shortHash, stamp].filter(Boolean).join(' · ')
+function compactTitle(entry: GitLogEntry, when: string): string {
+  return [entry.subject, entry.author, entry.shortHash, when].filter(Boolean).join(' · ')
 }

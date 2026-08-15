@@ -563,7 +563,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
                   disabled={generateDisabled}
                   onClick={generate}
                 >
-                  <IconSparkle />
+                  {generating ? <span className={css.spinner} aria-hidden /> : <IconSparkle />}
                 </IconButton>
               </span>
             </div>
