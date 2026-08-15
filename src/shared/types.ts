@@ -197,3 +197,11 @@ export interface ExternalOpenResult {
   app: ExternalEditorId
   path: string
 }
+
+export interface PluginUpdateSnapshot {
+  name: string
+  current: string
+  latest: string | null
+  outdated: boolean
+  command: string
+}

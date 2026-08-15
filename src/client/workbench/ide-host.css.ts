@@ -9,7 +9,7 @@ export const IDE_HOST_CSS = `
 [data-git-ide]{
   display:grid !important;
   grid-template-columns: var(--git-col-chat, minmax(300px, 38%)) minmax(0, 1fr) var(--git-col-side, 280px);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) var(--git-status-h, 24px);
   align-items: stretch;
   justify-content: stretch;
   overflow: hidden !important;
@@ -51,7 +51,7 @@ export const IDE_HOST_CSS = `
 }
 [data-git-ide] > [data-conversation-scroll]{
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 2 / -1;
   min-width: 0 !important;
   min-height: 0 !important;
   max-height: 100%;
@@ -74,14 +74,21 @@ export const IDE_HOST_CSS = `
 [data-git-ide-panel=editor],
 [data-git-ide-panel=rail-editor]{
   grid-column: 2;
-  grid-row: 1 / -1;
+  grid-row: 1 / 3;
 }
 [data-git-ide-panel=side],
 [data-git-ide-panel=rail-side]{
   grid-column: 3;
-  grid-row: 1 / -1;
+  grid-row: 1 / 3;
 }
-[data-git-ide-panel=rail-chat]{ grid-column: 1; grid-row: 2; }
+[data-git-ide-panel=rail-chat]{ grid-column: 1; grid-row: 2 / -1; }
+[data-git-ide-panel=status]{
+  grid-column: 2 / -1;
+  grid-row: 3;
+  z-index: 5;
+  min-width: 0;
+  overflow: visible;
+}
 `
 
 export function ensureIdeStyles(): void {

@@ -8,6 +8,8 @@ import type { GitService } from './git-service.ts'
 import { resolveWorkspacePath } from './workspace.ts'
 import { ExternalOpen } from './external-open.ts'
 import { TerminalHub } from './terminal.ts'
+import { sanitizeTermId } from '../shared/new-file-path.ts'
+import { checkPluginUpdate } from './update-check.ts'
 import type { WorkspaceFs } from './workspace-fs.ts'
 
 function send(res: ServerResponse, status: number, body: unknown): void {
@@ -189,7 +191,7 @@ export function registerGitHttp(
         } else {
           const cols = Number(query(url, 'cols') ?? '80')
           const rows = Number(query(url, 'rows') ?? '24')
-          await term.attach(id, rootOf(), res, cols, rows)
+          await term.attach(id, rootOf(), res, cols, rows, sanitizeTermId(query(url, 'termId')))
           return
         }
       } else if (method === 'POST' && route === '/git/term/write') {
@@ -199,6 +201,9 @@ export function registerGitHttp(
           typeof body.workspaceId === 'string' ? body.workspaceId : workspaceId ?? '',
           rootOf(body),
           data,
+          80,
+          24,
+          sanitizeTermId(body.termId),
         ))
       } else if (method === 'POST' && route === '/git/term/resize') {
         const body = await readJson(req)
@@ -207,10 +212,23 @@ export function registerGitHttp(
           rootOf(body),
           Number(body.cols),
           Number(body.rows),
+          sanitizeTermId(body.termId),
         ))
       } else if (method === 'POST' && route === '/git/term/interrupt') {
         const body = await readJson(req)
-        result = await wrap(() => term.interrupt(typeof body.workspaceId === 'string' ? body.workspaceId : workspaceId ?? '', rootOf(body)))
+        result = await wrap(() => term.interrupt(
+          typeof body.workspaceId === 'string' ? body.workspaceId : workspaceId ?? '',
+          rootOf(body),
+          sanitizeTermId(body.termId),
+        ))
+      } else if (method === 'POST' && route === '/git/term/close') {
+        const body = await readJson(req)
+        result = await wrap(() => term.close(
+          typeof body.workspaceId === 'string' ? body.workspaceId : workspaceId ?? '',
+          sanitizeTermId(body.termId),
+        ))
+      } else if (method === 'GET' && route === '/git/update') {
+        result = await wrap(() => checkPluginUpdate())
       } else if (method === 'POST' && route === '/git/term/restart') {
         const body = await readJson(req)
         result = await wrap(() => term.restart(
@@ -218,6 +236,7 @@ export function registerGitHttp(
           rootOf(body),
           Number(body.cols),
           Number(body.rows),
+          sanitizeTermId(body.termId),
         ))
       } else {
         result = fail('BAD_REQUEST')

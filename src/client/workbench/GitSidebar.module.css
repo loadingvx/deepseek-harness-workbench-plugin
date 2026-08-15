@@ -5,7 +5,7 @@
   max-width: 100%;
   min-height: 0;
   height: 100%;
-  overflow-x: hidden;
+  overflow: hidden;
   background: var(--dsw-alias-bg-base);
 }
 
@@ -85,7 +85,8 @@
 .pane[data-kind='graph'][data-open]:not([data-fill]) {
   flex: none;
   height: var(--git-graph-h, 220px);
-  min-height: 96px;
+  max-height: calc(100% - var(--git-graph-reserved, 160px));
+  min-height: 0;
 }
 
 .pane[data-kind='graph']:not([data-open]) {

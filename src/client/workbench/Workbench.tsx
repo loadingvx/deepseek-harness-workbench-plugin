@@ -14,7 +14,12 @@ import { IconChat, IconEditor, IconFiles, IconGit, IconLayout } from './icons.ts
 import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
 import { SideDock, type SideTab } from './SideDock.tsx'
-import { createTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type WorkbenchInjected } from './types.ts'
+import { termIdFromTabId } from '../../shared/new-file-path.ts'
+import { createTerminalTab, nextTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type WorkbenchInjected } from './types.ts'
+import { StatusBar } from './StatusBar.tsx'
+import { STATUS_BAR_H } from './status-bar.ts'
+import { usePluginUpdate, visibleUpdate } from './UpdateBanner.tsx'
+import { updateTermSeed } from '../../shared/version.ts'
 import { useWorkspace } from './useWorkspace.ts'
 import css from './Workbench.module.css'
 
@@ -63,6 +68,16 @@ export function Workbench(props: WorkbenchProps) {
   const buffersRef = useRef(buffers)
   buffersRef.current = buffers
 
+  const [updateHidden, setUpdateHidden] = useState(false)
+  const pluginInfo = usePluginUpdate(client)
+  const updateInfo = updateHidden ? null : visibleUpdate(pluginInfo)
+  const termSeed = updateInfo === null || updateInfo.latest === null
+    ? undefined
+    : updateTermSeed(
+      updateInfo.command,
+      t('update.termHint', { latest: updateInfo.latest, current: updateInfo.current }),
+    )
+
   const workspace = useWorkspace(useSessions, useWorkspaces)
   const workspaceId = workspace?.workspaceId
   const running = Boolean(props.useSession?.(state => state.running))
@@ -73,6 +88,13 @@ export function Workbench(props: WorkbenchProps) {
   useEffect(() => {
     if (running || pending > 0) setChatOpen(true)
   }, [running, pending])
+
+  useEffect(() => {
+    if (updateInfo === null) return
+    setEditorOpen(true)
+    setSideOpen(true)
+    setActiveId(TERMINAL_TAB_ID)
+  }, [updateInfo])
 
   useLayoutEffect(() => {
     ensureIdeStyles()
@@ -114,6 +136,7 @@ export function Workbench(props: WorkbenchProps) {
       scroll.style.removeProperty('--git-col-chat')
       scroll.style.removeProperty('--git-col-editor')
       scroll.style.removeProperty('--git-col-side')
+      scroll.style.removeProperty('--git-status-h')
       return
     }
     scroll.dataset.gitIde = ''
@@ -140,6 +163,7 @@ export function Workbench(props: WorkbenchProps) {
       const next = clampLayout(hostW, chatW, sideW, { chat: chatOpen, editor: editorOpen, side: sideOpen })
       scroll.style.setProperty('--git-col-chat', `${next.chat}px`)
       scroll.style.setProperty('--git-col-side', `${next.side}px`)
+      scroll.style.setProperty('--git-status-h', `${STATUS_BAR_H}px`)
     }
     apply()
     const observer = new ResizeObserver(apply)
@@ -242,6 +266,11 @@ export function Workbench(props: WorkbenchProps) {
   const closeTabs = (ids: string[]): void => {
     const closable = ids.filter(id => id !== TERMINAL_TAB_ID)
     if (closable.length === 0) return
+    if (workspaceId !== undefined) {
+      for (const id of closable) {
+        if (id.startsWith('terminal:')) void client.closeTerm(workspaceId, termIdFromTabId(id))
+      }
+    }
     setTabs((current) => {
       const closing = new Set(closable)
       for (const tab of current) {
@@ -297,6 +326,26 @@ export function Workbench(props: WorkbenchProps) {
           }}
           onCollapse={() => { setEditorOpen(false) }}
           notice={fileError}
+          termSeed={termSeed}
+          onNewTerminal={() => {
+            setEditorOpen(true)
+            const tab = nextTerminalTab(tabs)
+            setTabs(current => [...current, tab])
+            setActiveId(tab.id)
+          }}
+          onCreateFile={async (path) => {
+            if (workspaceId === undefined) return { ok: false, code: 'NO_WORKSPACE', messageZh: t('editor.addFileNoWorkspace'), hintZh: '' }
+            const existing = await client.readFile(workspaceId, path)
+            if (existing.ok) {
+              await openFile(path)
+              return null
+            }
+            if (existing.code !== 'FS_NOT_FOUND') return existing
+            const created = await client.writeFile(workspaceId, path, '')
+            if (!created.ok) return created
+            await openFile(path)
+            return null
+          }}
           leadingSash={chatOpen ? (
             <ColSash
               label={t('ide.resizeChat')}
@@ -334,6 +383,8 @@ export function Workbench(props: WorkbenchProps) {
               onReset={resetSideWidth}
             />
           }
+          update={updateInfo}
+          onDismissUpdate={() => { setUpdateHidden(true) }}
           t={t}
         />
       ) : (
@@ -346,6 +397,23 @@ export function Workbench(props: WorkbenchProps) {
           </IconButton>
         </div>
       )}
+      <StatusBar
+        client={client}
+        workspaceId={workspaceId}
+        workspacePath={workspace?.path}
+        active={tabs.find(tab => tab.id === activeId) ?? null}
+        plugin={pluginInfo}
+        tabs={tabs}
+        onActivate={(id) => {
+          setEditorOpen(true)
+          setActiveId(id)
+        }}
+        onPrepareUpdate={() => {
+          setEditorOpen(true)
+          setActiveId(TERMINAL_TAB_ID)
+        }}
+        t={t}
+      />
     </>,
     host,
   ) : null

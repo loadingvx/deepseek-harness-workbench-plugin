@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { GitClient } from '../api.ts'
 import type {
   GitBranchInfo, GitFail, GitFileChange, GitLogEntry, GitResult, GitStatusSnapshot,
@@ -8,6 +8,7 @@ import { IconButton } from './IconButton.tsx'
 import { visibleSyncActions } from '../../shared/sync-actions.ts'
 import { IconBranch, IconCheck, IconChevron, IconMinus, IconPlus, IconPull, IconPush, IconRefresh, IconSparkle } from './icons.tsx'
 import type { Translate } from './types.ts'
+import { clampGraphHeight, GRAPH_DEFAULT_H, GRAPH_MIN_H, measureReservedAboveGraph } from './graph-layout.ts'
 import css from './GitSidebar.module.css'
 
 export interface GitSidebarProps {
@@ -134,12 +135,15 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   const [graphH, setGraphH] = useState(() => {
     try {
       const raw = Number(localStorage.getItem(GRAPH_H_KEY))
-      return Number.isFinite(raw) && raw >= 96 ? raw : 220
+      return Number.isFinite(raw) && raw >= GRAPH_MIN_H ? raw : GRAPH_DEFAULT_H
     } catch {
-      return 220
+      return GRAPH_DEFAULT_H
     }
   })
+  const [hostH, setHostH] = useState(0)
+  const [reserved, setReserved] = useState(160)
   const [dragging, setDragging] = useState(false)
+  const graphHFit = clampGraphHeight(graphH, hostH, reserved)
 
   const refresh = async (): Promise<void> => {
     if (workspaceId === undefined) {
@@ -187,13 +191,16 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   const beginResize = (event: React.PointerEvent<HTMLButtonElement>): void => {
     event.preventDefault()
     const startY = event.clientY
-    const startH = graphH
+    const startH = graphHFit
     const host = rootRef.current
-    const max = Math.max(96, (host?.clientHeight ?? 480) - 160)
+    const room = host === null ? reserved : measureReservedAboveGraph(host)
+    const column = host?.clientHeight ?? hostH
     let latest = startH
     setDragging(true)
     const move = (next: PointerEvent): void => {
-      latest = Math.min(max, Math.max(96, startH + (startY - next.clientY)))
+      const liveH = host?.clientHeight ?? column
+      const liveRoom = host === null ? room : measureReservedAboveGraph(host)
+      latest = clampGraphHeight(startH + (startY - next.clientY), liveH, liveRoom)
       setGraphH(latest)
     }
     const up = (): void => {
@@ -244,6 +251,21 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   const generateDisabled = writesDisabled || generating || dirtyCount === 0
   const graphFills = changesOpen === false && graphOpen
 
+  useLayoutEffect(() => {
+    const host = rootRef.current
+    if (host === null) return
+    const apply = (): void => {
+      const nextReserved = measureReservedAboveGraph(host)
+      const nextH = host.clientHeight
+      setReserved(prev => prev === nextReserved ? prev : nextReserved)
+      setHostH(prev => prev === nextH ? prev : nextH)
+    }
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(host)
+    return () => { observer.disconnect() }
+  }, [changesOpen, graphOpen, error, loading, workspaceId, dirtyCount, actions.commit, actions.push, actions.pull])
+
   const toggleChanges = (): void => {
     setChangesOpen((open) => {
       writeFlag(CHANGES_OPEN_KEY, !open)
@@ -291,8 +313,13 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
   }
 
   return (
-    <aside ref={rootRef} className={css.root} aria-label={t('panel.title')} style={{ '--git-graph-h': `${graphH}px` } as never}>
-      <header className={css.head}>
+    <aside
+      ref={rootRef}
+      className={css.root}
+      aria-label={t('panel.title')}
+      style={{ '--git-graph-h': `${graphHFit}px`, '--git-graph-reserved': `${reserved}px` } as never}
+    >
+      <header className={css.head} data-git-chrome="head">
         <label className={css.branchWrap}>
           <IconBranch />
           <select
@@ -319,18 +346,18 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
         </IconButton>
       </header>
 
-      {workspaceId === undefined ? <p className={css.hint} style={{ padding: '8px 10px' }}>{t('panel.noWorkspace')}</p> : null}
+      {workspaceId === undefined ? <p className={css.hint} data-git-chrome="hint" style={{ padding: '8px 10px' }}>{t('panel.noWorkspace')}</p> : null}
       {error !== null ? (
-        <div className={css.banner}>
+        <div className={css.banner} data-git-chrome="banner">
           <div>{error.messageZh}</div>
           <div className={css.bannerHint}>{error.hintZh}</div>
         </div>
       ) : null}
-      {loading && status === null ? <p className={css.hint} style={{ padding: '8px 10px' }}>{t('panel.loading')}</p> : null}
+      {loading && status === null ? <p className={css.hint} data-git-chrome="hint" style={{ padding: '8px 10px' }}>{t('panel.loading')}</p> : null}
 
       {status !== null && status.probe.isRepo ? (
         <>
-          <div className={css.commitArea}>
+          <div className={css.commitArea} data-git-chrome="commit">
             <div className={css.commitBox}>
               <textarea
                 className={css.textarea}
@@ -404,7 +431,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
           </div>
 
           <section className={css.pane} data-kind="changes" data-open={changesOpen || undefined}>
-            <div className={css.sectionHead}>
+            <div className={css.sectionHead} data-git-chrome="changes-head">
               <button type="button" className={css.sectionToggle} aria-expanded={changesOpen} onClick={toggleChanges}>
                 <IconChevron open={changesOpen} />
                 <span className={css.sectionTitle}>{t('section.changes')}</span>

@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { GitClient } from '../api.ts'
 import type { GitFail } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconClose, IconDiff, IconMore, IconPanelOff, IconSave, IconTerminal } from './icons.tsx'
+import { joinWorkspaceFile, suggestNewFileDir, termIdFromTabId } from '../../shared/new-file-path.ts'
+import { IconClose, IconDiff, IconMore, IconPanelOff, IconPlus, IconSave, IconTerminal } from './icons.tsx'
 import { PathBreadcrumb } from './PathBreadcrumb.tsx'
 import { TerminalView } from './TerminalView.tsx'
-import type { FileBuffer, FileTab, Translate } from './types.ts'
+import { TERMINAL_TAB_ID, type FileBuffer, type FileTab, type Translate } from './types.ts'
 import css from './EditorPane.module.css'
 
 export interface EditorPaneProps {
@@ -22,8 +23,11 @@ export interface EditorPaneProps {
   onSaved: (path: string, content: string) => void
   onCollapse?: () => void
   notice?: GitFail | null
+  termSeed?: string
   workspaceTitle?: string
   leadingSash?: ReactNode
+  onNewTerminal?: () => void
+  onCreateFile?: (path: string) => Promise<GitFail | null>
   t: Translate
 }
 
@@ -48,7 +52,7 @@ function parseDiff(text: string): Array<{ kind: 'add' | 'del' | 'hunk' | 'meta' 
 /** Center editor: explorer + tabs + text/diff, with unsaved-close confirmation. */
 export function EditorPane({
   client, workspaceId, tabs, activeId, buffers,
-  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, workspaceTitle, leadingSash, t,
+  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onCreateFile, t,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.id === activeId) ?? null
   const buffer = active?.kind === 'file' ? buffers[active.path] : undefined
@@ -57,6 +61,12 @@ export function EditorPane({
   const [error, setError] = useState<GitFail | null>(null)
   const [pendingClose, setPendingClose] = useState<{ ids: string[]; names: string[] } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const [newFileOpen, setNewFileOpen] = useState(false)
+  const [newFileDir, setNewFileDir] = useState('')
+  const [newFileName, setNewFileName] = useState('未命名.txt')
+  const [newFileBusy, setNewFileBusy] = useState(false)
+  const [newFileError, setNewFileError] = useState<string | null>(null)
   const [diffText, setDiffText] = useState('')
   const [diffLoading, setDiffLoading] = useState(false)
   const areaRef = useRef<HTMLTextAreaElement>(null)
@@ -121,6 +131,23 @@ export function EditorPane({
     onSaved(active.path, buffer.draft)
   }
 
+  const submitNewFile = async (): Promise<void> => {
+    if (onCreateFile === undefined) return
+    const path = joinWorkspaceFile(newFileDir, newFileName)
+    if (path === null) {
+      setNewFileError(t('editor.addFileInvalid'))
+      return
+    }
+    setNewFileBusy(true)
+    const fail = await onCreateFile(path)
+    setNewFileBusy(false)
+    if (fail !== null) {
+      setNewFileError(fail.messageZh)
+      return
+    }
+    setNewFileOpen(false)
+  }
+
   const lines = useMemo(() => (buffer?.draft.split(/\n/).length ?? 1), [buffer?.draft])
 
   const activeIndex = activeId === null ? -1 : tabs.findIndex(tab => tab.id === activeId)
@@ -137,17 +164,20 @@ export function EditorPane({
     : []
 
   useEffect(() => {
-    if (!menuOpen) return
+    if (!menuOpen && !addOpen && !newFileOpen) return
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setMenuOpen(false)
+      if (event.key !== 'Escape') return
+      setMenuOpen(false)
+      setAddOpen(false)
+      if (!newFileBusy) setNewFileOpen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => { window.removeEventListener('keydown', onKey) }
-  }, [menuOpen])
+  }, [addOpen, menuOpen, newFileBusy, newFileOpen])
 
   let body: ReactNode
   if (active?.kind === 'terminal') {
-    body = <TerminalView client={client} workspaceId={workspaceId} t={t} />
+    body = <TerminalView client={client} workspaceId={workspaceId} termId={termIdFromTabId(active.id)} injectComment={termSeed} t={t} />
   } else if (active === null) {
     body = (
       <div className={css.empty}>
@@ -268,7 +298,7 @@ export function EditorPane({
                 <div key={tab.id} className={css.tab} data-active={tab.id === activeId || undefined} role="tab">
                   <button type="button" className={css.tabName} onClick={() => { onActivate(tab.id) }}>
                     {tab.kind === 'terminal'
-                      ? t('term.tab')
+                      ? (tab.title || t('term.tab'))
                       : tab.kind === 'diff'
                         ? `${fileName(tab.path)} · ${t('editor.diffTab')}`
                         : fileName(tab.path)}
@@ -276,7 +306,8 @@ export function EditorPane({
                   {tabDirty ? <span className={css.dirtyDot} title={t('editor.dirty')} /> : null}
                   {tab.kind === 'terminal' ? (
                     <span className={css.termMark} title={t('term.pinned')}><IconTerminal /></span>
-                  ) : (
+                  ) : null}
+                  {tab.kind === 'terminal' && tab.id === TERMINAL_TAB_ID ? null : (
                     <IconButton label={t('editor.close')} onClick={() => { requestClose(tab.id) }}>
                       <IconClose />
                     </IconButton>
@@ -288,11 +319,56 @@ export function EditorPane({
           <div className={css.tabActions}>
             <div className={css.menuWrap}>
               <IconButton
+                label={t('editor.add')}
+                active={addOpen}
+                aria-haspopup="menu"
+                aria-expanded={addOpen}
+                onClick={() => { setAddOpen(open => !open); setMenuOpen(false) }}
+              >
+                <IconPlus />
+              </IconButton>
+              {addOpen ? (
+                <>
+                  <div className={css.menuBackdrop} onClick={() => { setAddOpen(false) }} />
+                  <div className={css.menu} role="menu" aria-label={t('editor.add')}>
+                    <button
+                      type="button"
+                      className={css.menuItem}
+                      role="menuitem"
+                      onClick={() => {
+                        setAddOpen(false)
+                        onNewTerminal?.()
+                      }}
+                    >
+                      {t('editor.addTerminal')}
+                    </button>
+                    <button
+                      type="button"
+                      className={css.menuItem}
+                      role="menuitem"
+                      disabled={workspaceId === undefined || onCreateFile === undefined}
+                      title={workspaceId === undefined ? t('editor.addFileNoWorkspace') : undefined}
+                      onClick={() => {
+                        setAddOpen(false)
+                        setNewFileDir(suggestNewFileDir(active?.path, active?.kind))
+                        setNewFileName('未命名.txt')
+                        setNewFileError(null)
+                        setNewFileOpen(true)
+                      }}
+                    >
+                      {t('editor.addFile')}
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+            <div className={css.menuWrap}>
+              <IconButton
                 label={t('editor.tabsMenu')}
                 active={menuOpen}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                onClick={() => { setMenuOpen(open => !open) }}
+                onClick={() => { setMenuOpen(open => !open); setAddOpen(false) }}
               >
                 <IconMore />
               </IconButton>
@@ -318,6 +394,52 @@ export function EditorPane({
             </div>
           ) : null}
           {body}
+          {newFileOpen ? (
+            <div className={css.dialogMask}>
+              <div className={css.dialog} role="dialog" aria-labelledby="git-new-file-title">
+                <h2 id="git-new-file-title">{t('editor.addFileTitle')}</h2>
+                <p>{t('editor.addFileHint')}</p>
+                <label className={css.field}>
+                  <span>{t('editor.addFileDir')}</span>
+                  <input
+                    className={css.fieldInput}
+                    value={newFileDir}
+                    placeholder={t('editor.addFileDirRoot')}
+                    onChange={(event) => { setNewFileDir(event.target.value); setNewFileError(null) }}
+                  />
+                </label>
+                <label className={css.field}>
+                  <span>{t('editor.addFileName')}</span>
+                  <input
+                    className={css.fieldInput}
+                    value={newFileName}
+                    autoFocus
+                    onChange={(event) => { setNewFileName(event.target.value); setNewFileError(null) }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        void submitNewFile()
+                      }
+                    }}
+                  />
+                </label>
+                {newFileError !== null ? <p className={css.fieldError}>{newFileError}</p> : null}
+                <div className={css.dialogRow}>
+                  <button type="button" className={css.keep} onClick={() => { setNewFileOpen(false) }}>
+                    {t('editor.addFileCancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className={css.create}
+                    disabled={newFileBusy}
+                    onClick={() => { void submitNewFile() }}
+                  >
+                    {t('editor.addFileCreate')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
           {pendingClose !== null ? (
             <div className={css.dialogMask}>
               <div className={css.dialog} role="dialog" aria-labelledby="git-close-title">

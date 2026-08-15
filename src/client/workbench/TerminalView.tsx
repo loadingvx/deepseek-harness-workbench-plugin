@@ -16,10 +16,12 @@ type TermEvent =
   | { type: 'exit'; code: number | null }
 
 export function TerminalView({
-  client, workspaceId, t,
+  client, workspaceId, termId, injectComment, t,
 }: {
   client: GitClient
   workspaceId?: string
+  termId?: string
+  injectComment?: string
   t: Translate
 }) {
   const [cwd, setCwd] = useState('')
@@ -82,7 +84,7 @@ export function TerminalView({
       sourceRef.current?.close()
       const { cols, rows } = size()
       const source = new EventSource(
-        `/git/term/stream?workspaceId=${encodeURIComponent(workspaceId)}&cols=${cols}&rows=${rows}`,
+        `/git/term/stream?workspaceId=${encodeURIComponent(workspaceId)}&termId=${encodeURIComponent(termId ?? 'main')}&cols=${cols}&rows=${rows}`,
       )
       sourceRef.current = source
       setStatus('idle')
@@ -121,7 +123,7 @@ export function TerminalView({
       flushing.current = true
       while (writeQueue.current.length > 0) {
         const data = writeQueue.current.splice(0, 64).join('')
-        const result = await client.writeTerm(workspaceId, data)
+        const result = await client.writeTerm(workspaceId, data, termId)
         if (!result.ok) {
           setError(result)
           break
@@ -135,7 +137,7 @@ export function TerminalView({
       void flushWrites()
     })
     const onResize = term.onResize(({ cols, rows }) => {
-      void client.resizeTerm(workspaceId, cols, rows)
+      void client.resizeTerm(workspaceId, cols, rows, termId)
     })
     const host = hostRef.current
     const observer = new ResizeObserver(() => { applyFit() })
@@ -159,7 +161,23 @@ export function TerminalView({
       if (termRef.current === term) termRef.current = null
       fitRef.current = null
     }
-  }, [client, t, workspaceId])
+  }, [client, t, termId, workspaceId])
+
+  useEffect(() => {
+    if (workspaceId === undefined || status !== 'live') return
+    const text = injectComment?.trim()
+    if (text === undefined || text === '') return
+    const key = `dsh-workbench-plugin:term-hint:${text}`
+    try {
+      if (window.sessionStorage.getItem(key) === '1') return
+    } catch { /* still try once */ }
+    void client.writeTerm(workspaceId, text, termId).then((result) => {
+      if (!result.ok) return
+      try {
+        window.sessionStorage.setItem(key, '1')
+      } catch { /* private mode */ }
+    })
+  }, [client, injectComment, status, termId, workspaceId])
 
   const restart = async (): Promise<void> => {
     if (workspaceId === undefined) return
@@ -167,7 +185,7 @@ export function TerminalView({
     termRef.current?.reset()
     const cols = termRef.current?.cols ?? 80
     const rows = termRef.current?.rows ?? 24
-    const result = await client.restartTerm(workspaceId, cols, rows)
+    const result = await client.restartTerm(workspaceId, cols, rows, termId)
     if (!result.ok) {
       setError(result)
       return
@@ -193,7 +211,7 @@ export function TerminalView({
         <IconButton
           label={t('term.interrupt')}
           disabled={status !== 'live'}
-          onClick={() => { void client.interruptTerm(workspaceId) }}
+          onClick={() => { void client.interruptTerm(workspaceId, termId) }}
         >
           <span className={css.ctrl}>^C</span>
         </IconButton>

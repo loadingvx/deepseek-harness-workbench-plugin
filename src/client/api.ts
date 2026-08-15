@@ -3,7 +3,7 @@ import type {
   ExternalEditorId, ExternalEditorsSnapshot, ExternalOpenResult,
   FsFileSnapshot, FsListSnapshot, FsSearchSnapshot, FsWriteResult,
   GitBranchInfo, GitCommitMessage, GitCommitResult, GitDiffSnapshot, GitLogEntry, GitPullResult,
-  GitPushResult, GitResult, GitStatusSnapshot, GitSwitchResult,
+  GitPushResult, GitResult, GitStatusSnapshot, GitSwitchResult, PluginUpdateSnapshot,
 } from '../shared/types.ts'
 
 async function request<T>(path: string, init?: RequestInit): Promise<GitResult<T>> {
@@ -44,10 +44,12 @@ export interface GitClient {
   writeFile(workspaceId: string, path: string, content: string): Promise<GitResult<FsWriteResult>>
   listEditors(): Promise<GitResult<ExternalEditorsSnapshot>>
   openExternal(workspaceId: string, path?: string, app?: ExternalEditorId): Promise<GitResult<ExternalOpenResult>>
-  writeTerm(workspaceId: string, data: string): Promise<GitResult<{ ok: true }>>
-  resizeTerm(workspaceId: string, cols: number, rows: number): Promise<GitResult<{ ok: true; cols: number; rows: number }>>
-  interruptTerm(workspaceId: string): Promise<GitResult<{ ok: true }>>
-  restartTerm(workspaceId: string, cols?: number, rows?: number): Promise<GitResult<{ cwd: string; shell: string; cols: number; rows: number }>>
+  writeTerm(workspaceId: string, data: string, termId?: string): Promise<GitResult<{ ok: true }>>
+  resizeTerm(workspaceId: string, cols: number, rows: number, termId?: string): Promise<GitResult<{ ok: true; cols: number; rows: number }>>
+  interruptTerm(workspaceId: string, termId?: string): Promise<GitResult<{ ok: true }>>
+  restartTerm(workspaceId: string, cols?: number, rows?: number, termId?: string): Promise<GitResult<{ cwd: string; shell: string; cols: number; rows: number }>>
+  closeTerm(workspaceId: string, termId?: string): Promise<GitResult<{ ok: true }>>
+  pluginUpdate(): Promise<GitResult<PluginUpdateSnapshot>>
 }
 
 export function createGitClient(): GitClient {
@@ -103,17 +105,21 @@ export function createGitClient(): GitClient {
     openExternal: (workspaceId, path, app) => request('/git/fs/open', {
       method: 'POST', body: JSON.stringify({ workspaceId, path: path ?? '', app }),
     }),
-    writeTerm: (workspaceId, data) => request('/git/term/write', {
-      method: 'POST', body: JSON.stringify({ workspaceId, data }),
+    writeTerm: (workspaceId, data, termId) => request('/git/term/write', {
+      method: 'POST', body: JSON.stringify({ workspaceId, data, termId }),
     }),
-    resizeTerm: (workspaceId, cols, rows) => request('/git/term/resize', {
-      method: 'POST', body: JSON.stringify({ workspaceId, cols, rows }),
+    resizeTerm: (workspaceId, cols, rows, termId) => request('/git/term/resize', {
+      method: 'POST', body: JSON.stringify({ workspaceId, cols, rows, termId }),
     }),
-    interruptTerm: workspaceId => request('/git/term/interrupt', {
-      method: 'POST', body: JSON.stringify({ workspaceId }),
+    interruptTerm: (workspaceId, termId) => request('/git/term/interrupt', {
+      method: 'POST', body: JSON.stringify({ workspaceId, termId }),
     }),
-    restartTerm: (workspaceId, cols, rows) => request('/git/term/restart', {
-      method: 'POST', body: JSON.stringify({ workspaceId, cols, rows }),
+    restartTerm: (workspaceId, cols, rows, termId) => request('/git/term/restart', {
+      method: 'POST', body: JSON.stringify({ workspaceId, cols, rows, termId }),
     }),
+    closeTerm: (workspaceId, termId) => request('/git/term/close', {
+      method: 'POST', body: JSON.stringify({ workspaceId, termId }),
+    }),
+    pluginUpdate: () => request('/git/update'),
   }
 }

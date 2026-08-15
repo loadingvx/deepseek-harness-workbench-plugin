@@ -24,8 +24,14 @@ export interface FileTab {
   staged?: boolean
 }
 
-export function createTerminalTab(): FileTab {
-  return { id: TERMINAL_TAB_ID, kind: 'terminal', path: '', title: '终端' }
+export function createTerminalTab(id = TERMINAL_TAB_ID, title = '终端'): FileTab {
+  return { id, kind: 'terminal', path: '', title }
+}
+
+export function nextTerminalTab(tabs: FileTab[]): FileTab {
+  const count = tabs.filter(tab => tab.kind === 'terminal').length
+  const n = count + 1
+  return createTerminalTab(`terminal:${Date.now()}`, n <= 1 ? '终端' : `终端 ${n}`)
 }
 
 export interface FileBuffer {

@@ -86,6 +86,26 @@ describe('TerminalHub', () => {
     hub.disposeAll()
   })
 
+  it('keeps two terminal tabs on the same workspace apart', async () => {
+    const one = fakePty()
+    const two = fakePty()
+    let spawnCount = 0
+    const hub = new TerminalHub({
+      exists: async () => true,
+      env: { SHELL: '/bin/bash' },
+      spawnPty: async () => {
+        spawnCount += 1
+        return spawnCount === 1 ? one.pty : two.pty
+      },
+    })
+    await hub.write('ws1', '/repo', 'first\n', 80, 24, 'main')
+    await hub.write('ws1', '/repo', 'second\n', 80, 24, '2')
+    expect(one.written).toEqual(['first\n'])
+    expect(two.written).toEqual(['second\n'])
+    await hub.close('ws1', '2')
+    hub.disposeAll()
+  })
+
   it('resizes the live PTY', async () => {
     const fake = fakePty()
     const hub = new TerminalHub({

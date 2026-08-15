@@ -1,16 +1,18 @@
 import type { ReactNode } from 'react'
 import type { GitClient } from '../api.ts'
+import type { PluginUpdateSnapshot } from '../../shared/types.ts'
 import { FileTree } from './FileTree.tsx'
 import { GitSidebar } from './GitSidebar.tsx'
 import { IconButton } from './IconButton.tsx'
 import { IconFiles, IconGit, IconPanelOff } from './icons.tsx'
 import type { Translate } from './types.ts'
+import { UpdateBanner } from './UpdateBanner.tsx'
 import css from './SideDock.module.css'
 
 export type SideTab = 'files' | 'git'
 
 export function SideDock({
-  client, workspaceId, workspaceTitle, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onCollapse, leadingSash, t,
+  client, workspaceId, workspaceTitle, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onCollapse, leadingSash, update, onDismissUpdate, t,
 }: {
   client: GitClient
   workspaceId?: string
@@ -23,11 +25,14 @@ export function SideDock({
   onOpenDiff: (path: string, staged: boolean) => void
   onCollapse: () => void
   leadingSash?: ReactNode
+  update?: PluginUpdateSnapshot | null
+  onDismissUpdate?: () => void
   t: Translate
 }) {
   return (
     <aside className={css.root} data-git-ide-panel="side">
       {leadingSash}
+      <UpdateBanner info={update ?? null} onDismiss={onDismissUpdate ?? (() => {})} t={t} />
       <div className={css.tabs} role="tablist">
         <IconButton label={t('ide.files')} active={tab === 'files'} onClick={() => { onTab('files') }}>
           <IconFiles />

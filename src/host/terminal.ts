@@ -6,6 +6,7 @@ import { constants } from 'node:fs'
 import type { ServerResponse } from 'node:http'
 import { basename } from 'node:path'
 import { GitError } from '../shared/errors.ts'
+import { termSessionKey } from '../shared/new-file-path.ts'
 import { redactSecrets } from '../shared/redact.ts'
 
 const MAX_BUFFER = 200_000
@@ -137,14 +138,18 @@ async function defaultSpawnPty(bin: string, cwd: string, cols: number, rows: num
   })
 }
 
-/** One real PTY per workspace. Output is redacted before it reaches the browser. */
+/** One real PTY per workspace terminal tab. Output is redacted before it reaches the browser. */
 export class TerminalHub {
   private readonly sessions = new Map<string, Session>()
 
   constructor(private readonly deps: TerminalDeps = {}) {}
 
-  async attach(workspaceId: string, cwd: string, res: ServerResponse, cols = DEFAULT_COLS, rows = DEFAULT_ROWS): Promise<void> {
-    const session = await this.ensure(workspaceId, cwd, cols, rows)
+  private key(workspaceId: string, termId?: string): string {
+    return termSessionKey(workspaceId, termId)
+  }
+
+  async attach(workspaceId: string, cwd: string, res: ServerResponse, cols = DEFAULT_COLS, rows = DEFAULT_ROWS, termId?: string): Promise<void> {
+    const session = await this.ensure(workspaceId, cwd, cols, rows, termId)
     res.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-store',
@@ -169,38 +174,44 @@ export class TerminalHub {
     res.on('error', drop)
   }
 
-  async write(workspaceId: string, cwd: string, data: string, cols = DEFAULT_COLS, rows = DEFAULT_ROWS): Promise<{ ok: true }> {
+  async write(workspaceId: string, cwd: string, data: string, cols = DEFAULT_COLS, rows = DEFAULT_ROWS, termId?: string): Promise<{ ok: true }> {
     if (data.length > MAX_WRITE) throw new GitError('BAD_REQUEST')
-    const session = await this.ensure(workspaceId, cwd, cols, rows)
+    const session = await this.ensure(workspaceId, cwd, cols, rows, termId)
     session.pty.write(data)
     return { ok: true }
   }
 
-  async resize(workspaceId: string, cwd: string, cols: number, rows: number): Promise<{ ok: true; cols: number; rows: number }> {
+  async resize(workspaceId: string, cwd: string, cols: number, rows: number, termId?: string): Promise<{ ok: true; cols: number; rows: number }> {
     const nextCols = clampSize(cols, 10, 400, DEFAULT_COLS)
     const nextRows = clampSize(rows, 4, 200, DEFAULT_ROWS)
-    const session = await this.ensure(workspaceId, cwd, nextCols, nextRows)
+    const session = await this.ensure(workspaceId, cwd, nextCols, nextRows, termId)
     session.cols = nextCols
     session.rows = nextRows
     session.pty.resize(nextCols, nextRows)
     return { ok: true, cols: nextCols, rows: nextRows }
   }
 
-  async interrupt(workspaceId: string, cwd: string): Promise<{ ok: true }> {
-    const session = await this.ensure(workspaceId, cwd, DEFAULT_COLS, DEFAULT_ROWS)
+  async interrupt(workspaceId: string, cwd: string, termId?: string): Promise<{ ok: true }> {
+    const session = await this.ensure(workspaceId, cwd, DEFAULT_COLS, DEFAULT_ROWS, termId)
     session.pty.write('\x03')
     return { ok: true }
   }
 
-  async restart(workspaceId: string, cwd: string, cols = DEFAULT_COLS, rows = DEFAULT_ROWS): Promise<TerminalHello> {
-    const existing = this.sessions.get(workspaceId)
+  async close(workspaceId: string, termId?: string): Promise<{ ok: true }> {
+    this.kill(this.key(workspaceId, termId))
+    return { ok: true }
+  }
+
+  async restart(workspaceId: string, cwd: string, cols = DEFAULT_COLS, rows = DEFAULT_ROWS, termId?: string): Promise<TerminalHello> {
+    const key = this.key(workspaceId, termId)
+    const existing = this.sessions.get(key)
     const listeners = existing === undefined ? new Set<(event: TerminalEvent) => void>() : new Set(existing.listeners)
     if (existing !== undefined) {
       existing.listeners.clear()
-      this.sessions.delete(workspaceId)
+      this.sessions.delete(key)
       try { existing.pty.kill() } catch { /* already gone */ }
     }
-    const session = await this.ensure(workspaceId, cwd, cols, rows)
+    const session = await this.ensure(workspaceId, cwd, cols, rows, termId)
     for (const listener of listeners) session.listeners.add(listener)
     return { cwd: session.cwd, shell: basename(session.shell), cols: session.cols, rows: session.rows }
   }
@@ -209,10 +220,10 @@ export class TerminalHub {
     for (const id of [...this.sessions.keys()]) this.kill(id)
   }
 
-  private kill(workspaceId: string): void {
-    const session = this.sessions.get(workspaceId)
+  private kill(key: string): void {
+    const session = this.sessions.get(key)
     if (session === undefined) return
-    this.sessions.delete(workspaceId)
+    this.sessions.delete(key)
     try { session.pty.kill() } catch { /* already gone */ }
     for (const listener of session.listeners) listener({ type: 'exit', code: null })
     session.listeners.clear()
@@ -229,10 +240,11 @@ export class TerminalHub {
     for (const listener of session.listeners) listener(event)
   }
 
-  private async ensure(workspaceId: string, cwd: string, cols: number, rows: number): Promise<Session> {
-    const existing = this.sessions.get(workspaceId)
+  private async ensure(workspaceId: string, cwd: string, cols: number, rows: number, termId?: string): Promise<Session> {
+    const key = this.key(workspaceId, termId)
+    const existing = this.sessions.get(key)
     if (existing !== undefined && existing.cwd === cwd) return existing
-    if (existing !== undefined) this.kill(workspaceId)
+    if (existing !== undefined) this.kill(key)
     const shell = await pickShell(this.deps.env ?? process.env, this.deps.exists)
     const spawnPty = this.deps.spawnPty ?? defaultSpawnPty
     const nextCols = clampSize(cols, 10, 400, DEFAULT_COLS)
@@ -241,14 +253,14 @@ export class TerminalHub {
     const session: Session = {
       cwd, shell, pty, buffer: '', cols: nextCols, rows: nextRows, listeners: new Set(),
     }
-    this.sessions.set(workspaceId, session)
+    this.sessions.set(key, session)
     pty.onData((chunk) => {
       this.emit(session, { type: 'out', text: chunk })
     })
     pty.onExit((event) => {
-      if (this.sessions.get(workspaceId) !== session) return
+      if (this.sessions.get(key) !== session) return
       this.emit(session, { type: 'exit', code: event.exitCode })
-      this.sessions.delete(workspaceId)
+      this.sessions.delete(key)
     })
     return session
   }

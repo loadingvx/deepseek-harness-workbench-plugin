@@ -409,3 +409,51 @@
   background: var(--dsw-alias-interactive-bg-hover-danger);
   color: var(--dsw-alias-state-error-primary);
 }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 10px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.fieldInput {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.fieldInput:focus {
+  outline: 2px solid var(--dsw-alias-border-l1);
+}
+
+.fieldError {
+  margin: 0 0 10px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.create {
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-bg-base);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.create:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
