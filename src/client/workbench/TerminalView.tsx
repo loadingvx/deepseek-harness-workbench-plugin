@@ -61,9 +61,17 @@ export function TerminalView({
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(hostRef.current)
-    fit.fit()
     termRef.current = term
     fitRef.current = fit
+
+    const applyFit = (): boolean => {
+      try {
+        fit.fit()
+        return term.cols >= 10 && term.rows >= 4
+      } catch {
+        return false
+      }
+    }
 
     const size = () => ({
       cols: Math.max(10, term.cols),
@@ -122,7 +130,6 @@ export function TerminalView({
       flushing.current = false
     }
 
-    connect()
     const onData = term.onData((data) => {
       writeQueue.current.push(data)
       void flushWrites()
@@ -130,11 +137,16 @@ export function TerminalView({
     const onResize = term.onResize(({ cols, rows }) => {
       void client.resizeTerm(workspaceId, cols, rows)
     })
-    const observer = new ResizeObserver(() => {
-      try { fit.fit() } catch { /* host not ready */ }
+    const host = hostRef.current
+    const observer = new ResizeObserver(() => { applyFit() })
+    observer.observe(host)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        applyFit()
+        if (sourceRef.current === null) connect()
+        term.focus()
+      })
     })
-    observer.observe(hostRef.current)
-    term.focus()
 
     return () => {
       observer.disconnect()
