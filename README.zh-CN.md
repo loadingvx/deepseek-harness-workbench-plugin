@@ -6,16 +6,18 @@ DeepSeek Harness Web UI 的工作台界面插件：在「对话」里打开 Curs
 
 ![工作台：对话 / 编辑器 / 文件与 Git](docs/img/workbench.png)
 
+![工作区终端](docs/img/terminal.png)
+
 ## 发版状态
 
 | 项 | 值 |
 | --- | --- |
 | 包名 | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| 版本 | **0.1.1**（`latest`） |
+| 版本 | **0.1.2**（`latest`） |
 | 仓库 | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.1
++ dsh-workbench-plugin@0.1.2
 ```
 
 维护者发版：`bash devops/release.sh`（使用本机已有的 `npm login`，不要把账号密码写进仓库）。
