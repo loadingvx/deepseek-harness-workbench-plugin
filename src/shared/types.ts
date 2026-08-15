@@ -33,6 +33,9 @@ export type GitErrorCode =
   | 'AUTH_FAILED'
   | 'REMOTE_UNREACHABLE'
   | 'DETACHED_HEAD'
+  | 'EDITOR_NOT_FOUND'
+  | 'EDITOR_FAILED'
+  | 'EDITOR_UNKNOWN'
 
 export interface GitFail {
   ok: false
@@ -144,6 +147,12 @@ export interface FsListSnapshot {
   truncated: boolean
 }
 
+export interface FsSearchSnapshot {
+  query: string
+  hits: FsDirEntry[]
+  truncated: boolean
+}
+
 export interface FsFileSnapshot {
   path: string
   content: string
@@ -154,4 +163,35 @@ export interface FsFileSnapshot {
 export interface FsWriteResult {
   path: string
   size: number
+}
+
+export const EXTERNAL_EDITOR_IDS = [
+  'cursor',
+  'vscode',
+  'vscode-insiders',
+  'codium',
+  'windsurf',
+  'zed',
+  'system',
+] as const
+
+export type ExternalEditorId = (typeof EXTERNAL_EDITOR_IDS)[number]
+
+export function isExternalEditorId(value: unknown): value is ExternalEditorId {
+  return typeof value === 'string' && (EXTERNAL_EDITOR_IDS as readonly string[]).includes(value)
+}
+
+export interface ExternalEditorInfo {
+  id: ExternalEditorId
+  label: string
+  available: boolean
+}
+
+export interface ExternalEditorsSnapshot {
+  editors: ExternalEditorInfo[]
+}
+
+export interface ExternalOpenResult {
+  app: ExternalEditorId
+  path: string
 }

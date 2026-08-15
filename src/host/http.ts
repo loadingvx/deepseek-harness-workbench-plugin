@@ -6,6 +6,7 @@ import type { GitFail, GitResult } from '../shared/types.ts'
 import { generateCommitMessage } from './commit-message.ts'
 import type { GitService } from './git-service.ts'
 import { resolveWorkspacePath } from './workspace.ts'
+import { ExternalOpen } from './external-open.ts'
 import type { WorkspaceFs } from './workspace-fs.ts'
 
 function send(res: ServerResponse, status: number, body: unknown): void {
@@ -75,7 +76,7 @@ async function wrap<T>(run: () => Promise<T>): Promise<GitResult<T>> {
 }
 
 /** Register the `/git` JSON API used by the sidebar panel and workbench. */
-export function registerGitHttp(ctx: Context, git: GitService, fs: WorkspaceFs): () => void {
+export function registerGitHttp(ctx: Context, git: GitService, fs: WorkspaceFs, editors = new ExternalOpen(fs)): () => void {
   const server = ctx.webServer
   if (server === undefined) {
     throw new Error('dsh-workbench-plugin: 需要 webServer 才能提供工作台接口，请把本插件装到 web profile。')
@@ -149,6 +150,8 @@ export function registerGitHttp(ctx: Context, git: GitService, fs: WorkspaceFs):
         result = await wrap(() => git.switchBranch(rootOf(body), name))
       } else if (method === 'GET' && route === '/git/fs/list') {
         result = await wrap(() => fs.list(rootOf(), query(url, 'path') ?? ''))
+      } else if (method === 'GET' && route === '/git/fs/search') {
+        result = await wrap(() => fs.search(rootOf(), query(url, 'q') ?? '', query(url, 'hidden') === '1'))
       } else if (method === 'GET' && route === '/git/fs/read') {
         const path = query(url, 'path')
         if (path === undefined) {
@@ -165,6 +168,13 @@ export function registerGitHttp(ctx: Context, git: GitService, fs: WorkspaceFs):
         } else {
           result = await wrap(() => fs.write(rootOf(body), path, content))
         }
+      } else if (method === 'GET' && route === '/git/fs/editors') {
+        result = await wrap(() => editors.list())
+      } else if (method === 'POST' && route === '/git/fs/open') {
+        const body = await readJson(req)
+        const path = typeof body.path === 'string' ? body.path : ''
+        const app = typeof body.app === 'string' ? body.app : undefined
+        result = await wrap(() => editors.open(rootOf(body), path, app))
       } else {
         result = fail('BAD_REQUEST')
       }

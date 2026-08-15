@@ -175,6 +175,24 @@ export function IconBranch() {
   )
 }
 
+export function IconSearch() {
+  return (
+    <Icon>
+      <circle cx="6.6" cy="6.6" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M9.3 9.3 13.2 13.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </Icon>
+  )
+}
+
+export function IconExternal() {
+  return (
+    <Icon>
+      <path d="M3.2 4.2h6V5.6H4.6v5.8H10.4V10h1.4v3H3.2z" />
+      <path d="M8.4 3h4.6v4.6M12.6 3.4 7.6 8.4" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </Icon>
+  )
+}
+
 export function IconMore() {
   return (
     <Icon>

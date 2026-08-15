@@ -1,6 +1,7 @@
 import { fail } from '../shared/errors.ts'
 import type {
-  FsFileSnapshot, FsListSnapshot, FsWriteResult,
+  ExternalEditorId, ExternalEditorsSnapshot, ExternalOpenResult,
+  FsFileSnapshot, FsListSnapshot, FsSearchSnapshot, FsWriteResult,
   GitBranchInfo, GitCommitMessage, GitCommitResult, GitDiffSnapshot, GitLogEntry, GitPullResult,
   GitPushResult, GitResult, GitStatusSnapshot, GitSwitchResult,
 } from '../shared/types.ts'
@@ -38,8 +39,11 @@ export interface GitClient {
   pull(workspaceId: string): Promise<GitResult<GitPullResult>>
   switchBranch(workspaceId: string, name: string): Promise<GitResult<GitSwitchResult>>
   listDir(workspaceId: string, path?: string): Promise<GitResult<FsListSnapshot>>
+  searchFiles(workspaceId: string, query: string, hidden?: boolean): Promise<GitResult<FsSearchSnapshot>>
   readFile(workspaceId: string, path: string): Promise<GitResult<FsFileSnapshot>>
   writeFile(workspaceId: string, path: string, content: string): Promise<GitResult<FsWriteResult>>
+  listEditors(): Promise<GitResult<ExternalEditorsSnapshot>>
+  openExternal(workspaceId: string, path?: string, app?: ExternalEditorId): Promise<GitResult<ExternalOpenResult>>
 }
 
 export function createGitClient(): GitClient {
@@ -79,12 +83,21 @@ export function createGitClient(): GitClient {
       if (path) query.set('path', path)
       return request(`/git/fs/list?${query.toString()}`)
     },
+    searchFiles: (workspaceId, query, hidden) => {
+      const params = new URLSearchParams({ workspaceId, q: query })
+      if (hidden) params.set('hidden', '1')
+      return request(`/git/fs/search?${params.toString()}`)
+    },
     readFile: (workspaceId, path) => {
       const query = new URLSearchParams({ workspaceId, path })
       return request(`/git/fs/read?${query.toString()}`)
     },
     writeFile: (workspaceId, path, content) => request('/git/fs/write', {
       method: 'POST', body: JSON.stringify({ workspaceId, path, content }),
+    }),
+    listEditors: () => request('/git/fs/editors'),
+    openExternal: (workspaceId, path, app) => request('/git/fs/open', {
+      method: 'POST', body: JSON.stringify({ workspaceId, path: path ?? '', app }),
     }),
   }
 }

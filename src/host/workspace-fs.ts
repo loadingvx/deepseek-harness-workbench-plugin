@@ -1,10 +1,12 @@
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import { dirname, extname, join, normalize, relative, resolve as resolvePath, sep } from 'node:path'
 import { GitError } from '../shared/errors.ts'
-import type { FsDirEntry, FsFileSnapshot, FsListSnapshot, FsWriteResult } from '../shared/types.ts'
+import { entryMatchesFilter, MAX_SEARCH_HITS, normalizeFileFilter, shouldSkipSearchDir } from '../shared/file-filter.ts'
+import type { FsDirEntry, FsFileSnapshot, FsListSnapshot, FsSearchSnapshot, FsWriteResult } from '../shared/types.ts'
 
 export const MAX_FILE_BYTES = 1_500_000
 const MAX_DIR_ENTRIES = 400
+const MAX_SEARCH_VISITS = 4000
 
 const BINARY_EXT = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.bmp', '.tif', '.tiff',
@@ -154,6 +156,68 @@ export class WorkspaceFs {
       return left.name.localeCompare(right.name, 'zh')
     })
     return { path: rel, entries, truncated }
+  }
+
+  async search(root: string, query: string, showHidden = false): Promise<FsSearchSnapshot> {
+    const q = normalizeFileFilter(query)
+    if (q === '') return { query: '', hits: [], truncated: false }
+    const absRoot = await resolveInside(root, '')
+    const hits: FsDirEntry[] = []
+    const queue: string[] = ['']
+    let visits = 0
+    let truncated = false
+    const revealHidden = showHidden || q.startsWith('.')
+
+    while (queue.length > 0) {
+      if (hits.length >= MAX_SEARCH_HITS || visits >= MAX_SEARCH_VISITS) {
+        truncated = true
+        break
+      }
+      const rel = queue.shift() ?? ''
+      const abs = rel === '' ? absRoot : join(absRoot, rel)
+      let names: string[]
+      try {
+        names = await readdir(abs)
+      } catch {
+        continue
+      }
+      visits += 1
+      for (const name of names) {
+        if (hits.length >= MAX_SEARCH_HITS || visits >= MAX_SEARCH_VISITS) {
+          truncated = true
+          break
+        }
+        const hidden = name.startsWith('.')
+        if (hidden && !revealHidden) continue
+        if (shouldSkipSearchDir(name, q)) continue
+        const childRel = rel === '' ? name : `${rel}/${name}`
+        const childAbs = join(abs, name)
+        try {
+          const childReal = await realpath(childAbs)
+          if (relative(root, childReal).startsWith('..')) continue
+          const childStat = await stat(childReal)
+          const kind = childStat.isDirectory() ? 'directory' : 'file'
+          const path = toPosix(childRel)
+          if (entryMatchesFilter(name, path, q)) {
+            hits.push({ name, path, kind, hidden })
+          }
+          if (kind === 'directory') queue.push(childRel)
+        } catch {
+          // Dangling symlink or unreadable entry: skip.
+        }
+      }
+    }
+
+    hits.sort((left, right) => {
+      if (left.kind !== right.kind) return left.kind === 'directory' ? -1 : 1
+      return left.path.localeCompare(right.path, 'zh')
+    })
+    return { query: q, hits, truncated }
+  }
+
+  async resolveAbsolute(root: string, filePath: string): Promise<string> {
+    const rel = assertSafeWorkspacePath(root, filePath)
+    return resolveInside(root, rel)
   }
 
   async read(root: string, filePath: string): Promise<FsFileSnapshot> {

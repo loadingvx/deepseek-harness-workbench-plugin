@@ -130,6 +130,18 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     messageZh: '当前处于分离 HEAD，不能推送或拉取。',
     hintZh: '请先切换到一个普通分支，再同步远端。',
   },
+  EDITOR_NOT_FOUND: {
+    messageZh: '本机没有找到可用的外部编辑器。',
+    hintZh: '请先安装 Cursor 或 VS Code，并确认终端里能执行 `cursor` 或 `code`。装好后点右上角三角重新选择。',
+  },
+  EDITOR_FAILED: {
+    messageZh: '外部编辑器没有打开成功。',
+    hintZh: '请确认这个软件还能启动。也可以点三角换一个本机应用再试。',
+  },
+  EDITOR_UNKNOWN: {
+    messageZh: '不支持用这个应用打开。',
+    hintZh: '请从列表里选 Cursor、VS Code 或系统默认应用。不会执行列表以外的命令。',
+  },
 }
 
 /** Structured Git failure with Chinese copy the UI can show as-is. */
