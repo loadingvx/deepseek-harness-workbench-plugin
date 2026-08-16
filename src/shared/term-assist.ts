@@ -349,7 +349,7 @@ export function termAssistCommentPayload(note: string, shell = '', prefs?: unkno
   return `${termAssistLeadIn(shell, p)}${body}`
 }
 
-export function isTermAssistHotkey(event: {
+type TermHotkeyEvent = {
   altKey: boolean
   ctrlKey: boolean
   metaKey: boolean
@@ -357,7 +357,23 @@ export function isTermAssistHotkey(event: {
   code: string
   isComposing?: boolean
   repeat?: boolean
-}): boolean {
-  if (event.isComposing === true || event.repeat === true) return false
-  return event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.code === 'KeyI'
+}
+
+/** Ignore IME composition and key-repeat so a held key never fires twice. */
+function isUsableHotkey(event: TermHotkeyEvent): boolean {
+  return event.isComposing !== true && event.repeat !== true
+}
+
+/** Alt+J: open a new terminal tab. Works anywhere in the workbench. */
+export function isTermNewTabHotkey(event: TermHotkeyEvent): boolean {
+  return isUsableHotkey(event)
+    && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
+    && event.code === 'KeyJ'
+}
+
+/** Alt+I: toggle the bottom AI assist bar of the active terminal. */
+export function isTermAssistHotkey(event: TermHotkeyEvent): boolean {
+  return isUsableHotkey(event)
+    && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
+    && event.code === 'KeyI'
 }

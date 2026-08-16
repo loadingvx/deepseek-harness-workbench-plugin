@@ -4,7 +4,7 @@ import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import type { GitClient } from '../api.ts'
 import { fail } from '../../shared/errors.ts'
-import { isTermAssistHotkey } from '../../shared/term-assist.ts'
+import { isTermAssistHotkey, isTermNewTabHotkey } from '../../shared/term-assist.ts'
 import type { GitFail } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
 import { IconRefresh, IconSparkle } from './icons.tsx'
@@ -77,7 +77,9 @@ export function TerminalView({
     term.open(hostRef.current)
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true
-      if (isTermAssistHotkey(event)) return false
+      // Never let xterm type these into the PTY: Alt+J opens a new terminal tab,
+      // Alt+I toggles the AI assist bar. Both are handled on window.
+      if (isTermAssistHotkey(event) || isTermNewTabHotkey(event)) return false
       return true
     })
     termRef.current = term
@@ -198,11 +200,10 @@ export function TerminalView({
   }, [client, injectComment, status, termId, workspaceId])
 
   useEffect(() => {
+    // Only the active terminal tab is mounted, so a window-level Alt+I
+    // always targets the terminal that is currently shown — no focus gate.
     const onKey = (event: KeyboardEvent): void => {
       if (!isTermAssistHotkey(event)) return
-      const root = rootRef.current
-      const target = event.target
-      if (root !== null && target instanceof Node && !root.contains(target)) return
       event.preventDefault()
       event.stopPropagation()
       const next = !aiOpen

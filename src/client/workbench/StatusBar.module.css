@@ -67,6 +67,10 @@
   min-width: 0;
   max-width: 52%;
   height: 24px;
+  /* Flush with the status bar's left edge. The bar keeps its 10px padding
+     for the right-hand items; without this the first tab (usually the pinned
+     terminal) sits 10px in even when no left scroll triangle is shown. */
+  margin-left: -10px;
 }
 
 .tabs {

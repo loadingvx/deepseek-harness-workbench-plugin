@@ -41,6 +41,7 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 | --- | --- | --- | --- |
 | 智能终端 | 本地 PTY 终端 | 基于 xterm.js；POSIX 白名单 bash / zsh / sh / dash 及路径约束 | 已支持 |
 | 智能终端 | 命令与自然语言自动分类 | 真实 argv 行直接写入终端；请求交给模型翻译 | 已支持 |
+| 智能终端 | 多终端标签 | <kbd>Alt</kbd>+<kbd>J</kbd> 新建标签；每个标签各自持有独立的 PTY 会话 | 已支持 |
 | 智能终端 | 自然语言翻译为 shell 命令 | <kbd>Alt</kbd>+<kbd>I</kbd> 唤起，写入当前会话 shell | 已支持 |
 | 智能终端 | 说明语句执行隔离 | 问候 / 警告写为不可执行语句，永不执行 | 已支持 |
 | 智能终端 | 危险命令黑名单 | 命中黑名单的命令拒绝代执行并提示；规则可在设置中增删 | 已支持 |
@@ -62,11 +63,11 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 | 项目 | 说明 |
 | --- | --- |
 | 包名 | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| 当前版本 | **0.1.12**（npm 标签 `latest`） |
+| 当前版本 | **0.1.13**（npm 标签 `latest`） |
 | 软件源 | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.12
++ dsh-workbench-plugin@0.1.13
 ```
 
 维护者发布 npm 请执行 `bash devops/release.sh`。该脚本使用本机已有的 `npm login` 会话；不得将账号或凭据写入仓库。
@@ -81,13 +82,13 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 
 ### 步骤
 
-1. 安装插件（必须带版本号，不要省略 `@0.1.12`）：
+1. 安装插件（必须带版本号，不要省略 `@0.1.13`）：
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.12
+dsh plugin --profile web add dsh-workbench-plugin@0.1.13
 ```
 
-`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.12` 才会明确要这一版。
+`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.13` 才会明确要这一版。
 
 若指定版本后仍提示太新、装不上，在 `~/.dsh/profiles/web/pnpm-workspace.yaml` 加上下面两行，再执行一次安装命令：
 
@@ -123,7 +124,7 @@ dsh plugin --profile web add github:loadingvx/deepseek-harness-workbench-plugin
 
 ### 从 0.1.1 升级
 
-**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.12；此后版本将通过界面提示。
+**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.13；此后版本将通过界面提示。
 
 ## 界面
 
@@ -177,7 +178,9 @@ Windows 下依次探测 Git Bash、系统 PowerShell，随后才轮及下方的 
 
 ## AI 命令助手
 
-按 <kbd>Alt</kbd>+<kbd>I</kbd> 将自然语言请求转换为 shell 命令，写入当前会话所用的 shell，不启动独立 shell。问候、风险说明与命令前的一行解释以不可执行语句写入，不会被执行。
+<kbd>Alt</kbd>+<kbd>J</kbd> 新建一个终端标签；每个标签各自持有独立的 PTY 会话与 AI 助手状态，互不串扰。
+
+按 <kbd>Alt</kbd>+<kbd>I</kbd>（或终端工具栏的 ✨ 按钮）打开当前终端底部的 AI 命令助手，将自然语言请求转换为 shell 命令，写入该终端所用的 shell，不启动独立 shell。问候、风险说明与命令前的一行解释以不可执行语句写入，不会被执行。
 
 ## 许可证
 

@@ -28,6 +28,7 @@ import { SideDock, type SideTab } from './SideDock.tsx'
 import { termIdFromTabId } from '../../shared/new-file-path.ts'
 import { createTerminalTab, nextTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type WorkbenchInjected } from './types.ts'
 import { previewKindOfPath } from '../../shared/preview-kind.ts'
+import { isTermNewTabHotkey } from '../../shared/term-assist.ts'
 import { StatusBar } from './StatusBar.tsx'
 import { STATUS_BAR_H } from './status-bar.ts'
 import { usePluginUpdate, visibleUpdate } from './UpdateBanner.tsx'
@@ -165,6 +166,8 @@ function WorkbenchInner(props: WorkbenchProps) {
   const [dragging, setDragging] = useState<null | 'chat' | 'side'>(null)
   const buffersRef = useRef(buffers)
   buffersRef.current = buffers
+  const tabsRef = useRef(tabs)
+  tabsRef.current = tabs
 
   const [updateHidden, setUpdateHidden] = useState(false)
   const [aiTermIds, setAiTermIds] = useState<string[]>([])
@@ -446,6 +449,27 @@ function WorkbenchInner(props: WorkbenchProps) {
     }, 0)
   }
 
+  /** Alt+J or the + menu: open a fresh, isolated terminal tab and switch to it. */
+  const openNewTerminal = useCallback((): void => {
+    patchWorkbenchChrome({ editorOpen: true })
+    const tab = nextTerminalTab(tabsRef.current)
+    setTabs(current => [...current, tab])
+    setActiveId(tab.id)
+  }, [])
+
+  useEffect(() => {
+    // Global within the workbench: works whether focus is in the terminal,
+    // the tab bar, the editor, or the side panel. xterm never sees Alt+J.
+    const onKey = (event: KeyboardEvent): void => {
+      if (!isTermNewTabHotkey(event)) return
+      event.preventDefault()
+      event.stopPropagation()
+      openNewTerminal()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => { window.removeEventListener('keydown', onKey, true) }
+  }, [openNewTerminal])
+
   const closeTab = (id: string): void => {
     closeTabs([id])
   }
@@ -458,8 +482,11 @@ function WorkbenchInner(props: WorkbenchProps) {
         if (id.startsWith('terminal:')) void client.closeTerm(workspaceId, termIdFromTabId(id))
       }
     }
+    const closing = new Set(closable)
+    // Drop the AI-open marks for closed tabs outside the updater: React may
+    // run updater functions more than once, and side effects belong here.
+    setAiTermIds(ids => ids.filter(id => !closing.has(id)))
     setTabs((current) => {
-      const closing = new Set(closable)
       for (const tab of current) {
         if (tab.kind === 'file' && closing.has(tab.id)) {
           setBuffers((buffersNow) => {
@@ -476,7 +503,6 @@ function WorkbenchInner(props: WorkbenchProps) {
         const index = current.findIndex(tab => tab.id === active)
         return next[index]?.id ?? next[index - 1]?.id ?? TERMINAL_TAB_ID
       })
-      setAiTermIds(ids => ids.filter(id => !closing.has(id)))
       return next
     })
   }
@@ -515,12 +541,7 @@ function WorkbenchInner(props: WorkbenchProps) {
           onCollapse={() => { patchWorkbenchChrome({ editorOpen: false }) }}
           notice={fileError}
           termSeed={termSeed}
-          onNewTerminal={() => {
-            patchWorkbenchChrome({ editorOpen: true })
-            const tab = nextTerminalTab(tabs)
-            setTabs(current => [...current, tab])
-            setActiveId(tab.id)
-          }}
+          onNewTerminal={openNewTerminal}
           aiTermIds={aiTermIds}
           onAiModeChange={(tabId, open) => {
             setAiTermIds((current) => {

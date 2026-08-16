@@ -41,6 +41,7 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 | --- | --- | --- | --- |
 | Smart terminal | Local PTY terminal | xterm.js PTY; POSIX bash / zsh / sh / dash allowlist with path constraints | Supported |
 | Smart terminal | Command vs. natural-language classification | Real argv lines go straight to the PTY; requests are translated by the model | Supported |
+| Smart terminal | Multiple terminal tabs | <kbd>Alt</kbd>+<kbd>J</kbd> opens a new tab; each tab keeps its own PTY session | Supported |
 | Smart terminal | AI translation to shell commands | <kbd>Alt</kbd>+<kbd>I</kbd>; written into the current session shell | Supported |
 | Smart terminal | Note isolation | Greetings / warnings written as non-executable statements, never executed | Supported |
 | Smart terminal | Destructive command blacklist | Matching commands are refused with a note; rules configurable in settings | Supported |
@@ -62,11 +63,11 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.12** (npm tag `latest`) |
+| Version | **0.1.13** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.12
++ dsh-workbench-plugin@0.1.13
 ```
 
 Maintainers publish npm with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -81,13 +82,13 @@ The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbenc
 
 ### Procedure
 
-1. Install the plugin (pin the version; do not omit `@0.1.12`):
+1. Install the plugin (pin the version; do not omit `@0.1.13`):
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.12
+dsh plugin --profile web add dsh-workbench-plugin@0.1.13
 ```
 
-`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.12` requests that release explicitly.
+`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.13` requests that release explicitly.
 
 If a pinned install is still refused as too new, add this to `~/.dsh/profiles/web/pnpm-workspace.yaml` and run the command again:
 
@@ -123,7 +124,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.12 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.13 manually using the command above. Later releases will prompt in the UI.
 
 Markdown preview (the 👁 mode in the editor) renders images (http(s) and workspace-relative paths) and Mermaid diagrams (```mermaid fenced blocks, powered by [mermaid.js](https://mermaid.js.org/) 11).
 
@@ -167,7 +168,9 @@ If none of these paths are available, the terminal cannot start. Shells not yet 
 
 ## AI command assist
 
-<kbd>Alt</kbd>+<kbd>I</kbd> translates natural-language requests into shell commands and writes them into the shell of the current session; no separate shell is started. Greetings, warnings, and the one-line explanation preceding a command are written as non-executable statements and are never executed.
+<kbd>Alt</kbd>+<kbd>J</kbd> opens a new terminal tab; each tab keeps its own isolated PTY session and AI-assist state.
+
+<kbd>Alt</kbd>+<kbd>I</kbd> (or the sparkle button in the terminal toolbar) opens the AI command assist bar of the active terminal. It translates natural-language requests into shell commands and writes them into the shell of that terminal; no separate shell is started. Greetings, warnings, and the one-line explanation preceding a command are written as non-executable statements and are never executed.
 
 ## License
 

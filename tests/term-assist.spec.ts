@@ -6,6 +6,7 @@ import {
   classifyTermAssistInput,
   destructiveAssistNote,
   isTermAssistHotkey,
+  isTermNewTabHotkey,
   looksDestructiveCommand,
   looksLikeShellCommand,
   parseAssistOutput,
@@ -389,14 +390,30 @@ describe('resolveTermAssistPrefs', () => {
   })
 })
 
+describe('isTermNewTabHotkey', () => {
+  const base = { altKey: true, ctrlKey: false, metaKey: false, shiftKey: false, code: 'KeyJ' }
+
+  it('matches Alt+J and ignores repeats / IME / other modifiers', () => {
+    expect(isTermNewTabHotkey(base)).toBe(true)
+    expect(isTermNewTabHotkey({ ...base, repeat: true })).toBe(false)
+    expect(isTermNewTabHotkey({ ...base, isComposing: true })).toBe(false)
+    expect(isTermNewTabHotkey({ ...base, ctrlKey: true })).toBe(false)
+    expect(isTermNewTabHotkey({ ...base, metaKey: true })).toBe(false)
+    expect(isTermNewTabHotkey({ ...base, shiftKey: true })).toBe(false)
+    expect(isTermNewTabHotkey({ ...base, code: 'KeyK' })).toBe(false)
+  })
+})
+
 describe('isTermAssistHotkey', () => {
   const base = { altKey: true, ctrlKey: false, metaKey: false, shiftKey: false, code: 'KeyI' }
 
-  it('matches Alt+I and ignores repeats / IME', () => {
+  it('matches Alt+I and ignores repeats / IME / other modifiers', () => {
     expect(isTermAssistHotkey(base)).toBe(true)
     expect(isTermAssistHotkey({ ...base, repeat: true })).toBe(false)
     expect(isTermAssistHotkey({ ...base, isComposing: true })).toBe(false)
     expect(isTermAssistHotkey({ ...base, ctrlKey: true })).toBe(false)
+    expect(isTermAssistHotkey({ ...base, metaKey: true })).toBe(false)
+    expect(isTermAssistHotkey({ ...base, shiftKey: true })).toBe(false)
     expect(isTermAssistHotkey({ ...base, code: 'KeyK' })).toBe(false)
   })
 })

@@ -39,10 +39,15 @@ export function createTerminalTab(id = TERMINAL_TAB_ID, termIndex = 1): FileTab 
   return { id, kind: 'terminal', path: '', title: '', termIndex }
 }
 
+let terminalTabSeq = 0
+
 export function nextTerminalTab(tabs: FileTab[]): FileTab {
   const count = tabs.filter(tab => tab.kind === 'terminal').length
   const n = count + 1
-  return createTerminalTab(`terminal:${Date.now()}`, n)
+  // Date.now() alone can collide when tabs are created in the same millisecond,
+  // which would share one termId (one PTY session) across two tabs.
+  terminalTabSeq += 1
+  return createTerminalTab(`terminal:${Date.now().toString(36)}-${terminalTabSeq.toString(36)}`, n)
 }
 
 export function terminalTabLabel(tab: FileTab, t: Translate): string {
