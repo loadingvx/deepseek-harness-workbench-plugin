@@ -1,36 +1,7 @@
 
 ![preview](docs/img/social-preview.jpg)
 
-
-
 A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. After Workbench is opened in Conversation, chat stays on the left. Two new columns appear on the right: the editor (syntax highlighting and terminal) and files & Git.
-
-## Architecture
-
-The plugin attaches to DeepSeek Harness Conversation. The UI is three columns; the code is Client / Shared / Host.
-
-```mermaid
-flowchart TB
-  dsh["DeepSeek Harness · dsh web"]
-
-  subgraph ui["Workbench UI"]
-    direction LR
-    chat["Chat"]
-    editor["Editor + smart terminal"]
-    files["Files + Git"]
-  end
-
-  subgraph code["Plugin layers"]
-    direction TB
-    client["Client · browser<br/>Workbench · Git tool cards · locales"]
-    shared["Shared<br/>types · errors · redactSecrets"]
-    host["Host · Node<br/>HTTP API · Git / workspace files / PTY<br/>git_* model tools · update check"]
-    client --> shared --> host
-  end
-
-  dsh --> ui
-  ui --> client
-```
 
 ## Contents
 
@@ -125,9 +96,12 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 The workbench uses a three-column layout. Conversation stays on the left. The two columns on the right are the new capability area: editor and terminal in the center, file tree and Git on the far right.
 
-![Workbench: chat, terminal, files & Git](docs/img/workbench.png)
-
-![Editor and file tree](docs/img/terminal.png)
+![screen_1](docs/img/screen_shot_1.png)
+![screen_2](docs/img/screen_shot_2.png)
+![screen_3](docs/img/screen_shot_3.png)
+![screen_4](docs/img/screen_shot_4.png)
+![screen_5](docs/img/screen_shot_5.png)
+![screen_6](docs/img/screen_shot_6.png)
 
 Markdown preview (the 👁 mode in the editor) renders images (http(s) and workspace-relative paths) and Mermaid diagrams (```mermaid fenced blocks, powered by [mermaid.js](https://mermaid.js.org/) 11).
 
