@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { fail, toFail } from '../shared/errors.ts'
+import { parsePullMode, parsePushMode } from '../shared/git-sync-prefs.ts'
 import { redactSecrets } from '../shared/redact.ts'
 import type { GitFail, GitResult } from '../shared/types.ts'
 import { generateCommitMessage, streamCommitMessage } from './commit-message.ts'
@@ -217,10 +218,10 @@ export function registerGitHttp(
         })
       } else if (method === 'POST' && route === '/git/push') {
         const body = await readJson(req)
-        result = await wrap(() => git.push(rootOf(body)))
+        result = await wrap(() => git.push(rootOf(body), undefined, parsePushMode(body.pushMode)))
       } else if (method === 'POST' && route === '/git/pull') {
         const body = await readJson(req)
-        result = await wrap(() => git.pull(rootOf(body)))
+        result = await wrap(() => git.pull(rootOf(body), undefined, parsePullMode(body.pullMode)))
       } else if (method === 'POST' && route === '/git/fetch') {
         const body = await readJson(req)
         result = await wrap(() => git.fetch(rootOf(body)))

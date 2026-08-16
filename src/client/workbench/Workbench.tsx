@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import * as ReactNs from 'react'
 import { createPortal } from 'react-dom'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { GitFail } from '../../shared/types.ts'
@@ -52,17 +53,64 @@ function findConversationColumn(): HTMLElement | null {
   return root instanceof HTMLElement ? root : null
 }
 
-/** Header toggle + portal: native chat stays left; editor and files/git split to the right. */
 let __wbRenderCount = 0
+let __wbActiveId = 0
+function __wbHookKinds(fiber: unknown): string[] {
+  const kind = (h: unknown): string => {
+    const ms = (h as { memoizedState?: unknown } | null)?.memoizedState
+    if (ms !== null && typeof ms === 'object' && ms !== undefined && 'deps' in (ms as object)) return 'effect'
+    if (ms !== null && typeof ms === 'object' && ms !== undefined && 'queue' in (ms as object)) return 'state'
+    return ms === undefined ? 'undef' : ms === null ? 'null' : typeof ms
+  }
+  const out: string[] = []
+  let h = fiber as { next?: unknown } | null
+  let i = 0
+  while (h && i < 80) {
+    out.push(`${i}:${kind(h)}`)
+    h = h.next as { next?: unknown } | null
+    i++
+  }
+  return out
+}
+function __wbDump(tag: string, fiber: unknown): string {
+  try {
+    const f = fiber as { memoizedState?: unknown; alternate?: { memoizedState?: unknown } }
+    const wip = __wbHookKinds(f.memoizedState)
+    const cur = f.alternate ? __wbHookKinds(f.alternate.memoizedState) : []
+    const max = Math.max(wip.length, cur.length)
+    const diffs: string[] = []
+    for (let i = 0; i < max; i++) {
+      const a = wip[i] ?? '(none)'
+      const b = cur[i] ?? '(none)'
+      if (a.split(':')[1] !== b.split(':')[1]) diffs.push(`${i} wip=${a} cur=${b}`)
+    }
+    return `[FIBER]${tag} wip=${wip.length} cur=${cur.length} diffs=[${diffs.join(' | ')}] wip=${wip.join(',')} cur=${cur.join(',')}`
+  } catch (e) {
+    return `[FIBER]${tag} dump failed: ${String(e)}`
+  }
+}
+
+/** Header toggle + portal: native chat stays left; editor and files/git split to the right. */
 export function Workbench(props: WorkbenchProps) {
-  const { client, t, useSessions, useWorkspaces } = props
   __wbRenderCount += 1
-  console.log('[WB-DEBUG] render', __wbRenderCount, {
-    useSessionType: typeof props.useSession,
-    useSessionsType: typeof props.useSessions,
-    useWorkspacesType: typeof props.useWorkspaces,
-    hasClient: typeof props.client,
-  })
+  __wbActiveId += 1
+  const renderId = __wbActiveId
+  console.log('[WB-DEBUG] render', renderId, __wbRenderCount, { useSessionType: typeof props.useSession })
+  try {
+    return <WorkbenchInner {...props} />
+  } catch (error) {
+    let dump = ''
+    try {
+      const ns = ReactNs as unknown as { __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED?: { ReactCurrentOwner?: { current?: unknown } } }
+      const owner = ns.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED?.ReactCurrentOwner?.current
+      if (owner !== undefined) dump = __wbDump('CRASH', owner)
+    } catch { /* ignore */ }
+    console.error('[WB-CATCH]', renderId, __wbRenderCount, String(error), dump)
+    throw error
+  }
+}
+function WorkbenchInner(props: WorkbenchProps) {
+  const { client, t, useSessions, useWorkspaces } = props
   const [enabled, setEnabled] = useState(true)
   const [chatOpen, setChatOpen] = useState(true)
   const [editorOpen, setEditorOpen] = useState(true)

@@ -8,6 +8,7 @@ import type {
   GitFetchResult, GitFileChange, GitLogEntry, GitMergeResult, GitProbe, GitPullResult,
   GitPushResult, GitRefMark, GitStatusSnapshot, GitSwitchResult,
 } from '../shared/types.ts'
+import { parsePullMode, parsePushMode, pullArgs, pushArgs, type PullMode, type PushMode } from '../shared/git-sync-prefs.ts'
 import { gitAvailable, runGit } from './git-exec.ts'
 import { GitMutex } from './mutex.ts'
 
@@ -342,7 +343,13 @@ export class GitService {
     return this.probe(root, signal)
   }
 
-  async push(root: string, signal?: AbortSignal): Promise<GitPushResult> {
+  private async abortInterruptedPull(root: string, mode: PullMode, signal?: AbortSignal): Promise<void> {
+    const args = mode === 'rebase' ? ['rebase', '--abort'] : ['merge', '--abort']
+    await runGit({ cwd: root, args, signal, allowNonZero: true, timeoutMs: 15_000 })
+  }
+
+  async push(root: string, signal?: AbortSignal, pushMode: PushMode = 'safe'): Promise<GitPushResult> {
+    const mode = parsePushMode(pushMode)
     return this.mutex.run(async () => {
       await this.requireRepo(root, signal)
       let probe = await this.probe(root, signal)
@@ -350,20 +357,18 @@ export class GitService {
       if (probe.remote === undefined) throw new GitError('NO_REMOTE')
       if (!probe.hasHead) throw new GitError('NOTHING_TO_PUSH')
       probe = await this.refreshTracking(root, probe, signal)
-      if (probe.behind > 0) throw new GitError('REMOTE_AHEAD')
+      if (probe.behind > 0 && mode !== 'lease') throw new GitError('REMOTE_AHEAD')
       if (probe.ahead === 0 && probe.upstream !== undefined) throw new GitError('NOTHING_TO_PUSH')
       const branch = probe.branch
       if (branch === undefined || branch.trim() === '') throw new GitError('BRANCH_MISSING')
-      if (probe.upstream !== undefined) {
-        await runGit({ cwd: root, args: ['push'], signal, timeoutMs: 90_000 })
-        return { remote: probe.remote, branch, setUpstream: false }
-      }
-      await runGit({ cwd: root, args: ['push', '-u', probe.remote, 'HEAD'], signal, timeoutMs: 90_000 })
-      return { remote: probe.remote, branch, setUpstream: true }
+      const setUpstream = probe.upstream === undefined
+      await runGit({ cwd: root, args: pushArgs(mode, probe.remote, setUpstream), signal, timeoutMs: 90_000 })
+      return { remote: probe.remote, branch, setUpstream }
     })
   }
 
-  async pull(root: string, signal?: AbortSignal): Promise<GitPullResult> {
+  async pull(root: string, signal?: AbortSignal, pullMode: PullMode = 'merge'): Promise<GitPullResult> {
+    const mode = parsePullMode(pullMode)
     return this.mutex.run(async () => {
       await this.requireRepo(root, signal)
       let probe = await this.probe(root, signal)
@@ -377,7 +382,12 @@ export class GitService {
       if (probe.behind === 0) throw new GitError('NOTHING_TO_PULL')
       const branch = probe.branch
       if (branch === undefined || branch.trim() === '') throw new GitError('BRANCH_MISSING')
-      await runGit({ cwd: root, args: ['pull', '--ff-only'], signal, timeoutMs: 90_000 })
+      try {
+        await runGit({ cwd: root, args: pullArgs(mode), signal, timeoutMs: 90_000 })
+      } catch (error) {
+        await this.abortInterruptedPull(root, mode, signal)
+        throw error
+      }
       return { remote: probe.remote, branch }
     })
   }

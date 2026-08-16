@@ -7,6 +7,7 @@ import type {
   GitFail, GitFetchResult, GitFileChange, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
   GitStatusSnapshot, GitSwitchResult, PluginUpdateSnapshot,
 } from '../shared/types.ts'
+import type { PullMode, PushMode } from '../shared/git-sync-prefs.ts'
 
 async function request<T>(path: string, init?: RequestInit): Promise<GitResult<T>> {
   try {
@@ -125,8 +126,8 @@ export interface GitClient {
     template?: string,
     options?: { signal?: AbortSignal; onDelta?: (text: string) => void },
   ): Promise<GitResult<GitCommitMessage>>
-  push(workspaceId: string): Promise<GitResult<GitPushResult>>
-  pull(workspaceId: string): Promise<GitResult<GitPullResult>>
+  push(workspaceId: string, pushMode?: PushMode): Promise<GitResult<GitPushResult>>
+  pull(workspaceId: string, pullMode?: PullMode): Promise<GitResult<GitPullResult>>
   fetch(workspaceId: string): Promise<GitResult<GitFetchResult>>
   createBranch(workspaceId: string, name: string): Promise<GitResult<GitCreateBranchResult>>
   mergeBranch(workspaceId: string, name: string): Promise<GitResult<GitMergeResult>>
@@ -185,11 +186,11 @@ export function createGitClient(): GitClient {
       method: 'POST', body: JSON.stringify({ workspaceId, message, all: all === true }),
     }),
     generateCommitMessage: (workspaceId, template, options) => readCommitMessageStream(workspaceId, template, options),
-    push: workspaceId => request('/git/push', {
-      method: 'POST', body: JSON.stringify({ workspaceId }),
+    push: (workspaceId, pushMode) => request('/git/push', {
+      method: 'POST', body: JSON.stringify({ workspaceId, pushMode }),
     }),
-    pull: workspaceId => request('/git/pull', {
-      method: 'POST', body: JSON.stringify({ workspaceId }),
+    pull: (workspaceId, pullMode) => request('/git/pull', {
+      method: 'POST', body: JSON.stringify({ workspaceId, pullMode }),
     }),
     fetch: workspaceId => request('/git/fetch', {
       method: 'POST', body: JSON.stringify({ workspaceId }),

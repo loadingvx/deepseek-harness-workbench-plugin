@@ -7,6 +7,14 @@ import { GitGraph } from './GitGraph.tsx'
 import { IconButton } from './IconButton.tsx'
 import { isDefaultCommitTemplate, resolveCommitTemplate } from '../../shared/commit-template.ts'
 import { visibleSyncActions } from '../../shared/sync-actions.ts'
+import {
+  DEFAULT_GIT_SYNC_PREFS,
+  pullCommandPreview,
+  pushCommandPreview,
+  readGitSyncPrefs,
+  writeGitSyncPrefs,
+  type GitSyncPrefs, type PullMode, type PushMode,
+} from '../../shared/git-sync-prefs.ts'
 import { invalidBranchName } from '../../shared/branch-name.ts'
 import { IconBranch, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRefresh, IconRestore, IconSparkle, IconTune } from './icons.tsx'
 import type { Translate } from './types.ts'
@@ -197,6 +205,8 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const [customTemplate, setCustomTemplate] = useState<string | null>(readCustomTemplate)
   const [templateOpen, setTemplateOpen] = useState(false)
   const [templateDraft, setTemplateDraft] = useState('')
+  const [syncPrefs, setSyncPrefs] = useState<GitSyncPrefs>(readGitSyncPrefs)
+  const [prefsDraft, setPrefsDraft] = useState<GitSyncPrefs>(DEFAULT_GIT_SYNC_PREFS)
   const localeDefault = t('commit.templateDefault')
   const template = customTemplate ?? localeDefault
   const messageRef = useRef<HTMLTextAreaElement>(null)
@@ -397,7 +407,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
         ? t('push.disabledDetached')
         : probe?.remote === undefined
           ? t('push.disabledNoRemote')
-          : behindCount > 0
+          : behindCount > 0 && syncPrefs.pushMode !== 'lease'
             ? t('push.disabledBehind', { count: behindCount })
             : aheadCount === 0 && probe?.upstream !== undefined
               ? t('push.disabledNothing')
@@ -504,12 +514,12 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
 
   const push = (): void => {
     if (workspaceId === undefined || pushDisabledReason !== null) return
-    void runWrite(() => client.push(workspaceId), 'push')
+    void runWrite(() => client.push(workspaceId, syncPrefs.pushMode), 'push')
   }
 
   const pull = (): void => {
     if (workspaceId === undefined || pullDisabledReason !== null) return
-    void runWrite(() => client.pull(workspaceId), 'pull')
+    void runWrite(() => client.pull(workspaceId, syncPrefs.pullMode), 'pull')
   }
 
   const fetchRemote = (): void => {
@@ -609,6 +619,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const openTemplate = (): void => {
     setPrompt(null)
     setTemplateDraft(template)
+    setPrefsDraft(readGitSyncPrefs())
     setTemplateOpen(true)
   }
 
@@ -629,6 +640,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
 
   const saveTemplate = (): void => {
     setCustomTemplate(writeCustomTemplate(templateDraft, localeDefault))
+    setSyncPrefs(writeGitSyncPrefs(prefsDraft))
     setTemplateOpen(false)
   }
 
@@ -790,8 +802,8 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
               <div className={css.sectionActions}>
                 <IconButton
                   dense
-                  label={customTemplate === null ? t('commit.template') : t('commit.templateCustom')}
-                  active={customTemplate !== null}
+                  label={t('gitSettings.open')}
+                  active={customTemplate !== null || syncPrefs.pullMode !== 'merge' || syncPrefs.pushMode !== 'safe'}
                   onClick={openTemplate}
                 >
                   <IconTune />
@@ -1010,14 +1022,51 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
             aria-labelledby="git-commit-template-title"
             onClick={(event) => { event.stopPropagation() }}
           >
-            <h2 id="git-commit-template-title">{t('commit.templateTitle')}</h2>
-            <p>{t('commit.templateHint')}</p>
+            <h2 id="git-commit-template-title">{t('gitSettings.title')}</h2>
+            <p>{t('gitSettings.hint')}</p>
+            <fieldset className={css.choiceSet}>
+              <legend>{t('gitSettings.pullTitle')}</legend>
+              <p className={css.choiceLead}>{t('gitSettings.pullHint')}</p>
+              {(['merge', 'ff-only', 'rebase'] as const).map((mode: PullMode) => (
+                <label key={mode} className={css.choice} data-active={prefsDraft.pullMode === mode || undefined}>
+                  <input
+                    type="radio"
+                    name="dsw-pull-mode"
+                    checked={prefsDraft.pullMode === mode}
+                    onChange={() => { setPrefsDraft(current => ({ ...current, pullMode: mode })) }}
+                  />
+                  <span>
+                    <strong>{t(`gitSettings.pull.${mode}`)}</strong>
+                    <code>{pullCommandPreview(mode)}</code>
+                    <em>{t(`gitSettings.pull.${mode}Help`)}</em>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            <fieldset className={css.choiceSet}>
+              <legend>{t('gitSettings.pushTitle')}</legend>
+              <p className={css.choiceLead}>{t('gitSettings.pushHint')}</p>
+              {(['safe', 'lease'] as const).map((mode: PushMode) => (
+                <label key={mode} className={css.choice} data-active={prefsDraft.pushMode === mode || undefined}>
+                  <input
+                    type="radio"
+                    name="dsw-push-mode"
+                    checked={prefsDraft.pushMode === mode}
+                    onChange={() => { setPrefsDraft(current => ({ ...current, pushMode: mode })) }}
+                  />
+                  <span>
+                    <strong>{t(`gitSettings.push.${mode}`)}</strong>
+                    <code>{pushCommandPreview(mode)}</code>
+                    <em>{t(`gitSettings.push.${mode}Help`)}</em>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
             <label className={css.field}>
               <span>{t('commit.templateTitle')}</span>
               <textarea
                 className={css.templateInput}
                 value={templateDraft}
-                autoFocus
                 onChange={(event) => { setTemplateDraft(event.target.value) }}
                 onKeyDown={(event) => {
                   if (event.key === 'Escape') closeTemplate()
@@ -1028,7 +1077,10 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
               <button
                 type="button"
                 className={css.dialogCancel}
-                onClick={() => { setTemplateDraft(localeDefault) }}
+                onClick={() => {
+                  setTemplateDraft(localeDefault)
+                  setPrefsDraft({ ...DEFAULT_GIT_SYNC_PREFS })
+                }}
               >
                 {t('commit.templateReset')}
               </button>

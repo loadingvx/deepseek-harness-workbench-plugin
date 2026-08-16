@@ -52,7 +52,7 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
   },
   MERGE_CONFLICT: {
     messageZh: '合并时出现冲突，已自动取消，工作区保持原样。',
-    hintZh: '请先在本机终端处理分叉，或换一个能快进合并的分支再试。本插件不会留下半成品合并。',
+    hintZh: '两边改了同一处。请在终端里手动处理，或先和同事对齐后再拉取。本插件不会留下半成品合并。',
   },
   IDENTITY_MISSING: {
     messageZh: '还没有配置 Git 用户信息，无法提交。',
@@ -139,8 +139,8 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     hintZh: '请先点「拉取」，把远端更新接到本地，确认没有冲突后再推送。',
   },
   DIVERGED: {
-    messageZh: '本地和远端都有对方没有的提交，无法快进拉取。',
-    hintZh: '为避免自动合并出乱子，这里只做快进拉取。请在本机终端处理分叉后再试。',
+    messageZh: '本地和远端都有对方没有的提交，当前拉取方式无法接入。',
+    hintZh: '请在齿轮设置里把拉取改为「合并」（git pull --no-rebase），或在终端处理分叉后再试。',
   },
   AUTH_FAILED: {
     messageZh: '远程仓库拒绝了身份验证。',
