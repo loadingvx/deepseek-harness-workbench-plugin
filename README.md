@@ -7,6 +7,8 @@ A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/dee
 
 ## Contents
 
+- [Core capabilities](#core-capabilities)
+- [Capability matrix](#capability-matrix)
 - [Release](#release)
 - [Installation](#installation)
 - [Upgrade](#upgrade)
@@ -14,6 +16,33 @@ A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/dee
 - [Workspace terminal](#workspace-terminal)
 - [AI command assist](#ai-command-assist)
 - [License](#license)
+
+## Core capabilities
+
+1. **Smart terminal.** A local pseudo-terminal (PTY) inside the workbench. Input is classified automatically — lines that are real shell commands (including pasted prompt prefixes like `$ ls`) go straight to the PTY, while natural-language tasks are translated by the model into shell commands and typed into the **current session** shell; no separate shell is started. Greetings, warnings and one-line explanations are written as non-executable POSIX no-ops, and commands matching the configurable destructive blacklist are refused with a note.
+2. **Workspace editor.** CodeMirror 6 with syntax highlighting for CSS, HTML, JavaScript, JSON, Markdown, Python, XML and YAML, plus a Markdown preview (👁 mode) that renders images (http(s) and workspace-relative paths) and Mermaid diagrams.
+3. **Files & Git.** A file tree (browse, open, new, rename, delete) and a Git sidebar (status, diff, log, branch, commit with streamed AI commit-message generation, restore, commit graph).
+4. **Maintenance & i18n.** In-UI upgrade checker with a dismissible notice, and Chinese / English locales.
+
+## Capability matrix
+
+| Area | Capability | Notes | Status |
+| --- | --- | --- | --- |
+| Smart terminal | Local PTY terminal | xterm.js PTY; bash / zsh / sh / dash allowlist with path constraints | Supported |
+| Smart terminal | Command vs. natural-language classification | Real argv lines go straight to the PTY; requests are translated by the model | Supported |
+| Smart terminal | AI translation to shell commands | <kbd>Alt</kbd>+<kbd>I</kbd>; written into the current session shell | Supported |
+| Smart terminal | Note isolation | Greetings / warnings written as POSIX `:` no-ops, never executed | Supported |
+| Smart terminal | Destructive command blacklist | Matching commands are refused with a note; rules configurable in settings | Supported |
+| Editor | Syntax highlighting | CodeMirror 6: CSS / HTML / JavaScript / JSON / Markdown / Python / XML / YAML | Supported |
+| Editor | Markdown preview | Images (http(s) + workspace-relative) and Mermaid diagrams | Supported |
+| Files & Git | File tree | Browse / open / new / rename / delete with path breadcrumbs | Supported |
+| Files & Git | Git sidebar | Status / diff / log / branch / commit / restore, commit graph | Supported |
+| Files & Git | AI commit messages | Streamed commit-message generation from staged changes | Supported |
+| Workbench | Three-column layout | Chat \| editor + terminal \| files & Git; drag-resizable with remembered widths | Supported |
+| Maintenance | Upgrade checker | Notice + install command written as a `#` comment into the terminal | Supported |
+| i18n | Locales | Chinese and English dictionaries | Supported |
+| Compatibility | Non-allowlisted shells | fish / tcsh / csh / ksh / mksh / PowerShell / cmd / BusyBox-as-`ash` fall back to bash / zsh / sh when available | Fallback |
+| Compatibility | Windows consoles, SSH jump hosts | Outside the compatibility scope | Out of scope |
 
 ## Release
 
