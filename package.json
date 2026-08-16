@@ -1,6 +1,6 @@
 {
   "name": "dsh-workbench-plugin",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "DeepSeek Harness Web UI 工作台：聊天 / 编辑器（语法高亮） / 文件与 Git、侧边栏、模型工具",
   "type": "module",
   "main": "lib/index.js",
@@ -31,7 +31,7 @@
   },
   "scripts": {
     "build": "tsdown",
-    "prepare": "tsdown",
+    "prepublishOnly": "tsdown",
     "test": "vitest run",
     "dev": "bash devops/dev.sh",
     "release": "bash devops/release.sh"

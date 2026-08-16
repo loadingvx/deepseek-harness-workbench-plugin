@@ -62,14 +62,16 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 | 项目 | 说明 |
 | --- | --- |
 | 包名 | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| 当前版本 | **0.1.10**（npm 标签 `latest`） |
+| 当前版本 | **0.1.11**（npm 标签 `latest`） |
 | 软件源 | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.10
++ dsh-workbench-plugin@0.1.11
 ```
 
-维护者发布请执行 `bash devops/release.sh`。该脚本使用本机已有的 `npm login` 会话；不得将账号或凭据写入仓库。
+维护者发布 npm 请执行 `bash devops/release.sh`。该脚本使用本机已有的 `npm login` 会话；不得将账号或凭据写入仓库。
+
+应用市场走 GitHub 安装（`github:loadingvx/deepseek-harness-workbench-plugin`），**不会在用户机器上编译**。每次推 GitHub 之前先执行 `bash devops/build.sh`，把 `lib/index.js` 和 `lib/client.js` 与源码一起提交。
 
 ## 安装
 
@@ -79,13 +81,13 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 
 ### 步骤
 
-1. 安装插件（必须带版本号，不要省略 `@0.1.10`）：
+1. 安装插件（必须带版本号，不要省略 `@0.1.11`）：
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.10
+dsh plugin --profile web add dsh-workbench-plugin@0.1.11
 ```
 
-`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.10` 才会明确要这一版。
+`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.11` 才会明确要这一版。
 
 若指定版本后仍提示太新、装不上，在 `~/.dsh/profiles/web/pnpm-workspace.yaml` 加上下面两行，再执行一次安装命令：
 
@@ -96,6 +98,16 @@ minimumReleaseAgeExclude:
 
 2. 重启 `dsh web`。
 3. 访问 http://127.0.0.1:3080 ，进入「对话」，在标题栏右侧打开 **工作台**。
+
+### 应用市场 / GitHub
+
+市场分配的安装命令装的是 GitHub 仓库，不是 npm 包：
+
+```bash
+dsh plugin --profile web add github:loadingvx/deepseek-harness-workbench-plugin
+```
+
+默认分支里必须已经有构建好的 `lib/index.js` 和 `lib/client.js`。只提交源码会装不上：pnpm 默认拦截 git 包的 `prepare` 构建脚本，用户会看到 `allowBuilds` 报错。装完后同样重启 `dsh web`，再打开工作台。
 
 ## 升级
 
@@ -111,7 +123,7 @@ minimumReleaseAgeExclude:
 
 ### 从 0.1.1 升级
 
-**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.10；此后版本将通过界面提示。
+**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.11；此后版本将通过界面提示。
 
 ## 界面
 
