@@ -26,6 +26,8 @@ export interface FileTab {
   hash?: string
   /** 1 = 主终端；2+ = 额外终端。展示文案用 terminalTabLabel，不要写死中文。 */
   termIndex?: number
+  /** Open file matches .gitignore and is not tracked. */
+  ignored?: boolean
 }
 
 export function createTerminalTab(id = TERMINAL_TAB_ID, termIndex = 1): FileTab {

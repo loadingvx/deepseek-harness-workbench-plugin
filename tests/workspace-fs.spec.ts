@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { mkdtemp } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import { GitError } from '../src/shared/errors.ts'
+import { runGit } from '../src/host/git-exec.ts'
 import { assertSafeWorkspacePath, WorkspaceFs } from '../src/host/workspace-fs.ts'
 
 const fs = new WorkspaceFs()
@@ -172,5 +173,32 @@ describe('WorkspaceFs rename / move / delete', () => {
     await expect(fs.read(root, 'keep.txt')).resolves.toMatchObject({ content: 'keep' })
     await expect(fs.delete(root, 'missing.txt')).rejects.toMatchObject({ code: 'FS_NOT_FOUND' })
     await expect(fs.delete(root, '')).rejects.toMatchObject({ code: 'INVALID_PATH' })
+  })
+
+  it('marks gitignored paths so the explorer can dim them', async () => {
+    const root = await tempRoot()
+    await runGit({ cwd: root, args: ['init', '-b', 'main'] })
+    await runGit({ cwd: root, args: ['config', 'user.name', 'Test User'] })
+    await runGit({ cwd: root, args: ['config', 'user.email', 'test@example.com'] })
+    await runGit({ cwd: root, args: ['config', 'commit.gpgsign', 'false'] })
+    await writeFile(join(root, '.gitignore'), 'dist\n*.log\n')
+    await mkdir(join(root, 'dist'))
+    await writeFile(join(root, 'keep.ts'), 'x\n')
+    await writeFile(join(root, 'noise.log'), 'x\n')
+    await writeFile(join(root, 'dist', 'out.js'), 'x\n')
+    const listed = await fs.list(root, '')
+    expect(listed.entries.find(item => item.name === 'keep.ts')?.ignored).toBe(false)
+    expect(listed.entries.find(item => item.name === 'noise.log')?.ignored).toBe(true)
+    expect(listed.entries.find(item => item.name === 'dist')?.ignored).toBe(true)
+    expect(listed.entries.find(item => item.name === '.gitignore')?.ignored).toBe(false)
+    const readLog = await fs.read(root, 'noise.log')
+    expect(readLog.ignored).toBe(true)
+    const readKeep = await fs.read(root, 'keep.ts')
+    expect(readKeep.ignored).toBe(false)
+    await runGit({ cwd: root, args: ['add', 'keep.ts', '.gitignore'] })
+    await runGit({ cwd: root, args: ['commit', '-m', 'seed'] })
+    await writeFile(join(root, '.gitignore'), 'dist\n*.log\nkeep.ts\n')
+    const after = await fs.list(root, '')
+    expect(after.entries.find(item => item.name === 'keep.ts')?.ignored).toBe(false)
   })
 })

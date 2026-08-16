@@ -113,6 +113,12 @@ button.crumb:disabled {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+.choice[data-ignored],
+.choice[data-ignored] .choiceName,
+.choice[data-ignored] [data-kind] {
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .choice [data-kind] {
   display: inline-flex;
   flex: none;

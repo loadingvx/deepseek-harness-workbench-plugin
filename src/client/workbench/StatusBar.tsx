@@ -292,8 +292,9 @@ function StatusTabs({
               data-tab={tab.id}
               data-active={tab.id === activeId || undefined}
               data-ai={aiOn || undefined}
+              data-ignored={tab.ignored === true || undefined}
               role="tab"
-              title={title}
+              title={tab.ignored === true ? t('tree.ignored') : title}
               onClick={() => { onActivate?.(tab.id) }}
             >
               {aiOn ? (

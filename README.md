@@ -28,11 +28,13 @@ A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/dee
 
 | Area | Capability | Notes | Status |
 | --- | --- | --- | --- |
-| Smart terminal | Local PTY terminal | xterm.js PTY; bash / zsh / sh / dash allowlist with path constraints | Supported |
+| Smart terminal | Local PTY terminal | xterm.js PTY; POSIX bash / zsh / sh / dash allowlist with path constraints | Supported |
 | Smart terminal | Command vs. natural-language classification | Real argv lines go straight to the PTY; requests are translated by the model | Supported |
 | Smart terminal | AI translation to shell commands | <kbd>Alt</kbd>+<kbd>I</kbd>; written into the current session shell | Supported |
-| Smart terminal | Note isolation | Greetings / warnings written as POSIX `:` no-ops, never executed | Supported |
+| Smart terminal | Note isolation | Greetings / warnings written as non-executable statements, never executed | Supported |
 | Smart terminal | Destructive command blacklist | Matching commands are refused with a note; rules configurable in settings | Supported |
+| Smart terminal | Windows terminal — Git Bash | Probed at the standard Git for Windows install paths and selected when present | Supported |
+| Smart terminal | Windows terminal — Windows PowerShell | Probed at the system PowerShell path and selected when Git Bash is absent | Supported |
 | Editor | Syntax highlighting | CodeMirror 6: CSS / HTML / JavaScript / JSON / Markdown / Python / XML / YAML | Supported |
 | Editor | Markdown preview | Images (http(s) + workspace-relative) and Mermaid diagrams | Supported |
 | Files & Git | File tree | Browse / open / new / rename / delete with path breadcrumbs | Supported |
@@ -41,19 +43,19 @@ A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/dee
 | Workbench | Three-column layout | Chat \| editor + terminal \| files & Git; drag-resizable with remembered widths | Supported |
 | Maintenance | Upgrade checker | Notice + install command written as a `#` comment into the terminal | Supported |
 | i18n | Locales | Chinese and English dictionaries | Supported |
-| Compatibility | Non-allowlisted shells | fish / tcsh / csh / ksh / mksh / PowerShell / cmd / BusyBox-as-`ash` fall back to bash / zsh / sh when available | Fallback |
-| Compatibility | Windows consoles, SSH jump hosts | Outside the compatibility scope | Out of scope |
+| Compatibility | Shells beyond the tested coverage | fish / tcsh / csh / ksh / mksh / cmd / BusyBox-as-`ash`: not yet covered by tests; when `$SHELL` points to one of them, the terminal falls back to a tested shell when available | Not yet covered by tests |
+| Compatibility | Remote SSH jump-host sessions | Not yet covered by tests | Not yet covered by tests |
 
 ## Release
 
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.9** (npm tag `latest`) |
+| Version | **0.1.10** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.9
++ dsh-workbench-plugin@0.1.10
 ```
 
 Maintainers publish with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -89,7 +91,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.9 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.10 manually using the command above. Later releases will prompt in the UI.
 
 ## Interface
 
@@ -103,9 +105,9 @@ Markdown preview (the 👁 mode in the editor) renders images (http(s) and works
 
 ## Workspace terminal
 
-The workspace terminal is a local pseudo-terminal (PTY). AI command assist converts natural language into commands and writes greetings or notes as non-executable statements. Both are typed into the **current session** shell. Assist compatibility follows the same shell allowlist; shells outside that list are not supported separately.
+The workspace terminal is a local pseudo-terminal (PTY). AI command assist converts natural language into shell commands and writes them into the **current session** shell; greetings and notes are written as non-executable statements and are never executed. Shell coverage — tested and not yet tested — is summarized in the [capability matrix](#capability-matrix).
 
-### Allowed shells
+### Allowed shells — POSIX
 
 | Name | Selection criteria | Assist verification |
 | --- | --- | --- |
@@ -114,11 +116,20 @@ The workspace terminal is a local pseudo-terminal (PTY). AI command assist conve
 | **sh** | `$SHELL` is sh; otherwise the fallback when bash and zsh are unavailable | Verified. `/bin/sh` may be a symlink to bash or dash; the symlink target is used as-is |
 | **dash** | Only when `$SHELL` is explicitly dash (`/bin/dash`, `/usr/bin/dash`, or `/usr/local/bin/dash`) | Same POSIX `:` no-op as sh. Dash is **not** included in the default candidate list |
 
+### Allowed shells — Windows
+
+| Name | Selection criteria | Assist verification |
+| --- | --- | --- |
+| **Git Bash** | Probed at `C:/Program Files/Git/bin/bash.exe` and `C:/Program Files/Git/usr/bin/bash.exe`; selected when present | Not yet covered by tests |
+| **Windows PowerShell** | Probed at `%SystemRoot%/System32/WindowsPowerShell/v1.0/powershell.exe`; selected when Git Bash is absent | Not yet covered by tests |
+
 ### Path constraints
 
-Absolute paths are accepted only under `/bin`, `/usr/bin`, or `/usr/local/bin`, and only for the four names in the table above (for example `/bin/bash`, `/usr/bin/zsh`). All other paths, including custom installs under a home directory, are ignored so that unknown programs are not executed.
+Absolute paths are accepted only under `/bin`, `/usr/bin`, or `/usr/local/bin`, and only for the four POSIX names in the table above (for example `/bin/bash`, `/usr/bin/zsh`). On Windows, absolute paths to the Git Bash and PowerShell executables are accepted. All other paths, including custom installs under a home directory, are ignored so that unknown programs are not executed.
 
 ### Selection order
+
+On Windows, Git Bash is probed first, followed by the system PowerShell, then the POSIX candidates below. The POSIX order is:
 
 1. `$SHELL` (must be on the allowlist)
 2. `/bin/bash`
@@ -128,48 +139,11 @@ Absolute paths are accepted only under `/bin`, `/usr/bin`, or `/usr/local/bin`, 
 6. `/bin/sh`
 7. `/usr/bin/sh`
 
-If none of these paths are available, the terminal cannot start.
-
-### Not covered by basic tests
-
-The following types have not been through basic tests:
-
-- fish
-- tcsh
-- csh
-- ksh
-- mksh
-- PowerShell
-- cmd
-- BusyBox when invoked as `ash`
-
-If `$SHELL` is one of the above, the workbench **ignores** that value and falls back to bash, zsh, or sh when those binaries exist.
-
-BusyBox is treated as **sh** only when the operating system exposes it as `/bin/sh`. The name `ash` is not on the allowlist and has not been tested separately.
-
-### Out of scope
-
-The following are outside the compatibility scope:
-
-- Windows consoles
-- Remote SSH jump-host sessions
-- Custom shells outside the allowlist
+If none of these paths are available, the terminal cannot start. Shells not yet covered by tests (fish, tcsh, csh, ksh, mksh, cmd, and BusyBox invoked as `ash`) are listed in the [capability matrix](#capability-matrix): when `$SHELL` points to one of them, the value is ignored and the terminal falls back to a tested shell when available. BusyBox is treated as **sh** only when the operating system exposes it as `/bin/sh`; the name `ash` is not yet covered by tests.
 
 ## AI command assist
 
-Shortcut: <kbd>Alt</kbd>+<kbd>I</kbd>. Assist writes into the current PTY and does not start a separate shell.
-
-### Isolation of note lines
-
-Greetings, warnings, and the one-line summary before a command are written as a POSIX no-op:
-
-```text
-: '# --------'
-: '# list files in the current directory'
-ls -la
-```
-
-`:` performs no operation. The argument is single-quoted so that zsh does not treat `today?` as a glob and bash/zsh do not treat `!` as history expansion. Commands intended for execution are still written as emitted by the model (typically one bash or zsh line).
+<kbd>Alt</kbd>+<kbd>I</kbd> translates natural-language requests into shell commands and writes them into the shell of the current session; no separate shell is started. Greetings, warnings, and the one-line explanation preceding a command are written as non-executable statements and are never executed.
 
 ## License
 

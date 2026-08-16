@@ -389,8 +389,19 @@ export function EditorPane({
               const tabDirty = tab.kind === 'file' && buffers[tab.path] !== undefined
                 && buffers[tab.path]!.draft !== buffers[tab.path]!.original
               return (
-                <div key={tab.id} className={css.tab} data-active={tab.id === activeId || undefined} role="tab">
-                  <button type="button" className={css.tabName} onClick={() => { onActivate(tab.id) }}>
+                <div
+                  key={tab.id}
+                  className={css.tab}
+                  data-active={tab.id === activeId || undefined}
+                  data-ignored={tab.ignored === true || undefined}
+                  role="tab"
+                >
+                  <button
+                    type="button"
+                    className={css.tabName}
+                    title={tab.ignored === true ? t('tree.ignored') : undefined}
+                    onClick={() => { onActivate(tab.id) }}
+                  >
                     {tab.kind === 'terminal'
                       ? terminalTabLabel(tab, t)
                       : tab.kind === 'diff'

@@ -42,4 +42,12 @@ describe('buildFilterTree', () => {
     expect(tree[0]?.children[0]?.name).toBe('client')
     expect(tree[0]?.children[0]?.children.map(item => item.name)).toEqual(['workbench', 'api.ts'])
   })
+
+  it('keeps the ignored flag on the matching file', () => {
+    const tree = buildFilterTree([
+      { name: 'noise.log', path: 'tmp/noise.log', kind: 'file', ignored: true },
+    ])
+    expect(tree[0]?.ignored).toBeUndefined()
+    expect(tree[0]?.children[0]?.ignored).toBe(true)
+  })
 })

@@ -304,6 +304,9 @@ function WorkbenchInner(props: WorkbenchProps) {
       return
     }
     setFileError(null)
+    setTabs(current => current.map(tab => (
+      tab.id === id ? { ...tab, ignored: result.value.ignored === true } : tab
+    )))
     setBuffers(current => current[path] !== undefined ? current : ({
       ...current,
       [path]: { path, original: result.value.content, draft: result.value.content, language: result.value.language },

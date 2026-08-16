@@ -140,9 +140,12 @@ export function PathBreadcrumb({
                 type="button"
                 role="menuitem"
                 className={css.choice}
-                title={entry.kind === 'directory'
-                  ? t('editor.breadcrumbFolder', { name: entry.name })
-                  : t('editor.breadcrumbOpen', { name: entry.name })}
+                data-ignored={entry.ignored === true || undefined}
+                title={entry.ignored === true
+                  ? t('tree.ignored')
+                  : entry.kind === 'directory'
+                    ? t('editor.breadcrumbFolder', { name: entry.name })
+                    : t('editor.breadcrumbOpen', { name: entry.name })}
                 onClick={() => {
                   if (entry.kind === 'directory') {
                     setOpenPath(entry.path)

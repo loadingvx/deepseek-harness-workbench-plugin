@@ -7,6 +7,7 @@ export interface FilterNode {
   name: string
   path: string
   kind: 'file' | 'directory'
+  ignored?: boolean
   children: FilterNode[]
 }
 
@@ -35,16 +36,17 @@ export function shouldSkipSearchDir(name: string, query: string): boolean {
 }
 
 /** Rebuild a folder tree from flat search hits so the explorer stays recognizable. */
-export function buildFilterTree(hits: readonly Pick<FsDirEntry, 'name' | 'path' | 'kind'>[]): FilterNode[] {
+export function buildFilterTree(hits: readonly Pick<FsDirEntry, 'name' | 'path' | 'kind' | 'ignored'>[]): FilterNode[] {
   const byPath = new Map<string, FilterNode>()
 
-  const ensure = (path: string, kind: 'file' | 'directory', name: string): FilterNode => {
+  const ensure = (path: string, kind: 'file' | 'directory', name: string, ignored?: boolean): FilterNode => {
     const existing = byPath.get(path)
     if (existing !== undefined) {
       if (kind === 'directory') existing.kind = 'directory'
+      if (ignored === true) existing.ignored = true
       return existing
     }
-    const node: FilterNode = { name, path, kind, children: [] }
+    const node: FilterNode = { name, path, kind, children: [], ...ignored === true ? { ignored: true } : {} }
     byPath.set(path, node)
     return node
   }
@@ -56,7 +58,7 @@ export function buildFilterTree(hits: readonly Pick<FsDirEntry, 'name' | 'path' 
       const name = parts[index] ?? ''
       const next = acc === '' ? name : `${acc}/${name}`
       const leaf = index === parts.length - 1
-      ensure(next, leaf ? hit.kind : 'directory', name)
+      ensure(next, leaf ? hit.kind : 'directory', name, leaf ? hit.ignored : undefined)
       acc = next
     }
   }

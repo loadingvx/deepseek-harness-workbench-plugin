@@ -116,6 +116,14 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.tab[data-ignored] {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.tab[data-ignored][data-active] {
+  color: var(--dsw-alias-label-secondary);
+}
+
 .tabName {
   min-width: 0;
   overflow: hidden;

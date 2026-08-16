@@ -103,6 +103,18 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+.rowWrap[data-ignored] .row {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.rowWrap[data-ignored] .name {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.rowWrap[data-ignored] .row [data-kind] {
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .row {
   display: flex;
   align-items: center;

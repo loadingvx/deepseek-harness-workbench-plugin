@@ -10,6 +10,8 @@ export interface GitExecOptions {
   signal?: AbortSignal
   timeoutMs?: number
   allowNonZero?: boolean
+  /** Written to git stdin, then closed. Used by `check-ignore --stdin`. */
+  input?: string
 }
 
 export interface GitExecResult {
@@ -62,8 +64,12 @@ export function runGit(options: GitExecOptions): Promise<GitExecResult> {
     const child = spawn('git', options.args, {
       cwd: options.cwd,
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [options.input !== undefined ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     })
+    if (options.input !== undefined && child.stdin) {
+      child.stdin.on('error', () => { /* git may close stdin before we finish writing */ })
+      child.stdin.end(options.input, 'utf8')
+    }
     let stdout = ''
     let stderr = ''
     child.stdout.setEncoding('utf8')

@@ -405,7 +405,7 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
   }
 
   const renderEntryRow = (
-    entry: { name: string; path: string; kind: 'file' | 'directory' },
+    entry: { name: string; path: string; kind: 'file' | 'directory'; ignored?: boolean },
     depth: number,
     open: boolean,
   ): ReactNode => {
@@ -417,6 +417,7 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
       <div
         className={css.rowWrap}
         data-active={activePath === entry.path || undefined}
+        data-ignored={entry.ignored === true || undefined}
         data-dragover={dragOver === entry.path || undefined}
         data-drag-source={dragSource === entry.path || undefined}
         draggable={canDrag && !renaming}
@@ -447,7 +448,11 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
         >
           <span className={css.chevron}>{entry.kind === 'directory' ? (open ? '▾' : '▸') : ''}</span>
           <FileKindIcon kind={entry.kind} name={entry.name} open={open} />
-          {renaming ? null : <span className={css.name}>{entry.name}</span>}
+          {renaming ? null : (
+            <span className={css.name} title={entry.ignored === true ? t('tree.ignored') : undefined}>
+              {entry.name}
+            </span>
+          )}
         </button>
         {renaming ? (
           <input

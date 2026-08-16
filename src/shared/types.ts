@@ -162,6 +162,8 @@ export interface FsDirEntry {
   path: string
   kind: 'file' | 'directory'
   hidden: boolean
+  /** True when Git will not track this path (matches .gitignore and is not already tracked). */
+  ignored: boolean
 }
 
 export interface FsListSnapshot {
@@ -181,6 +183,7 @@ export interface FsFileSnapshot {
   content: string
   size: number
   language: string
+  ignored: boolean
 }
 
 export interface FsWriteResult {

@@ -2,6 +2,7 @@ import { mkdir, readdir, readFile, realpath, rename as fsRename, rm, stat, write
 import { dirname, extname, join, normalize, relative, resolve as resolvePath, sep } from 'node:path'
 import { GitError } from '../shared/errors.ts'
 import { entryMatchesFilter, MAX_SEARCH_HITS, normalizeFileFilter, shouldSkipSearchDir } from '../shared/file-filter.ts'
+import { attachIgnored, ignoredPathSet } from './git-ignore.ts'
 import type { FsDeleteResult, FsDirEntry, FsFileSnapshot, FsListSnapshot, FsRenameResult, FsSearchSnapshot, FsWriteResult } from '../shared/types.ts'
 
 export const MAX_FILE_BYTES = 1_500_000
@@ -194,6 +195,7 @@ export class WorkspaceFs {
           path: toPosix(childRel),
           kind: childStat.isDirectory() ? 'directory' : 'file',
           hidden: name.startsWith('.'),
+          ignored: false,
         })
       } catch {
         // Dangling symlink or unreadable entry: skip rather than fail the folder.
@@ -203,7 +205,7 @@ export class WorkspaceFs {
       if (left.kind !== right.kind) return left.kind === 'directory' ? -1 : 1
       return left.name.localeCompare(right.name, 'zh')
     })
-    return { path: rel, entries, truncated }
+    return { path: rel, entries: await attachIgnored(root, entries), truncated }
   }
 
   async search(root: string, query: string, showHidden = false): Promise<FsSearchSnapshot> {
@@ -247,7 +249,7 @@ export class WorkspaceFs {
           const kind = childStat.isDirectory() ? 'directory' : 'file'
           const path = toPosix(childRel)
           if (entryMatchesFilter(name, path, q)) {
-            hits.push({ name, path, kind, hidden })
+            hits.push({ name, path, kind, hidden, ignored: false })
           }
           if (kind === 'directory') queue.push(childRel)
         } catch {
@@ -260,7 +262,7 @@ export class WorkspaceFs {
       if (left.kind !== right.kind) return left.kind === 'directory' ? -1 : 1
       return left.path.localeCompare(right.path, 'zh')
     })
-    return { query: q, hits, truncated }
+    return { query: q, hits: await attachIgnored(root, hits), truncated }
   }
 
   async resolveAbsolute(root: string, filePath: string): Promise<string> {
@@ -289,7 +291,8 @@ export class WorkspaceFs {
       throw new GitError('GIT_FAILED', error instanceof Error ? error.message : String(error))
     }
     if (looksBinary(buffer, rel)) throw new GitError('FS_BINARY')
-    return { path: rel, content: buffer.toString('utf8'), size: buffer.length, language: languageOf(rel) }
+    const ignored = (await ignoredPathSet(root, [rel])).has(rel)
+    return { path: rel, content: buffer.toString('utf8'), size: buffer.length, language: languageOf(rel), ignored }
   }
 
   /** Read a workspace image as raw bytes. Rejects non-images, directories, and files over the image cap. */
