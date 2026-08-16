@@ -18,6 +18,7 @@ export interface GitSidebarProps {
   workspaceId?: string
   selected?: { path: string; staged: boolean } | null
   onOpenDiff: (path: string, staged: boolean) => void
+  onOpenCommitDiff: (hash: string, path: string) => void
   t: Translate
 }
 
@@ -176,7 +177,7 @@ function FileGroup({
 }
 
 /** Cursor-like source-control column: CHANGES + resizable GRAPH. */
-export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: GitSidebarProps) {
+export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCommitDiff, t }: GitSidebarProps) {
   const rootRef = useRef<HTMLElement>(null)
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<'commit' | 'push' | 'pull' | null>(null)
@@ -861,7 +862,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, t }: Git
             </div>
             {graphOpen ? (
               <div className={css.paneBody}>
-                <GitGraph entries={log} emptyLabel={t('graph.empty')} compact={graphCompact} t={t} />
+                <GitGraph entries={log} emptyLabel={t('graph.empty')} compact={graphCompact} client={client} workspaceId={workspaceId} onOpenCommitDiff={onOpenCommitDiff} t={t} />
               </div>
             ) : null}
           </section>

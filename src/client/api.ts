@@ -2,9 +2,9 @@ import { fail } from '../shared/errors.ts'
 import { parseCommitStreamLine } from '../shared/commit-stream.ts'
 import type {
   ExternalEditorId, ExternalEditorsSnapshot, ExternalOpenResult,
-  FsFileSnapshot, FsListSnapshot, FsSearchSnapshot, FsWriteResult,
+  FsDeleteResult, FsFileSnapshot, FsListSnapshot, FsRenameResult, FsSearchSnapshot, FsWriteResult,
   GitBranchInfo, GitCommitMessage, GitCommitResult, GitCreateBranchResult, GitDiffSnapshot,
-  GitFail, GitFetchResult, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
+  GitFail, GitFetchResult, GitFileChange, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
   GitStatusSnapshot, GitSwitchResult, PluginUpdateSnapshot,
 } from '../shared/types.ts'
 
@@ -131,6 +131,10 @@ export interface GitClient {
   createBranch(workspaceId: string, name: string): Promise<GitResult<GitCreateBranchResult>>
   mergeBranch(workspaceId: string, name: string): Promise<GitResult<GitMergeResult>>
   switchBranch(workspaceId: string, name: string): Promise<GitResult<GitSwitchResult>>
+  renameFile(workspaceId: string, from: string, to: string): Promise<GitResult<FsRenameResult>>
+  deleteFile(workspaceId: string, path: string): Promise<GitResult<FsDeleteResult>>
+  commitFiles(workspaceId: string, hash: string): Promise<GitResult<GitFileChange[]>>
+  commitDiff(workspaceId: string, hash: string, path: string): Promise<GitResult<GitDiffSnapshot>>
   listDir(workspaceId: string, path?: string): Promise<GitResult<FsListSnapshot>>
   searchFiles(workspaceId: string, query: string, hidden?: boolean): Promise<GitResult<FsSearchSnapshot>>
   readFile(workspaceId: string, path: string): Promise<GitResult<FsFileSnapshot>>
@@ -199,6 +203,20 @@ export function createGitClient(): GitClient {
     switchBranch: (workspaceId, name) => request('/git/switch', {
       method: 'POST', body: JSON.stringify({ workspaceId, name }),
     }),
+    renameFile: (workspaceId, from, to) => request('/git/fs/rename', {
+      method: 'POST', body: JSON.stringify({ workspaceId, from, to }),
+    }),
+    deleteFile: (workspaceId, path) => request('/git/fs/delete', {
+      method: 'POST', body: JSON.stringify({ workspaceId, path }),
+    }),
+    commitFiles: (workspaceId, hash) => {
+      const query = new URLSearchParams({ workspaceId, hash })
+      return request(`/git/commit-files?${query.toString()}`)
+    },
+    commitDiff: (workspaceId, hash, path) => {
+      const query = new URLSearchParams({ workspaceId, hash, path })
+      return request(`/git/commit-diff?${query.toString()}`)
+    },
     listDir: (workspaceId, path) => {
       const query = new URLSearchParams({ workspaceId })
       if (path) query.set('path', path)

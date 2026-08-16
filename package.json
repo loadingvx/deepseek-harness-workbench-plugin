@@ -1,6 +1,6 @@
 {
   "name": "dsh-workbench-plugin",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "DeepSeek Harness Web UI 工作台：聊天 / 编辑器（语法高亮） / 文件与 Git、侧边栏、模型工具",
   "type": "module",
   "main": "lib/index.js",
@@ -67,11 +67,13 @@
     "@xterm/xterm": "^6.0.0",
     "lightningcss": "^1.32.0",
     "marked": "^18.0.9",
+    "mermaid": "^11.16.1",
     "tsdown": "^0.22.2"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
     "@types/react": "~18.3.1",
+    "jsdom": "^30.0.1",
     "react": "^18.2.0",
     "typescript": "^5.9.2",
     "vitest": "^4.1.8"

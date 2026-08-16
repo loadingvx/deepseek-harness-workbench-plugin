@@ -27,7 +27,7 @@ export function PathBreadcrumb({
   const [error, setError] = useState<GitFail | null>(null)
 
   const rootLabel = workspaceTitle?.trim() || t('editor.breadcrumbWorkspace')
-  const parts = active?.kind === 'file' || active?.kind === 'diff'
+  const parts = active?.kind === 'file' || active?.kind === 'diff' || active?.kind === 'commitDiff'
     ? breadcrumbParts(active.path)
     : []
 
@@ -81,7 +81,7 @@ export function PathBreadcrumb({
         ) : null}
         {parts.map((part, index) => {
           const last = index === parts.length - 1
-          const folder = !last || active?.kind === 'diff'
+          const folder = !last || active?.kind === 'diff' || active?.kind === 'commitDiff'
           return (
             <li key={part.path} className={css.item}>
               <span className={css.sep} aria-hidden>/</span>
@@ -98,10 +98,12 @@ export function PathBreadcrumb({
               ) : (
                 <span className={css.crumb} data-current title={active?.path}>{part.name}</span>
               )}
-              {last && active?.kind === 'diff' ? (
+              {last && (active?.kind === 'diff' || active?.kind === 'commitDiff') ? (
                 <>
                   <span className={css.sep} aria-hidden>/</span>
-                  <span className={css.crumb} data-current>{t('editor.diffTab')}</span>
+                  <span className={css.crumb} data-current>
+                    {active?.kind === 'commitDiff' ? t('editor.commitDiffTab') : t('editor.diffTab')}
+                  </span>
                 </>
               ) : null}
             </li>

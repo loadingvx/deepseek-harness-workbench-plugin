@@ -348,3 +348,74 @@ describe('GitService', () => {
     expect(fetched.remote).toBe('origin')
   })
 })
+
+describe('GitService commit file listing and diffs', () => {
+  it('lists files changed by a commit with their kinds', async () => {
+    const root = await initRepo()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src/app.ts'), 'const a = 1\n')
+    await writeFile(join(root, 'notes.md'), 'hello\n')
+    await git.stage(root, ['src/app.ts', 'notes.md'])
+    await git.commit(root, 'seed')
+    await writeFile(join(root, 'src/app.ts'), 'const a = 2\n')
+    await git.stage(root, ['src/app.ts'])
+    await git.commit(root, 'tweak app')
+    await writeFile(join(root, 'gone.txt'), 'bye\n')
+    await git.stage(root, ['gone.txt'])
+    await git.commit(root, 'add gone')
+    const first = await git.log(root, 5)
+    const headHash = first[0]?.hash ?? ''
+    expect(headHash).not.toBe('')
+    const files = await git.commitFiles(root, headHash)
+    expect(files).toEqual([
+      { path: 'gone.txt', kind: 'added', staged: false, labelZh: '新增' },
+    ])
+    const secondHash = first[1]?.hash ?? ''
+    const tweak = await git.commitFiles(root, secondHash)
+    expect(tweak.map(file => [file.path, file.kind])).toEqual([['src/app.ts', 'modified']])
+    const rootFiles = await git.commitFiles(root, first[2]?.hash ?? '')
+    expect(rootFiles.map(file => file.path).sort()).toEqual(['notes.md', 'src/app.ts'])
+  })
+
+  it('lists files of the root commit', async () => {
+    const root = await initRepo()
+    await writeFile(join(root, 'only.txt'), 'only\n')
+    await git.stage(root, ['only.txt'])
+    await git.commit(root, 'first ever')
+    const log = await git.log(root, 3)
+    const files = await git.commitFiles(root, log[0]?.hash ?? '')
+    expect(files.map(file => file.path)).toEqual(['only.txt'])
+    expect(files[0]?.kind).toBe('added')
+  })
+
+  it('returns a unified diff for one file in a commit', async () => {
+    const root = await initRepo()
+    await writeFile(join(root, 'a.txt'), 'one\n')
+    await git.stage(root, ['a.txt'])
+    await git.commit(root, 'seed')
+    await writeFile(join(root, 'a.txt'), 'two\n')
+    await git.stage(root, ['a.txt'])
+    await git.commit(root, 'change a')
+    const log = await git.log(root, 3)
+    const diff = await git.commitDiff(root, log[0]?.hash ?? '', 'a.txt')
+    expect(diff.empty).toBe(false)
+    expect(diff.text).toContain('-one')
+    expect(diff.text).toContain('+two')
+  })
+
+  it('shows an added file as a full addition and handles missing commits', async () => {
+    const root = await initRepo()
+    await writeFile(join(root, 'new.ts'), 'export const x = 1\n')
+    await git.stage(root, ['new.ts'])
+    await git.commit(root, 'add new')
+    const log = await git.log(root, 3)
+    const hash = log[0]?.hash ?? ''
+    const diff = await git.commitDiff(root, hash, 'new.ts')
+    expect(diff.text).toContain('+export const x = 1')
+    await expect(git.commitFiles(root, 'deadbeef')).rejects.toMatchObject({ code: 'GIT_FAILED' })
+    await expect(git.commitFiles(root, 'not-a-hash')).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    const absent = await git.commitDiff(root, hash, 'missing.txt')
+    expect(absent.empty).toBe(true)
+    await expect(git.commitDiff(root, hash, '../escape.txt')).rejects.toMatchObject({ code: 'INVALID_PATH' })
+  })
+})

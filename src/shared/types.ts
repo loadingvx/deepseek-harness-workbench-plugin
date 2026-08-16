@@ -24,6 +24,9 @@ export type GitErrorCode =
   | 'FS_TOO_LARGE'
   | 'FS_BINARY'
   | 'FS_WRITE_FAILED'
+  | 'FS_EXISTS'
+  | 'FS_RENAME_FAILED'
+  | 'FS_DELETE_FAILED'
   | 'LLM_UNAVAILABLE'
   | 'LLM_FAILED'
   | 'NOTHING_TO_DESCRIBE'
@@ -181,6 +184,14 @@ export interface FsFileSnapshot {
 export interface FsWriteResult {
   path: string
   size: number
+}
+
+export interface FsRenameResult {
+  path: string
+}
+
+export interface FsDeleteResult {
+  path: string
 }
 
 export const EXTERNAL_EDITOR_IDS = [

@@ -477,6 +477,63 @@ export class GitService {
     return trimmed
   }
 
+
+  /** Files touched by a commit, with their change kind (A/M/D/R/…). Works for the root commit too. */
+  async commitFiles(root: string, hash: string, signal?: AbortSignal): Promise<GitFileChange[]> {
+    await this.requireRepo(root, signal)
+    const safeHash = await this.requireCommitHash(hash, root, signal)
+    const result = await runGit({
+      cwd: root,
+      args: ['diff-tree', '--no-commit-id', '--root', '--name-status', '-r', safeHash],
+      signal,
+      allowNonZero: true,
+    })
+    if (result.exitCode !== 0) throw new GitError('GIT_FAILED', result.stderr.trim() || '无法读取提交 ' + hash + ' 的改动文件')
+    const files: GitFileChange[] = []
+    for (const line of result.stdout.split(/\r?\n/)) {
+      if (line.trim() === '') continue
+      const parts = line.split('\t')
+      const letter = (parts[0] ?? '').trim()
+      if (letter === '') continue
+      // R100\told\tnew → path is the new name; plain entries are XY\tpath.
+      const path = parts.length >= 3 ? (parts[2] ?? '') : (parts[1] ?? '')
+      if (path.trim() === '') continue
+      const kind = letterKind(letter.charAt(0) ?? 'M')
+      files.push({ path: path.trim(), kind, staged: false, labelZh: KIND_LABEL[kind] })
+    }
+    return files
+  }
+
+  /** Unified diff of a single file inside a commit. */
+  async commitDiff(root: string, hash: string, path: string, signal?: AbortSignal): Promise<GitDiffSnapshot> {
+    await this.requireRepo(root, signal)
+    const safeHash = await this.requireCommitHash(hash, root, signal)
+    const safePath = assertSafeRepoPath(root, path)
+    const result = await runGit({
+      cwd: root,
+      args: ['show', '--no-color', '--format=', safeHash, '--', safePath],
+      signal,
+      allowNonZero: true,
+    })
+    if (result.exitCode !== 0) throw new GitError('GIT_FAILED', result.stderr.trim() || '无法读取提交 ' + hash + ' 中 ' + path + ' 的差异')
+    return { staged: false, path: safePath, text: result.stdout, empty: result.stdout.trim() === '' }
+  }
+
+  private async requireCommitHash(hash: string, root: string, signal?: AbortSignal): Promise<string> {
+    const trimmed = hash.trim()
+    if (!/^[0-9a-fA-F]{7,40}$/.test(trimmed)) throw new GitError('INVALID_PATH')
+    const verified = await runGit({
+      cwd: root,
+      args: ['rev-parse', '--verify', '--quiet', trimmed + '^{commit}'],
+      signal,
+      allowNonZero: true,
+    })
+    if (verified.exitCode !== 0 || verified.stdout.trim() === '') {
+      throw new GitError('GIT_FAILED', '找不到这个提交。')
+    }
+    return verified.stdout.trim()
+  }
+
   private async requireRepo(root: string, signal?: AbortSignal): Promise<void> {
     const probe = await this.probe(root, signal)
     if (!probe.gitAvailable) throw new GitError('GIT_NOT_FOUND')

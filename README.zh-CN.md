@@ -17,11 +17,11 @@ DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作�
 | 项目 | 说明 |
 | --- | --- |
 | 包名 | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| 当前版本 | **0.1.8**（npm 标签 `latest`） |
+| 当前版本 | **0.1.9**（npm 标签 `latest`） |
 | 软件源 | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.8
++ dsh-workbench-plugin@0.1.9
 ```
 
 维护者发布请执行 `bash devops/release.sh`。该脚本使用本机已有的 `npm login` 会话；不得将账号或凭据写入仓库。
@@ -57,7 +57,7 @@ dsh plugin --profile web add dsh-workbench-plugin
 
 ### 从 0.1.1 升级
 
-**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.8；此后版本将通过界面提示。
+**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.9；此后版本将通过界面提示。
 
 ## 界面
 
@@ -67,7 +67,7 @@ dsh plugin --profile web add dsh-workbench-plugin
 
 ![编辑器与文件树](docs/img/terminal.png)
 
-Markdown 预览（编辑器的 👁 模式）支持渲染图片：`http(s)` 地址直接加载，工作区内的相对路径图片（如 `./img/x.png`、`../img/x.png`、`/img/x.png`）会通过工作台接口按原字节加载；越界路径与 `data:`、`javascript:` 等来源会被跳过。
+Markdown 预览（编辑器的 👁 模式）支持渲染图片（`http(s)` 与工作区相对路径）和 Mermaid 图表（```mermaid 代码块，基于 [mermaid.js](https://mermaid.js.org/) 11）。
 
 社交预览静图见 [`docs/img/social-preview.png`](docs/img/social-preview.png)。
 

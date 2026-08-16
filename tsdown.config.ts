@@ -116,6 +116,10 @@ const client: UserConfig = {
   }],
   outputOptions: {
     entryFileNames: 'client.js',
+    // The DSH web ModuleLoader wraps this bundle in a CJS factory that cannot
+    // load sibling chunks, so every dependency (mermaid lazy diagram modules
+    // included) must land in this single file.
+    inlineDynamicImports: true,
     banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PACKAGE_ID)}, factory: (require) => {`,
     footer: 'return module.exports; } });',
     intro: 'var module = { exports: {} }; var exports = module.exports;',

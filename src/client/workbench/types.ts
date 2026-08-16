@@ -18,10 +18,12 @@ export const TERMINAL_TAB_ID = 'terminal:main'
 
 export interface FileTab {
   id: string
-  kind: 'file' | 'diff' | 'terminal'
+  kind: 'file' | 'diff' | 'commitDiff' | 'terminal'
   path: string
   title: string
   staged?: boolean
+  /** Commit hash for commitDiff tabs. */
+  hash?: string
   /** 1 = 主终端；2+ = 额外终端。展示文案用 terminalTabLabel，不要写死中文。 */
   termIndex?: number
 }

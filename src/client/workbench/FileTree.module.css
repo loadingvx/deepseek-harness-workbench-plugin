@@ -352,3 +352,164 @@
   color: var(--dsw-alias-label-caption);
   font-size: 11px;
 }
+
+.rowWrap:hover,
+.rowWrap[data-active] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.rowWrap[data-dragover] {
+  background: var(--dsw-alias-state-info-tertiary, var(--dsw-alias-interactive-bg-hover));
+  outline: 1px dashed var(--dsw-alias-state-info-primary, var(--dsw-alias-border-l1));
+  outline-offset: -1px;
+}
+
+.rowWrap[data-drag-source] {
+  opacity: 0.45;
+}
+
+.rowOpen,
+.rowAction {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.rowWrap:hover .rowOpen,
+.rowWrap:focus-within .rowOpen,
+.rowWrap:hover .rowAction,
+.rowWrap:focus-within .rowAction,
+.rowWrap[data-active] .rowOpen,
+.rowWrap[data-active] .rowAction,
+.rowWrap[data-drag-source] .rowAction {
+  opacity: 1;
+}
+
+.rowAction:last-child {
+  margin-right: 4px;
+}
+
+.rowOpen:hover:not(:disabled),
+.rowAction:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.rowAction[data-danger]:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.rowOpen:disabled,
+.rowAction:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.renameInput {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  margin-right: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--dsw-alias-state-info-primary, var(--dsw-alias-border-l1));
+  border-radius: 5px;
+  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-base));
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.renameInput:focus {
+  outline: 2px solid var(--dsw-alias-border-l1);
+}
+
+.body[data-dragover] {
+  outline: 1px dashed var(--dsw-alias-state-info-primary, var(--dsw-alias-border-l1));
+  outline-offset: -3px;
+}
+
+.dialogMask {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-base) 55%, transparent);
+}
+
+.dialog {
+  width: min(360px, calc(100% - 24px));
+  padding: 16px 18px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: var(--dsw-shadow-lv2);
+}
+
+.dialog h2 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dialog p {
+  margin: 0 0 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+}
+
+.dialogRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialogCancel,
+.dialogOk {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dialogCancel {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+}
+
+.dialogOk {
+  border: none;
+  background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-bg-base);
+}
+
+.dialogDanger {
+  background: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-bg-base);
+}
+
+.dialogCancel:disabled,
+.dialogOk:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

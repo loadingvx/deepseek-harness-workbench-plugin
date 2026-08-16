@@ -263,6 +263,38 @@ export function registerGitHttp(
           send(res, 400, toFail(error))
         }
         return
+      } else if (method === 'POST' && route === '/git/fs/rename') {
+        const body = await readJson(req)
+        const from = typeof body.from === 'string' ? body.from : ''
+        const to = typeof body.to === 'string' ? body.to : ''
+        if (from === '' || to === '') {
+          result = fail('BAD_REQUEST')
+        } else {
+          result = await wrap(() => fs.rename(rootOf(body), from, to))
+        }
+      } else if (method === 'POST' && route === '/git/fs/delete') {
+        const body = await readJson(req)
+        const path = typeof body.path === 'string' ? body.path : ''
+        if (path === '') {
+          result = fail('BAD_REQUEST')
+        } else {
+          result = await wrap(() => fs.delete(rootOf(body), path))
+        }
+      } else if (method === 'GET' && route === '/git/commit-files') {
+        const hash = query(url, 'hash')
+        if (hash === undefined) {
+          result = fail('BAD_REQUEST')
+        } else {
+          result = await wrap(() => git.commitFiles(rootOf(), hash))
+        }
+      } else if (method === 'GET' && route === '/git/commit-diff') {
+        const hash = query(url, 'hash')
+        const path = query(url, 'path')
+        if (hash === undefined || path === undefined) {
+          result = fail('BAD_REQUEST')
+        } else {
+          result = await wrap(() => git.commitDiff(rootOf(), hash, path))
+        }
       } else if (method === 'POST' && route === '/git/fs/write') {
         const body = await readJson(req)
         const path = typeof body.path === 'string' ? body.path : ''

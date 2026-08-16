@@ -12,7 +12,7 @@ import css from './SideDock.module.css'
 export type SideTab = 'files' | 'git'
 
 export function SideDock({
-  client, workspaceId, workspaceTitle, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onCollapse, leadingSash, update, onDismissUpdate, t,
+  client, workspaceId, workspaceTitle, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, t,
 }: {
   client: GitClient
   workspaceId?: string
@@ -23,6 +23,9 @@ export function SideDock({
   onTab: (tab: SideTab) => void
   onOpenFile: (path: string) => void
   onOpenDiff: (path: string, staged: boolean) => void
+  onOpenCommitDiff: (hash: string, path: string) => void
+  onRenamed: (from: string, to: string) => void
+  onDeleted: (path: string) => void
   onCollapse: () => void
   leadingSash?: ReactNode
   update?: PluginUpdateSnapshot | null
@@ -53,6 +56,8 @@ export function SideDock({
             workspaceTitle={workspaceTitle}
             activePath={activePath}
             onOpenFile={onOpenFile}
+            onRenamed={onRenamed}
+            onDeleted={onDeleted}
             t={t}
           />
         ) : (
@@ -61,6 +66,7 @@ export function SideDock({
             workspaceId={workspaceId}
             selected={selected}
             onOpenDiff={onOpenDiff}
+            onOpenCommitDiff={onOpenCommitDiff}
             t={t}
           />
         )}

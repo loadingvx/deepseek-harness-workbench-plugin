@@ -94,6 +94,18 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     messageZh: '无法保存这个文件。',
     hintZh: '请确认文件不是只读、磁盘还有空间，然后重试。',
   },
+  FS_EXISTS: {
+    messageZh: '这个名字已经有人用了。',
+    hintZh: '换一个名字，或先把同名文件处理掉再试。',
+  },
+  FS_RENAME_FAILED: {
+    messageZh: '无法重命名或移动这个文件。',
+    hintZh: '请确认目标位置可以写入、源文件没有被占用，然后重试。',
+  },
+  FS_DELETE_FAILED: {
+    messageZh: '无法删除这个文件。',
+    hintZh: '请确认文件没有被占用，或没有权限限制，然后重试。',
+  },
   LLM_UNAVAILABLE: {
     messageZh: '现在没法调用模型。',
     hintZh: '请确认会话里已经配好可用模型。这次调用不会写入当前对话。也可以先自己动手完成。',

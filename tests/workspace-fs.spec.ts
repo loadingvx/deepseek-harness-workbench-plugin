@@ -1,4 +1,4 @@
-import { mkdir, realpath, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, realpath, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { mkdtemp } from 'node:fs/promises'
@@ -111,5 +111,66 @@ describe('WorkspaceFs', () => {
     await expect(fs.readImage(root, 'notes.txt')).rejects.toMatchObject({ code: 'FS_BINARY' })
 
     await expect(fs.readImage(root, 'missing.png')).rejects.toMatchObject({ code: 'FS_NOT_FOUND' })
+  })
+})
+
+describe('WorkspaceFs rename / move / delete', () => {
+  it('renames a file in place', async () => {
+    const root = await tempRoot()
+    await writeFile(join(root, 'old.txt'), 'x')
+    const result = await fs.rename(root, 'old.txt', 'new.txt')
+    expect(result.path).toBe('new.txt')
+    await expect(fs.read(root, 'new.txt')).resolves.toMatchObject({ content: 'x' })
+    await expect(fs.read(root, 'old.txt')).rejects.toMatchObject({ code: 'FS_NOT_FOUND' })
+  })
+
+  it('moves a file into a subfolder', async () => {
+    const root = await tempRoot()
+    await mkdir(join(root, 'src'))
+    await writeFile(join(root, 'a.txt'), 'a')
+    await fs.rename(root, 'a.txt', 'src/a.txt')
+    await expect(fs.read(root, 'src/a.txt')).resolves.toMatchObject({ content: 'a' })
+    await expect(fs.read(root, 'a.txt')).rejects.toMatchObject({ code: 'FS_NOT_FOUND' })
+  })
+
+  it('renames a folder and moves a file into it', async () => {
+    const root = await tempRoot()
+    await mkdir(join(root, 'old'))
+    await writeFile(join(root, 'old/inner.txt'), 'i')
+    await fs.rename(root, 'old', 'renamed')
+    await expect(fs.read(root, 'renamed/inner.txt')).resolves.toMatchObject({ content: 'i' })
+    await writeFile(join(root, 'loose.txt'), 'l')
+    await fs.rename(root, 'loose.txt', 'renamed/loose.txt')
+    await expect(fs.read(root, 'renamed/loose.txt')).resolves.toMatchObject({ content: 'l' })
+  })
+
+  it('rejects renaming onto an existing entry', async () => {
+    const root = await tempRoot()
+    await writeFile(join(root, 'a.txt'), 'a')
+    await writeFile(join(root, 'b.txt'), 'b')
+    await expect(fs.rename(root, 'a.txt', 'b.txt')).rejects.toMatchObject({ code: 'FS_EXISTS' })
+    await expect(fs.rename(root, 'a.txt', 'a.txt')).rejects.toMatchObject({ code: 'FS_EXISTS' })
+  })
+
+  it('rejects moving a folder into itself or its descendant', async () => {
+    const root = await tempRoot()
+    await mkdir(join(root, 'dir', 'sub'), { recursive: true })
+    await expect(fs.rename(root, 'dir', 'dir')).rejects.toThrow(GitError)
+    await expect(fs.rename(root, 'dir', 'dir/sub')).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(fs.rename(root, '', 'dir')).rejects.toMatchObject({ code: 'INVALID_PATH' })
+  })
+
+  it('deletes a file and a folder recursively', async () => {
+    const root = await tempRoot()
+    await writeFile(join(root, 'keep.txt'), 'keep')
+    await mkdir(join(root, 'folder', 'nested'), { recursive: true })
+    await writeFile(join(root, 'folder', 'nested', 'deep.txt'), 'd')
+    await writeFile(join(root, 'folder', 'top.txt'), 't')
+    const deleted = await fs.delete(root, 'folder')
+    expect(deleted.path).toBe('folder')
+    await expect(stat(join(root, 'folder'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(fs.read(root, 'keep.txt')).resolves.toMatchObject({ content: 'keep' })
+    await expect(fs.delete(root, 'missing.txt')).rejects.toMatchObject({ code: 'FS_NOT_FOUND' })
+    await expect(fs.delete(root, '')).rejects.toMatchObject({ code: 'INVALID_PATH' })
   })
 })

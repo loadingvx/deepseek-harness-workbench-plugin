@@ -20,11 +20,11 @@ A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/dee
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.8** (npm tag `latest`) |
+| Version | **0.1.9** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.8
++ dsh-workbench-plugin@0.1.9
 ```
 
 Maintainers publish with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -60,7 +60,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.8 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.9 manually using the command above. Later releases will prompt in the UI.
 
 ## Interface
 
@@ -70,7 +70,7 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 
 ![Editor and file tree](docs/img/terminal.png)
 
-Markdown preview (the 👁 mode in the editor) renders images: `http(s)` URLs load directly, and workspace-relative paths such as `./img/x.png`, `../img/x.png`, or `/img/x.png` are served as raw bytes through the workbench API. Sources escaping the workspace root and `data:`/ `javascript:` URLs are skipped.
+Markdown preview (the 👁 mode in the editor) renders images (http(s) and workspace-relative paths) and Mermaid diagrams (```mermaid fenced blocks, powered by [mermaid.js](https://mermaid.js.org/) 11).
 
 ## Workspace terminal
 

@@ -1,8 +1,8 @@
-import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, realpath, rename as fsRename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, extname, join, normalize, relative, resolve as resolvePath, sep } from 'node:path'
 import { GitError } from '../shared/errors.ts'
 import { entryMatchesFilter, MAX_SEARCH_HITS, normalizeFileFilter, shouldSkipSearchDir } from '../shared/file-filter.ts'
-import type { FsDirEntry, FsFileSnapshot, FsListSnapshot, FsSearchSnapshot, FsWriteResult } from '../shared/types.ts'
+import type { FsDeleteResult, FsDirEntry, FsFileSnapshot, FsListSnapshot, FsRenameResult, FsSearchSnapshot, FsWriteResult } from '../shared/types.ts'
 
 export const MAX_FILE_BYTES = 1_500_000
 /** Images may be larger than text buffers; cap at 8 MB to protect the server and browser. */
@@ -316,6 +316,47 @@ export class WorkspaceFs {
     const mime = imageMimeOf(rel, buffer)
     if (mime === null) throw new GitError('FS_BINARY')
     return { buffer, mime }
+  }
+
+  /** Rename or move a workspace entry (file or folder). Rejects names that already exist or paths inside the source itself. */
+  async rename(root: string, fromPath: string, toPath: string): Promise<FsRenameResult> {
+    const fromRel = assertSafeWorkspacePath(root, fromPath)
+    const toRel = assertSafeWorkspacePath(root, toPath)
+    if (fromRel === '' || toRel === '') throw new GitError('INVALID_PATH')
+    if (fromRel === toRel) throw new GitError('FS_EXISTS')
+    const inside = toRel === fromRel || toRel.startsWith(fromRel + '/')
+    if (inside) throw new GitError('INVALID_PATH')
+    const fromAbs = await resolveInside(root, fromRel)
+    const toAbs = await resolveInside(root, toRel)
+    let target
+    try {
+      target = await stat(toAbs)
+    } catch (error) {
+      if (!isNotFound(error)) throw new GitError('FS_RENAME_FAILED')
+    }
+    if (target !== undefined) throw new GitError('FS_EXISTS')
+    try {
+      await fsRename(fromAbs, toAbs)
+    } catch (error) {
+      if (error instanceof GitError) throw error
+      throw new GitError('FS_RENAME_FAILED', error instanceof Error ? error.message : undefined)
+    }
+    return { path: toPosix(toRel) }
+  }
+
+  /** Delete a workspace entry (file or folder, recursively). */
+  async delete(root: string, filePath: string): Promise<FsDeleteResult> {
+    const rel = assertSafeWorkspacePath(root, filePath)
+    if (rel === '') throw new GitError('INVALID_PATH')
+    const abs = await resolveInside(root, rel)
+    try {
+      await rm(abs, { recursive: true, force: false })
+    } catch (error) {
+      if (isNotFound(error)) throw new GitError('FS_NOT_FOUND')
+      if (error instanceof GitError) throw error
+      throw new GitError('FS_DELETE_FAILED', error instanceof Error ? error.message : undefined)
+    }
+    return { path: toPosix(rel) }
   }
 
   async write(root: string, filePath: string, content: string): Promise<FsWriteResult> {

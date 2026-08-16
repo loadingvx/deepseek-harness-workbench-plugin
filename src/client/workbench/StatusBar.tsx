@@ -245,10 +245,10 @@ function StatusTabs({
         ) : tabs.map(tab => {
           const label = tab.kind === 'terminal'
             ? terminalTabLabel(tab, t)
-            : tab.kind === 'diff'
+            : tab.kind === 'diff' || tab.kind === 'commitDiff'
               ? t('status.diff', { name: fileName(tab.path) })
               : fileName(tab.path)
-          const title = tab.kind === 'file' || tab.kind === 'diff'
+          const title = tab.kind === 'file' || tab.kind === 'diff' || tab.kind === 'commitDiff'
             ? redactSecrets(tab.path)
             : tab.kind === 'terminal' && aiTermIds?.includes(tab.id)
               ? t('term.ai.modeOn')

@@ -98,14 +98,17 @@ export function EditorPane({
   const [mdView, setMdView] = useState<Record<string, MdViewMode>>({})
 
   useEffect(() => {
-    if (active?.kind !== 'diff' || workspaceId === undefined) {
+    if ((active?.kind !== 'diff' && active?.kind !== 'commitDiff') || workspaceId === undefined) {
       setDiffText('')
       setDiffLoading(false)
       return
     }
     let cancelled = false
     setDiffLoading(true)
-    void client.diff(workspaceId, active.path, active.staged === true).then((result) => {
+    const load = active.kind === 'commitDiff'
+      ? client.commitDiff(workspaceId, active.hash ?? '', active.path)
+      : client.diff(workspaceId, active.path, active.staged === true)
+    void load.then((result) => {
       if (cancelled) return
       setDiffLoading(false)
       if (result.ok) {
@@ -236,7 +239,7 @@ export function EditorPane({
         <p className={css.emptyHint}>{t('editor.emptyHint')}</p>
       </div>
     )
-  } else if (active.kind === 'diff') {
+  } else if (active.kind === 'diff' || active.kind === 'commitDiff') {
     const rows = parseDiff(diffText)
     const binary = !diffLoading && isBinaryDiff(diffText)
     const newEmpty = !diffLoading && isNewEmptyDiff(diffText, rows)
@@ -368,7 +371,7 @@ export function EditorPane({
               >
                 <IconSave />
               </IconButton>
-            ) : active?.kind === 'diff' ? (
+            ) : active?.kind === 'diff' || active?.kind === 'commitDiff' ? (
               <IconButton label={t('editor.fileTab')} onClick={() => { onOpenFile(active.path) }}>
                 <IconDiff />
               </IconButton>
@@ -392,7 +395,9 @@ export function EditorPane({
                       ? terminalTabLabel(tab, t)
                       : tab.kind === 'diff'
                         ? `${fileName(tab.path)} · ${t('editor.diffTab')}`
-                        : fileName(tab.path)}
+                        : tab.kind === 'commitDiff'
+                          ? `${fileName(tab.path)} · ${t('editor.commitDiffTab')}`
+                          : fileName(tab.path)}
                   </button>
                   {tabDirty ? <span className={css.dirtyDot} title={t('editor.dirty')} /> : null}
                   {tab.kind === 'terminal' ? (

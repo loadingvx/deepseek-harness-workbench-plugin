@@ -1,6 +1,6 @@
 /** Directory of the current editor tab. Terminal / empty → workspace root. */
 export function suggestNewFileDir(path: string | undefined, kind?: string): string {
-  if (kind !== 'file' && kind !== 'diff') return ''
+  if (kind !== 'file' && kind !== 'diff' && kind !== 'commitDiff') return ''
   if (path === undefined || path === '') return ''
   const slash = path.replace(/\\/g, '/').lastIndexOf('/')
   return slash === -1 ? '' : path.slice(0, slash)

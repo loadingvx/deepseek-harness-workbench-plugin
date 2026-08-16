@@ -36,6 +36,10 @@ function diffTabId(path: string, staged: boolean): string {
   return `diff:${staged ? '1' : '0'}:${path}`
 }
 
+function commitDiffTabId(hash: string, path: string): string {
+  return `commit:${hash}:${path}`
+}
+
 function fileName(path: string): string {
   const parts = path.split('/')
   return parts[parts.length - 1] || path
@@ -260,6 +264,79 @@ export function Workbench(props: WorkbenchProps) {
     setActiveId(id)
   }
 
+  const openCommitDiff = (hash: string, path: string): void => {
+    setEditorOpen(true)
+    const id = commitDiffTabId(hash, path)
+    setTabs((current) => current.some(tab => tab.id === id)
+      ? current
+      : [...current, { id, kind: 'commitDiff', path, title: fileName(path), hash }])
+    setActiveId(id)
+  }
+
+  /** Keep open editor tabs and buffers in sync when a file or folder is renamed/moved. */
+  const renamePath = (from: string, to: string): void => {
+    if (from === to) return
+    setTabs(current => current.map(tab => {
+      if (tab.kind === 'terminal') return tab
+      if (tab.path !== from && !tab.path.startsWith(from + '/')) return tab
+      const nextPath = tab.path === from ? to : to + tab.path.slice(from.length)
+      if (tab.kind === 'file') {
+        return { ...tab, id: fileTabId(nextPath), path: nextPath, title: fileName(nextPath) }
+      }
+      if (tab.kind === 'diff') {
+        return { ...tab, id: diffTabId(nextPath, tab.staged === true), path: nextPath }
+      }
+      return { ...tab, id: commitDiffTabId(tab.hash ?? '', nextPath), path: nextPath }
+    }))
+    setBuffers(current => {
+      const next: Record<string, FileBuffer> = {}
+      for (const [path, buffer] of Object.entries(current)) {
+        if (path === from || path.startsWith(from + '/')) {
+          const nextPath = path === from ? to : to + path.slice(from.length)
+          next[nextPath] = { ...buffer, path: nextPath }
+        } else {
+          next[path] = buffer
+        }
+      }
+      return next
+    })
+    setSelectedDiff(current => {
+      if (current === null) return current
+      if (current.path !== from && !current.path.startsWith(from + '/')) return current
+      return { ...current, path: current.path === from ? to : to + current.path.slice(from.length) }
+    })
+  }
+
+  /** Close editor tabs and drop buffers when a file or folder is deleted. */
+  const deletePath = (path: string): void => {
+    const closing = new Set<string>()
+    setTabs(current => {
+      const next = current.filter(tab => {
+        if (tab.kind === 'terminal') return true
+        if (tab.path === path || tab.path.startsWith(path + '/')) {
+          closing.add(tab.id)
+          return false
+        }
+        return true
+      })
+      return next
+    })
+    setBuffers(current => {
+      const next = { ...current }
+      for (const key of Object.keys(next)) {
+        if (key === path || key.startsWith(path + '/')) delete next[key]
+      }
+      return next
+    })
+    setSelectedDiff(current => {
+      if (current === null) return current
+      return current.path === path || current.path.startsWith(path + '/') ? null : current
+    })
+    window.setTimeout(() => {
+      setActiveId(current => current === null || closing.has(current) ? TERMINAL_TAB_ID : current)
+    }, 0)
+  }
+
   const closeTab = (id: string): void => {
     closeTabs([id])
   }
@@ -385,6 +462,9 @@ export function Workbench(props: WorkbenchProps) {
           onTab={setSideTab}
           onOpenFile={(path) => { void openFile(path) }}
           onOpenDiff={openDiff}
+          onOpenCommitDiff={openCommitDiff}
+          onRenamed={renamePath}
+          onDeleted={deletePath}
           onCollapse={() => { setSideOpen(false) }}
           leadingSash={
             <ColSash

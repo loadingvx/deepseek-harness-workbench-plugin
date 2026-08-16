@@ -1,5 +1,6 @@
-import { useMemo, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, type MouseEvent } from 'react'
 import { markdownFileFromClick, renderMarkdownHtml } from './markdown-html.ts'
+import { renderMermaidBlocks } from './mermaid-render.ts'
 import type { Translate } from './types.ts'
 import css from './MarkdownPreview.module.css'
 
@@ -16,6 +17,8 @@ export function MarkdownPreview({
   t: Translate
   workspaceId?: string
 }) {
+  const bodyRef = useRef<HTMLDivElement>(null)
+
   const html = useMemo(() => {
     if (markdown.trim() === '') return ''
     try {
@@ -29,6 +32,19 @@ export function MarkdownPreview({
       return null
     }
   }, [path, markdown, t, workspaceId])
+
+  useEffect(() => {
+    const root = bodyRef.current
+    if (root === null) return
+    let cancelled = false
+    void renderMermaidBlocks(
+      root,
+      { host: css.mermaidHost, error: css.mermaidError },
+      t('editor.mdMermaidFail'),
+      () => cancelled,
+    )
+    return () => { cancelled = true }
+  }, [html, t])
 
   if (markdown.trim() === '') {
     return (
@@ -53,7 +69,7 @@ export function MarkdownPreview({
 
   return (
     <div className={css.root} role="article" aria-label={t('editor.mdPreview')} onClick={onClick}>
-      <div className={css.body} dangerouslySetInnerHTML={{ __html: html }} />
+      <div className={css.body} ref={bodyRef} dangerouslySetInnerHTML={{ __html: html }} />
     </div>
   )
 }

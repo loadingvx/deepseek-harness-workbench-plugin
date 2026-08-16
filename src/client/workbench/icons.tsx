@@ -307,6 +307,24 @@ export function IconGithub({ size = 16 }: { size?: number }) {
   )
 }
 
+export function IconRename() {
+  return (
+    <Icon>
+      <path d="M11.9 2.3 13.7 4.1 6 11.8 3.4 12.6 4.2 10z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M10.6 3.6 12.4 5.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
+export function IconTrash() {
+  return (
+    <Icon>
+      <path d="M3 4.2h10M6.4 4.2V2.9h3.2v1.3M5.1 4.2l.6 8.8h4.6l.6-8.8" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6.8 6.6v4.6M9.2 6.6v4.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
 export function IconNpm({ size = 16 }: { size?: number }) {
   return (
     <Icon size={size}>
