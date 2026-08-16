@@ -16,6 +16,18 @@ A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/dee
 - [AI command assist](#ai-command-assist)
 - [License](#license)
 
+## Interface
+
+The workbench uses a three-column layout. Conversation stays on the left. The two columns on the right are the new capability area: editor and terminal in the center, file tree and Git on the far right.
+
+![screen_1](docs/img/screen_shot_1.png)
+![screen_2](docs/img/screen_shot_2.png)
+![screen_3](docs/img/screen_shot_3.png)
+![screen_4](docs/img/screen_shot_4.png)
+![screen_5](docs/img/screen_shot_5.png)
+![screen_6](docs/img/screen_shot_6.png)
+
+
 ## Core capabilities
 
 1. **Smart terminal.** A local pseudo-terminal (PTY) inside the workbench. Input is classified automatically — lines that are real shell commands (including pasted prompt prefixes like `$ ls`) go straight to the PTY, while natural-language tasks are translated by the model into shell commands and typed into the **current session** shell; no separate shell is started. Greetings, warnings and one-line explanations are written as non-executable POSIX no-ops, and commands matching the configurable destructive blacklist are refused with a note.
@@ -67,10 +79,19 @@ Maintainers publish with `bash devops/release.sh`. The script uses the existing 
 
 ### Procedure
 
-1. Install the plugin:
+1. Install the plugin (pin the version; do not omit `@0.1.10`):
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin
+dsh plugin --profile web add dsh-workbench-plugin@0.1.10
+```
+
+`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.10` requests that release explicitly.
+
+If a pinned install is still refused as too new, add this to `~/.dsh/profiles/web/pnpm-workspace.yaml` and run the command again:
+
+```yaml
+minimumReleaseAgeExclude:
+  - dsh-workbench-plugin
 ```
 
 2. Restart `dsh web`.
@@ -91,17 +112,6 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 ### Upgrading from 0.1.1
 
 **Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.10 manually using the command above. Later releases will prompt in the UI.
-
-## Interface
-
-The workbench uses a three-column layout. Conversation stays on the left. The two columns on the right are the new capability area: editor and terminal in the center, file tree and Git on the far right.
-
-![screen_1](docs/img/screen_shot_1.png)
-![screen_2](docs/img/screen_shot_2.png)
-![screen_3](docs/img/screen_shot_3.png)
-![screen_4](docs/img/screen_shot_4.png)
-![screen_5](docs/img/screen_shot_5.png)
-![screen_6](docs/img/screen_shot_6.png)
 
 Markdown preview (the 👁 mode in the editor) renders images (http(s) and workspace-relative paths) and Mermaid diagrams (```mermaid fenced blocks, powered by [mermaid.js](https://mermaid.js.org/) 11).
 

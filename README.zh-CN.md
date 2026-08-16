@@ -16,6 +16,18 @@ DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作�
 - [AI 命令助手](#ai-命令助手)
 - [许可证](#许可证)
 
+## Interface
+
+The workbench uses a three-column layout. Conversation stays on the left. The two columns on the right are the new capability area: editor and terminal in the center, file tree and Git on the far right.
+
+![screen_1](docs/img/screen_shot_1.png)
+![screen_2](docs/img/screen_shot_2.png)
+![screen_3](docs/img/screen_shot_3.png)
+![screen_4](docs/img/screen_shot_4.png)
+![screen_5](docs/img/screen_shot_5.png)
+![screen_6](docs/img/screen_shot_6.png)
+
+
 ## 核心能力
 
 1. **智能终端**：工作台内置本地伪终端（PTY）。输入会被自动分类——真正的 shell 命令（含粘贴的提示符前缀，如 `$ ls`）直接写入终端；自然语言任务则由模型翻译为 shell 命令，写入**当前会话**所用的 shell，不启动独立 shell。问候、风险说明与命令前的一行解释以不可执行的 POSIX 空操作写入，绝不执行；命中可配置黑名单的危险命令会被拒绝并给出提示。
@@ -67,10 +79,19 @@ DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作�
 
 ### 步骤
 
-1. 安装插件：
+1. 安装插件（必须带版本号，不要省略 `@0.1.10`）：
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin
+dsh plugin --profile web add dsh-workbench-plugin@0.1.10
+```
+
+`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.10` 才会明确要这一版。
+
+若指定版本后仍提示太新、装不上，在 `~/.dsh/profiles/web/pnpm-workspace.yaml` 加上下面两行，再执行一次安装命令：
+
+```yaml
+minimumReleaseAgeExclude:
+  - dsh-workbench-plugin
 ```
 
 2. 重启 `dsh web`。
