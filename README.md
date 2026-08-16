@@ -5,8 +5,36 @@
 
 A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. After Workbench is opened in Conversation, chat stays on the left. Two new columns appear on the right: the editor (syntax highlighting and terminal) and files & Git.
 
+## Architecture
+
+The plugin attaches to DeepSeek Harness Conversation. The UI is three columns; the code is Client / Shared / Host.
+
+```mermaid
+flowchart TB
+  dsh["DeepSeek Harness · dsh web"]
+
+  subgraph ui["Workbench UI"]
+    direction LR
+    chat["Chat"]
+    editor["Editor + smart terminal"]
+    files["Files + Git"]
+  end
+
+  subgraph code["Plugin layers"]
+    direction TB
+    client["Client · browser<br/>Workbench · Git tool cards · locales"]
+    shared["Shared<br/>types · errors · redactSecrets"]
+    host["Host · Node<br/>HTTP API · Git / workspace files / PTY<br/>git_* model tools · update check"]
+    client --> shared --> host
+  end
+
+  dsh --> ui
+  ui --> client
+```
+
 ## Contents
 
+- [Architecture](#architecture)
 - [Core capabilities](#core-capabilities)
 - [Capability matrix](#capability-matrix)
 - [Release](#release)

@@ -2,8 +2,36 @@
 
 DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作台后，对话保留在左侧；右侧新增两栏，分别承载编辑器（含语法高亮与终端）以及文件与 Git。
 
+## 架构
+
+插件挂在 DeepSeek Harness 的「对话」上：界面是三栏工作台，代码按 Client / Shared / Host 分层。
+
+```mermaid
+flowchart TB
+  dsh["DeepSeek Harness · dsh web"]
+
+  subgraph ui["工作台界面"]
+    direction LR
+    chat["对话"]
+    editor["编辑器 + 智能终端"]
+    files["文件树 + Git"]
+  end
+
+  subgraph code["插件分层"]
+    direction TB
+    client["Client 浏览器<br/>Workbench · Git 工具卡片 · 中英词典"]
+    shared["Shared 共享<br/>类型 · 错误码 · 密钥脱敏"]
+    host["Host Node<br/>HTTP API · Git / 工作区文件 / PTY<br/>git_* 模型工具 · 升级检查"]
+    client --> shared --> host
+  end
+
+  dsh --> ui
+  ui --> client
+```
+
 ## 目录
 
+- [架构](#架构)
 - [核心能力](#核心能力)
 - [能力矩阵](#能力矩阵)
 - [发行信息](#发行信息)
