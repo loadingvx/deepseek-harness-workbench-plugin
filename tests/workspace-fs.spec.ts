@@ -113,6 +113,38 @@ describe('WorkspaceFs', () => {
 
     await expect(fs.readImage(root, 'missing.png')).rejects.toMatchObject({ code: 'FS_NOT_FOUND' })
   })
+
+  it('reads xlsx / csv / tsv data files and rejects fakes', async () => {
+    const root = await tempRoot()
+    const zip = Buffer.concat([
+      Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+      Buffer.from('fake zip payload'),
+    ])
+    await writeFile(join(root, 'book.xlsx'), zip)
+    const xlsx = await fs.readData(root, 'book.xlsx')
+    expect(xlsx.mime).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    expect(xlsx.buffer.equals(zip)).toBe(true)
+
+    await writeFile(join(root, 'data.csv'), 'a,b\n1,2\n')
+    const csv = await fs.readData(root, 'data.csv')
+    expect(csv.mime).toBe('text/csv; charset=utf-8')
+    expect(csv.buffer.toString('utf8')).toBe('a,b\n1,2\n')
+
+    await writeFile(join(root, 'data.tsv'), 'a\tb')
+    expect((await fs.readData(root, 'data.tsv')).mime).toBe('text/tab-separated-values; charset=utf-8')
+
+    await writeFile(join(root, 'fake.xlsx'), 'not a zip at all')
+    await expect(fs.readData(root, 'fake.xlsx')).rejects.toMatchObject({ code: 'FS_BINARY' })
+
+    await writeFile(join(root, 'binary.csv'), Buffer.from([0x00, 0x01, 0x02]))
+    await expect(fs.readData(root, 'binary.csv')).rejects.toMatchObject({ code: 'FS_BINARY' })
+
+    await writeFile(join(root, 'legacy.xls'), 'BIFF bytes')
+    await expect(fs.readData(root, 'legacy.xls')).rejects.toMatchObject({ code: 'FS_BINARY' })
+
+    await writeFile(join(root, 'notes.txt'), 'plain text')
+    await expect(fs.readData(root, 'notes.txt')).rejects.toMatchObject({ code: 'FS_BINARY' })
+  })
 })
 
 describe('WorkspaceFs rename / move / delete', () => {

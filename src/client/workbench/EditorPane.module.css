@@ -368,6 +368,53 @@
   min-height: 0;
   height: 100%;
   overflow: hidden;
+  /* Light syntax palette (GitHub-Light inspired); dark values override below. */
+  --dsw-wb-syn-comment: #59636e;
+  --dsw-wb-syn-keyword: #cf222e;
+  --dsw-wb-syn-definition-keyword: #cf222e;
+  --dsw-wb-syn-operator-keyword: #cf222e;
+  --dsw-wb-syn-operator: #1f2328;
+  --dsw-wb-syn-string: #0a3069;
+  --dsw-wb-syn-number: #0550ae;
+  --dsw-wb-syn-constant: #cf222e;
+  --dsw-wb-syn-variable: #953800;
+  --dsw-wb-syn-function: #8250df;
+  --dsw-wb-syn-property: #0550ae;
+  --dsw-wb-syn-type: #116329;
+  --dsw-wb-syn-class: #8250df;
+  --dsw-wb-syn-tag: #116329;
+  --dsw-wb-syn-attribute: #0550ae;
+  --dsw-wb-syn-punctuation: #59636e;
+  --dsw-wb-syn-regexp: #0a3069;
+  --dsw-wb-syn-meta: #59636e;
+  --dsw-wb-syn-heading: #0550ae;
+  --dsw-wb-syn-link: #0969da;
+  --dsw-wb-syn-invalid: #82071e;
+}
+
+:global(body[data-ds-dark-theme]) .cmHost {
+  /* Dark syntax palette (VS Code Dark+). */
+  --dsw-wb-syn-comment: #6a9955;
+  --dsw-wb-syn-keyword: #c586c0;
+  --dsw-wb-syn-definition-keyword: #569cd6;
+  --dsw-wb-syn-operator-keyword: #d4d4d4;
+  --dsw-wb-syn-operator: #d4d4d4;
+  --dsw-wb-syn-string: #ce9178;
+  --dsw-wb-syn-number: #b5cea8;
+  --dsw-wb-syn-constant: #569cd6;
+  --dsw-wb-syn-variable: #9cdcfe;
+  --dsw-wb-syn-function: #dcdcaa;
+  --dsw-wb-syn-property: #9cdcfe;
+  --dsw-wb-syn-type: #4ec9b0;
+  --dsw-wb-syn-class: #4ec9b0;
+  --dsw-wb-syn-tag: #569cd6;
+  --dsw-wb-syn-attribute: #9cdcfe;
+  --dsw-wb-syn-punctuation: #808080;
+  --dsw-wb-syn-regexp: #d16969;
+  --dsw-wb-syn-meta: #9b9b9b;
+  --dsw-wb-syn-heading: #569cd6;
+  --dsw-wb-syn-link: #3794ff;
+  --dsw-wb-syn-invalid: #f44747;
 }
 
 .cmHost :global(.cm-editor) {

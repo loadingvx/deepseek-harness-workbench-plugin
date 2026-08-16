@@ -278,7 +278,8 @@ function StatusTabs({
             : tab.kind === 'diff' || tab.kind === 'commitDiff'
               ? t('status.diff', { name: fileName(tab.path) })
               : fileName(tab.path)
-          const title = tab.kind === 'file' || tab.kind === 'diff' || tab.kind === 'commitDiff'
+          const title = tab.kind === 'file' || tab.kind === 'preview'
+            || tab.kind === 'diff' || tab.kind === 'commitDiff'
             ? redactSecrets(tab.path)
             : tab.kind === 'terminal' && aiTermIds?.includes(tab.id)
               ? t('term.ai.modeOn')

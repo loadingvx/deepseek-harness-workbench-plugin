@@ -17,6 +17,7 @@ import railCss from './Rail.module.css'
 import { SideDock, type SideTab } from './SideDock.tsx'
 import { termIdFromTabId } from '../../shared/new-file-path.ts'
 import { createTerminalTab, nextTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type WorkbenchInjected } from './types.ts'
+import { previewKindOfPath } from '../../shared/preview-kind.ts'
 import { StatusBar } from './StatusBar.tsx'
 import { STATUS_BAR_H } from './status-bar.ts'
 import { usePluginUpdate, visibleUpdate } from './UpdateBanner.tsx'
@@ -291,6 +292,14 @@ function WorkbenchInner(props: WorkbenchProps) {
     if (workspaceId === undefined) return
     setEditorOpen(true)
     const id = fileTabId(path)
+    const previewKind = previewKindOfPath(path)
+    if (previewKind !== null) {
+      setTabs(current => current.some(tab => tab.id === id)
+        ? current
+        : [...current, { id, kind: 'preview', path, title: fileName(path), preview: previewKind }])
+      setActiveId(id)
+      return
+    }
     setTabs((current) => current.some(tab => tab.id === id)
       ? current
       : [...current, { id, kind: 'file', path, title: fileName(path) }])
@@ -339,7 +348,7 @@ function WorkbenchInner(props: WorkbenchProps) {
       if (tab.kind === 'terminal') return tab
       if (tab.path !== from && !tab.path.startsWith(from + '/')) return tab
       const nextPath = tab.path === from ? to : to + tab.path.slice(from.length)
-      if (tab.kind === 'file') {
+      if (tab.kind === 'file' || tab.kind === 'preview') {
         return { ...tab, id: fileTabId(nextPath), path: nextPath, title: fileName(nextPath) }
       }
       if (tab.kind === 'diff') {

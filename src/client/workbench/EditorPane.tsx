@@ -9,6 +9,7 @@ import { TerminalView } from './TerminalView.tsx'
 import { TERMINAL_TAB_ID, terminalTabLabel, type FileBuffer, type FileTab, type Translate } from './types.ts'
 import { CodeEditor } from './CodeEditor.tsx'
 import { isMarkdownPath } from './code-language.ts'
+import { FilePreview } from './FilePreview.tsx'
 import { MarkdownPreview } from './MarkdownPreview.tsx'
 import css from './EditorPane.module.css'
 
@@ -266,6 +267,16 @@ export function EditorPane({
           </pre>
         ) : null}
       </div>
+    )
+  } else if (active.kind === 'preview') {
+    body = (
+      <FilePreview
+        client={client}
+        workspaceId={workspaceId}
+        path={active.path}
+        kind={active.preview ?? 'image'}
+        t={t}
+      />
     )
   } else if (buffer === undefined) {
     body = <p className={css.hint}>{t('panel.loading')}</p>

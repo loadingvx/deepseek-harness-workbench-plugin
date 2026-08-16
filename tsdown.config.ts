@@ -1,8 +1,15 @@
 import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, dirname, resolve as resolvePath } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { transform } from 'lightningcss'
 import type { UserConfig } from 'tsdown'
+import { findForbiddenClientRequire } from './src/shared/client-bundle-guard.ts'
+
+function resolveBrowserPkg(spec: string): string {
+  const resolved = import.meta.resolve(spec)
+  return resolved.startsWith('file:') ? fileURLToPath(resolved) : resolved
+}
 
 const PACKAGE_ID = 'dsh-workbench-plugin'
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
@@ -46,6 +53,10 @@ const client: UserConfig = {
   outDir: 'lib',
   format: 'cjs',
   platform: 'browser',
+  // Do not inherit package.json engines.node (node22…): that makes rolldown
+  // pick fflate's Node export, which does createRequire("module") and crashes
+  // DSH ModuleLoader at plugin load.
+  target: 'es2024',
   dts: false,
   sourcemap: true,
   clean: false,
@@ -55,6 +66,9 @@ const client: UserConfig = {
     'node:process': resolvePath('src/client/shims/node-process.ts'),
     'node:path': resolvePath('src/client/shims/node-path.ts'),
     'node:url': resolvePath('src/client/shims/node-url.ts'),
+    'node:module': resolvePath('src/client/shims/node-module.ts'),
+    module: resolvePath('src/client/shims/node-module.ts'),
+    fflate: resolveBrowserPkg('fflate/browser'),
   },
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
@@ -66,8 +80,9 @@ const client: UserConfig = {
     generateBundle(_opts: unknown, bundle: Record<string, { type: string; code?: string }>) {
       for (const [fileName, chunk] of Object.entries(bundle)) {
         if (chunk.type !== 'chunk' || chunk.code === undefined) continue
-        if (/require\(["']node:/.test(chunk.code)) {
-          throw new Error(`${fileName} must not require("node:…"); DSH web ModuleLoader cannot load Node builtins`)
+        const forbidden = findForbiddenClientRequire(chunk.code)
+        if (forbidden !== undefined) {
+          throw new Error(`${fileName} 含有 ${forbidden}。DSH 网页 ModuleLoader 不能加载 Node 内置模块，请改用浏览器构建或 src/client/shims`)
         }
       }
     },

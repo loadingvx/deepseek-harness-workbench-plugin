@@ -139,6 +139,8 @@ export interface GitClient {
   listDir(workspaceId: string, path?: string): Promise<GitResult<FsListSnapshot>>
   searchFiles(workspaceId: string, query: string, hidden?: boolean): Promise<GitResult<FsSearchSnapshot>>
   readFile(workspaceId: string, path: string): Promise<GitResult<FsFileSnapshot>>
+  /** Fetch a data file (xlsx / csv / tsv) as raw bytes for table preview. */
+  readRawFile(workspaceId: string, path: string): Promise<GitResult<ArrayBuffer>>
   writeFile(workspaceId: string, path: string, content: string): Promise<GitResult<FsWriteResult>>
   listEditors(): Promise<GitResult<ExternalEditorsSnapshot>>
   openExternal(workspaceId: string, path?: string, app?: ExternalEditorId): Promise<GitResult<ExternalOpenResult>>
@@ -231,6 +233,22 @@ export function createGitClient(): GitClient {
     readFile: (workspaceId, path) => {
       const query = new URLSearchParams({ workspaceId, path })
       return request(`/git/fs/read?${query.toString()}`)
+    },
+    readRawFile: async (workspaceId, path) => {
+      const query = new URLSearchParams({ workspaceId, path })
+      try {
+        const response = await fetch(`/git/fs/raw?${query.toString()}`)
+        if (!response.ok) {
+          try {
+            const data: unknown = await response.json()
+            if (typeof data === 'object' && data !== null && 'ok' in data) return data as GitFail
+          } catch { /* fall through to a generic failure */ }
+          return fail('GIT_FAILED', '无法读取这个文件用于预览。')
+        }
+        return { ok: true, value: await response.arrayBuffer() }
+      } catch {
+        return fail('NETWORK')
+      }
     },
     writeFile: (workspaceId, path, content) => request('/git/fs/write', {
       method: 'POST', body: JSON.stringify({ workspaceId, path, content }),

@@ -264,6 +264,22 @@ export function registerGitHttp(
           send(res, 400, toFail(error))
         }
         return
+      } else if (method === 'GET' && route === '/git/fs/raw') {
+        const path = query(url, 'path')
+        if (path === undefined) {
+          send(res, 400, fail('BAD_REQUEST'))
+          return
+        }
+        try {
+          const data = await fs.readData(rootOf(), path)
+          res.statusCode = 200
+          res.setHeader('content-type', data.mime)
+          res.setHeader('cache-control', 'no-store')
+          res.end(data.buffer)
+        } catch (error) {
+          send(res, 400, toFail(error))
+        }
+        return
       } else if (method === 'POST' && route === '/git/fs/rename') {
         const body = await readJson(req)
         const from = typeof body.from === 'string' ? body.from : ''

@@ -321,6 +321,48 @@ export class WorkspaceFs {
     return { buffer, mime }
   }
 
+  /**
+   * Read a spreadsheet / delimited-text file (xlsx, csv, tsv) as raw bytes
+   * for in-browser table preview. Validates the container so arbitrary
+   * workspace files cannot be served as data.
+   */
+  async readData(root: string, filePath: string): Promise<{ buffer: Buffer; mime: string }> {
+    const rel = assertSafeWorkspacePath(root, filePath)
+    if (rel === '') throw new GitError('FS_IS_DIRECTORY')
+    const abs = await resolveInside(root, rel)
+    let info
+    try {
+      info = await stat(abs)
+    } catch (error) {
+      if (isNotFound(error)) throw new GitError('FS_NOT_FOUND')
+      throw new GitError('GIT_FAILED', error instanceof Error ? error.message : String(error))
+    }
+    if (info.isDirectory()) throw new GitError('FS_IS_DIRECTORY')
+    if (info.size > MAX_IMAGE_BYTES) throw new GitError('FS_TOO_LARGE')
+    let buffer: Buffer
+    try {
+      buffer = await readFile(abs)
+    } catch (error) {
+      if (isPermission(error)) throw new GitError('FS_WRITE_FAILED')
+      throw new GitError('GIT_FAILED', error instanceof Error ? error.message : String(error))
+    }
+    const ext = extname(rel).toLowerCase()
+    if (ext === '.xlsx') {
+      const magic = Buffer.from([0x50, 0x4b, 0x03, 0x04])
+      if (buffer.length < 4 || !buffer.subarray(0, 4).equals(magic)) throw new GitError('FS_BINARY')
+      return { buffer, mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+    }
+    const mime = ext === '.csv'
+      ? 'text/csv; charset=utf-8'
+      : ext === '.tsv'
+        ? 'text/tab-separated-values; charset=utf-8'
+        : null
+    if (mime === null) throw new GitError('FS_BINARY')
+    const sample = buffer.subarray(0, Math.min(buffer.length, 8192))
+    if (sample.includes(0)) throw new GitError('FS_BINARY')
+    return { buffer, mime }
+  }
+
   /** Rename or move a workspace entry (file or folder). Rejects names that already exist or paths inside the source itself. */
   async rename(root: string, fromPath: string, toPath: string): Promise<FsRenameResult> {
     const fromRel = assertSafeWorkspacePath(root, fromPath)

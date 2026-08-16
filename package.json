@@ -68,11 +68,15 @@
     "lightningcss": "^1.32.0",
     "marked": "^18.0.9",
     "mermaid": "^11.16.1",
+    "papaparse": "^5.6.0",
+    "read-excel-file": "^9.3.10",
     "tsdown": "^0.22.2"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
+    "@types/papaparse": "^5.5.2",
     "@types/react": "~18.3.1",
+    "fflate": "^0.8.3",
     "jsdom": "^30.0.1",
     "react": "^18.2.0",
     "typescript": "^5.9.2",

@@ -27,7 +27,8 @@ export function PathBreadcrumb({
   const [error, setError] = useState<GitFail | null>(null)
 
   const rootLabel = workspaceTitle?.trim() || t('editor.breadcrumbWorkspace')
-  const parts = active?.kind === 'file' || active?.kind === 'diff' || active?.kind === 'commitDiff'
+  const parts = active?.kind === 'file' || active?.kind === 'preview'
+    || active?.kind === 'diff' || active?.kind === 'commitDiff'
     ? breadcrumbParts(active.path)
     : []
 

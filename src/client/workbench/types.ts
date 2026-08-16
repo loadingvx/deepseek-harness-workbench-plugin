@@ -18,9 +18,11 @@ export const TERMINAL_TAB_ID = 'terminal:main'
 
 export interface FileTab {
   id: string
-  kind: 'file' | 'diff' | 'commitDiff' | 'terminal'
+  kind: 'file' | 'preview' | 'diff' | 'commitDiff' | 'terminal'
   path: string
   title: string
+  /** Direct-render kind for preview tabs (image / table). */
+  preview?: 'image' | 'table'
   staged?: boolean
   /** Commit hash for commitDiff tabs. */
   hash?: string
