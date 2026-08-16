@@ -62,11 +62,11 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.11** (npm tag `latest`) |
+| Version | **0.1.12** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.11
++ dsh-workbench-plugin@0.1.12
 ```
 
 Maintainers publish npm with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -81,13 +81,13 @@ The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbenc
 
 ### Procedure
 
-1. Install the plugin (pin the version; do not omit `@0.1.11`):
+1. Install the plugin (pin the version; do not omit `@0.1.12`):
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.11
+dsh plugin --profile web add dsh-workbench-plugin@0.1.12
 ```
 
-`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.11` requests that release explicitly.
+`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.12` requests that release explicitly.
 
 If a pinned install is still refused as too new, add this to `~/.dsh/profiles/web/pnpm-workspace.yaml` and run the command again:
 
@@ -97,7 +97,7 @@ minimumReleaseAgeExclude:
 ```
 
 2. Restart `dsh web`.
-3. Open http://127.0.0.1:3080, enter **Conversation**, and select **Workbench** in the header.
+3. Open http://127.0.0.1:3080, enter **Conversation**, and create a new session. Workbench opens on the right immediately — you do not need to send a first message. After the first turn, the header **Workbench** button can hide or show it.
 
 ### App market / GitHub
 
@@ -123,7 +123,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.11 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.12 manually using the command above. Later releases will prompt in the UI.
 
 Markdown preview (the 👁 mode in the editor) renders images (http(s) and workspace-relative paths) and Mermaid diagrams (```mermaid fenced blocks, powered by [mermaid.js](https://mermaid.js.org/) 11).
 

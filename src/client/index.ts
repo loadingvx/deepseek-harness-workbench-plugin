@@ -14,11 +14,21 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workbench: dictionaries')
   const client = createGitClient()
 
+  // Host lives in the composer overlay so a blank new-session hero still
+  // mounts the workbench. The header utilities seat is hidden until the
+  // first message, so it can only carry the toggle.
+  ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
+    name: 'conversation.input.overlay',
+    id: 'workbench-host',
+    locale: NS,
+    inject: () => ({ client, mount: 'host' as const }),
+  }, Workbench))
+
   ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
     name: 'conversation.session.header.utilities',
     id: 'workbench',
     locale: NS,
-    inject: () => ({ client }),
+    inject: () => ({ client, mount: 'toggle' as const }),
   }, Workbench))
 
   ctx.slots.inject('tool.call.toolview', function* () {

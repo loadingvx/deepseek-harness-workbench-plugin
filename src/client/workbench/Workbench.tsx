@@ -1,8 +1,18 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import * as ReactNs from 'react'
 import { createPortal } from 'react-dom'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { GitFail } from '../../shared/types.ts'
+import {
+  defaultWorkbenchChrome,
+  getWorkbenchChrome,
+  patchWorkbenchChrome,
+  resetWorkbenchChrome,
+  shouldSplitWorkbench,
+  subscribeWorkbenchChrome,
+  workbenchOwnsPortal,
+  workbenchShowsToggle,
+} from './auto-open.ts'
 import { ColSash } from './ColSash.tsx'
 import {
   CHAT_MIN, CHAT_RATIO, CHAT_W_KEY, EDITOR_MIN, RAIL_W,
@@ -98,6 +108,9 @@ export function Workbench(props: WorkbenchProps) {
   const renderId = __wbActiveId
   console.log('[WB-DEBUG] render', renderId, __wbRenderCount, { useSessionType: typeof props.useSession })
   try {
+    const mount = props.mount ?? 'toggle'
+    if (workbenchShowsToggle(mount)) return <WorkbenchToggle t={props.t} />
+    if (!workbenchOwnsPortal(mount)) return null
     return <WorkbenchInner {...props} />
   } catch (error) {
     let dump = ''
@@ -110,13 +123,37 @@ export function Workbench(props: WorkbenchProps) {
     throw error
   }
 }
+
+function WorkbenchToggle({ t }: Pick<WorkbenchProps, 't'>) {
+  const chrome = useSyncExternalStore(subscribeWorkbenchChrome, getWorkbenchChrome, defaultWorkbenchChrome)
+  return (
+    <div className={css.host}>
+      <button
+        type="button"
+        className={css.toggle}
+        data-active={chrome.enabled || undefined}
+        title={t('ide.toggle')}
+        aria-label={t('ide.toggle')}
+        aria-pressed={chrome.enabled}
+        onClick={() => { patchWorkbenchChrome({ enabled: !chrome.enabled }) }}
+      >
+        <IconLayout />
+        <span>{t('ide.toggleLabel')}</span>
+      </button>
+      {chrome.enabled && !chrome.chatOpen ? (
+        <IconButton label={t('ide.showChat')} onClick={() => { patchWorkbenchChrome({ chatOpen: true }) }}>
+          <IconChat />
+        </IconButton>
+      ) : null}
+    </div>
+  )
+}
+
 function WorkbenchInner(props: WorkbenchProps) {
-  const { client, t, useSessions, useWorkspaces } = props
-  const [enabled, setEnabled] = useState(true)
-  const [chatOpen, setChatOpen] = useState(true)
-  const [editorOpen, setEditorOpen] = useState(true)
-  const [sideOpen, setSideOpen] = useState(true)
-  const [sideTab, setSideTab] = useState<SideTab>('git')
+  const { client, t, useSessions, useWorkspaces, sessionId } = props
+  const chrome = useSyncExternalStore(subscribeWorkbenchChrome, getWorkbenchChrome, defaultWorkbenchChrome)
+  const { enabled, chatOpen, editorOpen, sideOpen } = chrome
+  const [sideTab, setSideTab] = useState<SideTab>('files')
   const [host, setHost] = useState<HTMLElement | null>(null)
   const [tabs, setTabs] = useState<FileTab[]>(() => [createTerminalTab()])
   const [activeId, setActiveId] = useState<string | null>(TERMINAL_TAB_ID)
@@ -144,17 +181,19 @@ function WorkbenchInner(props: WorkbenchProps) {
   const workspaceId = workspace?.workspaceId
   const running = Boolean(props.useSession?.(state => state.running))
   const pending = (props.useSession?.(state => state.pending)?.length ?? 0) as number
-  const blank = Boolean(props.useSession?.(state => state.blank) && props.useSession?.(state => state.composerPhase) === 'blank')
-  const split = enabled && !blank
+  const split = shouldSplitWorkbench(enabled)
+
+  useLayoutEffect(() => {
+    resetWorkbenchChrome()
+  }, [sessionId])
 
   useEffect(() => {
-    if (running || pending > 0) setChatOpen(true)
+    if (running || pending > 0) patchWorkbenchChrome({ chatOpen: true })
   }, [running, pending])
 
   useEffect(() => {
     if (updateInfo === null) return
-    setEditorOpen(true)
-    setSideOpen(true)
+    patchWorkbenchChrome({ editorOpen: true, sideOpen: true })
     setActiveId(TERMINAL_TAB_ID)
   }, [updateInfo])
 
@@ -181,7 +220,9 @@ function WorkbenchInner(props: WorkbenchProps) {
     if (scroll === null) return
     const onFocus = (event: Event): void => {
       const target = event.target
-      if (target instanceof Element && target.closest('[data-composer-seat]') !== null) setChatOpen(true)
+      if (target instanceof Element && target.closest('[data-composer-seat]') !== null) {
+        patchWorkbenchChrome({ chatOpen: true })
+      }
     }
     scroll.addEventListener('focusin', onFocus)
     return () => { scroll.removeEventListener('focusin', onFocus) }
@@ -290,7 +331,7 @@ function WorkbenchInner(props: WorkbenchProps) {
 
   const openFile = useCallback(async (path: string): Promise<void> => {
     if (workspaceId === undefined) return
-    setEditorOpen(true)
+    patchWorkbenchChrome({ editorOpen: true })
     const id = fileTabId(path)
     const previewKind = previewKindOfPath(path)
     if (previewKind !== null) {
@@ -323,7 +364,7 @@ function WorkbenchInner(props: WorkbenchProps) {
   }, [client, workspaceId])
 
   const openDiff = (path: string, staged: boolean): void => {
-    setEditorOpen(true)
+    patchWorkbenchChrome({ editorOpen: true })
     const id = diffTabId(path, staged)
     setSelectedDiff({ path, staged })
     setTabs((current) => current.some(tab => tab.id === id)
@@ -333,7 +374,7 @@ function WorkbenchInner(props: WorkbenchProps) {
   }
 
   const openCommitDiff = (hash: string, path: string): void => {
-    setEditorOpen(true)
+    patchWorkbenchChrome({ editorOpen: true })
     const id = commitDiffTabId(hash, path)
     setTabs((current) => current.some(tab => tab.id === id)
       ? current
@@ -446,7 +487,7 @@ function WorkbenchInner(props: WorkbenchProps) {
     <>
       {chatOpen ? null : (
         <div className={railCss.rail} data-edge="start" data-git-ide-panel="rail-chat">
-          <IconButton label={t('ide.showChat')} onClick={() => { setChatOpen(true) }}>
+          <IconButton label={t('ide.showChat')} onClick={() => { patchWorkbenchChrome({ chatOpen: true }) }}>
             <IconChat />
           </IconButton>
         </div>
@@ -471,11 +512,11 @@ function WorkbenchInner(props: WorkbenchProps) {
               ? current
               : { ...current, [path]: { ...current[path]!, original: content, draft: content } })
           }}
-          onCollapse={() => { setEditorOpen(false) }}
+          onCollapse={() => { patchWorkbenchChrome({ editorOpen: false }) }}
           notice={fileError}
           termSeed={termSeed}
           onNewTerminal={() => {
-            setEditorOpen(true)
+            patchWorkbenchChrome({ editorOpen: true })
             const tab = nextTerminalTab(tabs)
             setTabs(current => [...current, tab])
             setActiveId(tab.id)
@@ -514,7 +555,7 @@ function WorkbenchInner(props: WorkbenchProps) {
         />
       ) : (
         <div className={railCss.rail} data-git-ide-panel="rail-editor">
-          <IconButton label={t('ide.showEditor')} onClick={() => { setEditorOpen(true) }}>
+          <IconButton label={t('ide.showEditor')} onClick={() => { patchWorkbenchChrome({ editorOpen: true }) }}>
             <IconEditor />
           </IconButton>
         </div>
@@ -533,7 +574,7 @@ function WorkbenchInner(props: WorkbenchProps) {
           onOpenCommitDiff={openCommitDiff}
           onRenamed={renamePath}
           onDeleted={deletePath}
-          onCollapse={() => { setSideOpen(false) }}
+          onCollapse={() => { patchWorkbenchChrome({ sideOpen: false }) }}
           leadingSash={
             <ColSash
               label={t('ide.resizeSide')}
@@ -548,10 +589,10 @@ function WorkbenchInner(props: WorkbenchProps) {
         />
       ) : (
         <div className={railCss.rail} data-git-ide-panel="rail-side">
-          <IconButton label={t('ide.files')} onClick={() => { setSideOpen(true); setSideTab('files') }}>
+          <IconButton label={t('ide.files')} onClick={() => { patchWorkbenchChrome({ sideOpen: true }); setSideTab('files') }}>
             <IconFiles />
           </IconButton>
-          <IconButton label={t('ide.git')} onClick={() => { setSideOpen(true); setSideTab('git') }}>
+          <IconButton label={t('ide.git')} onClick={() => { patchWorkbenchChrome({ sideOpen: true }); setSideTab('git') }}>
             <IconGit />
           </IconButton>
         </div>
@@ -565,11 +606,11 @@ function WorkbenchInner(props: WorkbenchProps) {
         tabs={tabs}
         aiTermIds={aiTermIds}
         onActivate={(id) => {
-          setEditorOpen(true)
+          patchWorkbenchChrome({ editorOpen: true })
           setActiveId(id)
         }}
         onPrepareUpdate={() => {
-          setEditorOpen(true)
+          patchWorkbenchChrome({ editorOpen: true })
           setActiveId(TERMINAL_TAB_ID)
         }}
         t={t}
@@ -581,26 +622,5 @@ function WorkbenchInner(props: WorkbenchProps) {
     panels = null
   }
 
-  return (
-    <div className={css.host}>
-      <button
-        type="button"
-        className={css.toggle}
-        data-active={enabled || undefined}
-        title={t('ide.toggle')}
-        aria-label={t('ide.toggle')}
-        aria-pressed={enabled}
-        onClick={() => { setEnabled(value => !value) }}
-      >
-        <IconLayout />
-        <span>{t('ide.toggleLabel')}</span>
-      </button>
-      {chatOpen ? null : (
-        <IconButton label={t('ide.showChat')} onClick={() => { setChatOpen(true) }}>
-          <IconChat />
-        </IconButton>
-      )}
-      {panels}
-    </div>
-  )
+  return panels
 }

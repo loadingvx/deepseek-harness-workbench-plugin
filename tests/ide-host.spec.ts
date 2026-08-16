@@ -8,6 +8,7 @@ describe('IDE host split', () => {
     expect(IDE_HOST_CSS).toContain('grid-row: 1 / 3')
     expect(IDE_HOST_CSS).toContain('grid-column: 1;')
     expect(IDE_HOST_CSS).toContain('[data-git-ide-panel=status]')
+    expect(IDE_HOST_CSS).toContain('[data-git-ide][data-phase=hero]')
     expect(IDE_HOST_CSS).not.toContain('[data-git-ide-panel=update]')
   })
 })

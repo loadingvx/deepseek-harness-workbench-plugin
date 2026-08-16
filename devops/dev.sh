@@ -56,7 +56,7 @@ eval $DSH_CMD plugin --profile web add "$ROOT"
 
 echo
 echo "插件已安装到 web profile。正在启动 Web 界面…"
-echo "浏览器打开 http://127.0.0.1:3080 →「对话」→ 标题栏右侧「工作台」。"
+echo "浏览器打开 http://127.0.0.1:3080 →「对话」→ 新建会话，工作台会自动打开。"
 echo "改代码后重新执行本脚本，或先 devops/build.sh 再刷新页面。"
 echo
 exec bash "${ROOT}/devops/start-web.sh"

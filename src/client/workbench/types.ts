@@ -1,5 +1,6 @@
 import type { GitClient } from '../api.ts'
 import type { GitFail } from '../../shared/types.ts'
+import type { WorkbenchMount } from './auto-open.ts'
 
 export type Translate = (key: string, vars?: Record<string, string | number>) => string
 
@@ -12,6 +13,8 @@ export interface WorkspaceChoice {
 
 export interface WorkbenchInjected {
   client: GitClient
+  /** `host` portals the IDE; `toggle` is the header button. Default `toggle`. */
+  mount?: WorkbenchMount
 }
 
 export const TERMINAL_TAB_ID = 'terminal:main'

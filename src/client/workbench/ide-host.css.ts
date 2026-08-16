@@ -57,6 +57,10 @@ export const IDE_HOST_CSS = `
   max-height: 100%;
   border-right: 1px solid var(--dsw-alias-border-l2);
 }
+/* Blank new-session hero: keep the composer centered in the chat column. */
+[data-git-ide][data-phase=hero] > [data-conversation-scroll]{
+  justify-content: center;
+}
 [data-git-ide][data-git-chat=off] > [data-conversation-scroll]{
   display: none !important;
 }
