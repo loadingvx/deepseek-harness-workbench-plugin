@@ -390,6 +390,14 @@ export const zh = {
   'status.diff': '差异 {name}',
   'status.tabsPrev': '向左查看更多文件',
   'status.tabsNext': '向右查看更多文件',
+  'editor.mode': '编辑模式：{name}',
+  'editor.modeMenu': '切换编辑模式',
+  'editor.mode.plain': '普通模式',
+  'editor.mode.emacs': 'Emacs',
+  'editor.mode.vim': 'Vim',
+  'editor.mode.plainHint': '标准快捷键：方向键、Ctrl+Z/Y、Tab 缩进',
+  'editor.mode.emacsHint': 'Emacs 风格：Ctrl+A/E/F/B/P/N 移动，Ctrl+K 删到行尾',
+  'editor.mode.vimHint': 'Vim：Esc 进入普通模式，i 进入插入模式',
 } satisfies Record<string, string>
 
 export type WorkbenchKey = keyof typeof zh
@@ -787,4 +795,12 @@ export const en = {
   'status.diff': 'Diff {name}',
   'status.tabsPrev': 'More files to the left',
   'status.tabsNext': 'More files to the right',
+  'editor.mode': 'Editor mode: {name}',
+  'editor.modeMenu': 'Switch editor mode',
+  'editor.mode.plain': 'Plain',
+  'editor.mode.emacs': 'Emacs',
+  'editor.mode.vim': 'Vim',
+  'editor.mode.plainHint': 'Standard keys: arrows, Ctrl+Z/Y, Tab indent',
+  'editor.mode.emacsHint': 'Emacs-style keys: Ctrl+A/E/F/B/P/N to move, Ctrl+K deletes to end of line',
+  'editor.mode.vimHint': 'Vim: Esc for normal mode, i to insert',
 } satisfies Record<WorkbenchKey, string>

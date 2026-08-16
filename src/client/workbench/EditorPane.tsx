@@ -9,6 +9,7 @@ import { TerminalView } from './TerminalView.tsx'
 import { TERMINAL_TAB_ID, terminalTabLabel, type FileBuffer, type FileTab, type Translate } from './types.ts'
 import { CodeEditor } from './CodeEditor.tsx'
 import { isMarkdownPath } from './code-language.ts'
+import type { EditorModeId } from './editor-mode.ts'
 import { FilePreview } from './FilePreview.tsx'
 import { MarkdownPreview } from './MarkdownPreview.tsx'
 import css from './EditorPane.module.css'
@@ -34,6 +35,7 @@ export interface EditorPaneProps {
   onCreateFile?: (path: string) => Promise<GitFail | null>
   aiTermIds?: readonly string[]
   onAiModeChange?: (tabId: string, open: boolean) => void
+  editorMode: EditorModeId
   t: Translate
 }
 
@@ -79,7 +81,7 @@ type MdViewMode = 'edit' | 'preview' | 'split'
 /** Center editor: explorer + tabs + text/diff, with unsaved-close confirmation. */
 export function EditorPane({
   client, workspaceId, tabs, activeId, buffers,
-  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onCreateFile, aiTermIds, onAiModeChange, t,
+  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onCreateFile, aiTermIds, onAiModeChange, editorMode, t,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.id === activeId) ?? null
   const buffer = active?.kind === 'file' ? buffers[active.path] : undefined
@@ -286,6 +288,7 @@ export function EditorPane({
         path={active.path}
         value={buffer.draft}
         label={fileName(active.path)}
+        mode={editorMode}
         onChange={(next) => { onDraft(active.path, next) }}
         onSave={() => { void save() }}
       />
@@ -399,6 +402,13 @@ export function EditorPane({
             {tabs.map(tab => {
               const tabDirty = tab.kind === 'file' && buffers[tab.path] !== undefined
                 && buffers[tab.path]!.draft !== buffers[tab.path]!.original
+              const tabLabel = tab.kind === 'terminal'
+                ? terminalTabLabel(tab, t)
+                : tab.kind === 'diff'
+                  ? `${fileName(tab.path)} · ${t('editor.diffTab')}`
+                  : tab.kind === 'commitDiff'
+                    ? `${fileName(tab.path)} · ${t('editor.commitDiffTab')}`
+                    : fileName(tab.path)
               return (
                 <div
                   key={tab.id}
@@ -406,27 +416,27 @@ export function EditorPane({
                   data-active={tab.id === activeId || undefined}
                   data-ignored={tab.ignored === true || undefined}
                   role="tab"
+                  aria-selected={tab.id === activeId || undefined}
+                  tabIndex={0}
+                  title={tab.ignored === true ? t('tree.ignored') : undefined}
+                  onClick={() => { onActivate(tab.id) }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      onActivate(tab.id)
+                    }
+                  }}
                 >
-                  <button
-                    type="button"
-                    className={css.tabName}
-                    title={tab.ignored === true ? t('tree.ignored') : undefined}
-                    onClick={() => { onActivate(tab.id) }}
-                  >
-                    {tab.kind === 'terminal'
-                      ? terminalTabLabel(tab, t)
-                      : tab.kind === 'diff'
-                        ? `${fileName(tab.path)} · ${t('editor.diffTab')}`
-                        : tab.kind === 'commitDiff'
-                          ? `${fileName(tab.path)} · ${t('editor.commitDiffTab')}`
-                          : fileName(tab.path)}
-                  </button>
+                  <span className={css.tabName}>{tabLabel}</span>
                   {tabDirty ? <span className={css.dirtyDot} title={t('editor.dirty')} /> : null}
                   {tab.kind === 'terminal' ? (
                     <span className={css.termMark} title={t('term.pinned')}><IconTerminal /></span>
                   ) : null}
                   {tab.kind === 'terminal' && tab.id === TERMINAL_TAB_ID ? null : (
-                    <IconButton label={t('editor.close')} onClick={() => { requestClose(tab.id) }}>
+                    <IconButton
+                      label={t('editor.close')}
+                      onClick={(event) => { event.stopPropagation(); requestClose(tab.id) }}
+                    >
                       <IconClose />
                     </IconButton>
                   )}

@@ -48,6 +48,7 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 | Smart terminal | Windows terminal — Git Bash | Probed at the standard Git for Windows install paths and selected when present | Supported |
 | Smart terminal | Windows terminal — Windows PowerShell | Probed at the system PowerShell path and selected when Git Bash is absent | Supported |
 | Editor | Syntax highlighting | CodeMirror 6: CSS / HTML / JavaScript / JSON / Markdown / Python / XML / YAML | Supported |
+| Editor | Editing modes | Switch Plain / Emacs / Vim keymaps from the status bar; the choice persists. Emacs is the default so typing works immediately for users unfamiliar with Vim | Supported |
 | Editor | Markdown preview | Images (http(s) + workspace-relative) and Mermaid diagrams | Supported |
 | Files & Git | File tree | Browse / open / new / rename / delete with path breadcrumbs | Supported |
 | Files & Git | Git sidebar | Status / diff / log / branch / commit / restore, commit graph | Supported |
@@ -63,11 +64,11 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.13** (npm tag `latest`) |
+| Version | **0.1.14** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.13
++ dsh-workbench-plugin@0.1.14
 ```
 
 Maintainers publish npm with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -82,13 +83,13 @@ The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbenc
 
 ### Procedure
 
-1. Install the plugin (pin the version; do not omit `@0.1.13`):
+1. Install the plugin (pin the version; do not omit `@0.1.14`):
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.13
+dsh plugin --profile web add dsh-workbench-plugin@0.1.14
 ```
 
-`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.13` requests that release explicitly.
+`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.14` requests that release explicitly.
 
 If a pinned install is still refused as too new, add this to `~/.dsh/profiles/web/pnpm-workspace.yaml` and run the command again:
 
@@ -124,7 +125,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.13 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.14 manually using the command above. Later releases will prompt in the UI.
 
 Markdown preview (the 👁 mode in the editor) renders images (http(s) and workspace-relative paths) and Mermaid diagrams (```mermaid fenced blocks, powered by [mermaid.js](https://mermaid.js.org/) 11).
 

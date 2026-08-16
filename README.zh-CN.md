@@ -48,6 +48,7 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 | 智能终端 | Windows 终端 — Git Bash | 探测标准 Git for Windows 安装路径，存在即选用 | 已支持 |
 | 智能终端 | Windows 终端 — Windows PowerShell | 探测系统 PowerShell 路径，Git Bash 不可用时选用 | 已支持 |
 | 编辑器 | 多语言语法高亮 | CodeMirror 6：CSS / HTML / JavaScript / JSON / Markdown / Python / XML / YAML | 已支持 |
+| 编辑器 | 编辑模式 | 状态栏一键切换普通 / Emacs / Vim 快捷键，选择持久保存，默认 Emacs（打字即输入，不会像 Vim 普通模式那样让不熟悉的人以为系统没反应） | 已支持 |
 | 编辑器 | Markdown 预览 | 图片（`http(s)` 与工作区相对路径）与 Mermaid 图表 | 已支持 |
 | 文件与 Git | 文件树 | 浏览 / 打开 / 新建 / 重命名 / 删除，路径面包屑 | 已支持 |
 | 文件与 Git | Git 侧栏 | status / diff / log / branch / commit / restore、提交图 | 已支持 |
@@ -63,11 +64,11 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 | 项目 | 说明 |
 | --- | --- |
 | 包名 | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| 当前版本 | **0.1.13**（npm 标签 `latest`） |
+| 当前版本 | **0.1.14**（npm 标签 `latest`） |
 | 软件源 | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.13
++ dsh-workbench-plugin@0.1.14
 ```
 
 维护者发布 npm 请执行 `bash devops/release.sh`。该脚本使用本机已有的 `npm login` 会话；不得将账号或凭据写入仓库。
@@ -82,13 +83,13 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 
 ### 步骤
 
-1. 安装插件（必须带版本号，不要省略 `@0.1.13`）：
+1. 安装插件（必须带版本号，不要省略 `@0.1.14`）：
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.13
+dsh plugin --profile web add dsh-workbench-plugin@0.1.14
 ```
 
-`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.13` 才会明确要这一版。
+`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.14` 才会明确要这一版。
 
 若指定版本后仍提示太新、装不上，在 `~/.dsh/profiles/web/pnpm-workspace.yaml` 加上下面两行，再执行一次安装命令：
 
@@ -124,7 +125,7 @@ dsh plugin --profile web add github:loadingvx/deepseek-harness-workbench-plugin
 
 ### 从 0.1.1 升级
 
-**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.13；此后版本将通过界面提示。
+**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.14；此后版本将通过界面提示。
 
 ## 界面
 

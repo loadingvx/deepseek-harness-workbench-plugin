@@ -1,23 +1,26 @@
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { bracketMatching, indentOnInput, indentUnit } from '@codemirror/language'
-import { EditorState } from '@codemirror/state'
+import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
 import { useEffect, useRef } from 'react'
 import { workbenchEditorTheme } from './code-editor-theme.ts'
 import { languageExtension, languageIdFromPath } from './code-language.ts'
+import { editorModeExtensions, type EditorModeId } from './editor-mode.ts'
 import css from './EditorPane.module.css'
 
 export function CodeEditor({
-  path, value, onChange, onSave, label,
+  path, value, onChange, onSave, label, mode,
 }: {
   path: string
   value: string
   onChange: (next: string) => void
   onSave: () => void
   label: string
+  mode: EditorModeId
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
+  const modeCompartmentRef = useRef<Compartment | null>(null)
   const onChangeRef = useRef(onChange)
   const onSaveRef = useRef(onSave)
   const applyingRef = useRef(false)
@@ -27,6 +30,8 @@ export function CodeEditor({
   useEffect(() => {
     const parent = hostRef.current
     if (parent === null) return
+    const modeCompartment = new Compartment()
+    modeCompartmentRef.current = modeCompartment
     const view = new EditorView({
       parent,
       state: EditorState.create({
@@ -42,6 +47,7 @@ export function CodeEditor({
           EditorState.tabSize.of(2),
           languageExtension(languageIdFromPath(path)),
           workbenchEditorTheme,
+          modeCompartment.of(editorModeExtensions(mode)),
           keymap.of([
             { key: 'Mod-s', preventDefault: true, run: () => { onSaveRef.current(); return true } },
             indentWithTab,
@@ -61,8 +67,16 @@ export function CodeEditor({
     return () => {
       view.destroy()
       viewRef.current = null
+      modeCompartmentRef.current = null
     }
   }, [path, label])
+
+  useEffect(() => {
+    const view = viewRef.current
+    const compartment = modeCompartmentRef.current
+    if (view === null || compartment === null) return
+    view.dispatch({ effects: compartment.reconfigure(editorModeExtensions(mode)) })
+  }, [mode])
 
   useEffect(() => {
     const view = viewRef.current

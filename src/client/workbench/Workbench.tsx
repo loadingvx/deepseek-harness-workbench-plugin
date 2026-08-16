@@ -20,6 +20,7 @@ import {
   clamp, clampLayout, readPx, writePx,
 } from './column-layout.ts'
 import { EditorPane } from './EditorPane.tsx'
+import { loadEditorMode, saveEditorMode, type EditorModeId } from './editor-mode.ts'
 import { IconButton } from './IconButton.tsx'
 import { IconChat, IconEditor, IconFiles, IconGit, IconLayout } from './icons.tsx'
 import { ensureIdeStyles } from './ide-host.css.ts'
@@ -171,6 +172,11 @@ function WorkbenchInner(props: WorkbenchProps) {
 
   const [updateHidden, setUpdateHidden] = useState(false)
   const [aiTermIds, setAiTermIds] = useState<string[]>([])
+  const [editorMode, setEditorMode] = useState<EditorModeId>(() => loadEditorMode())
+  const changeEditorMode = useCallback((mode: EditorModeId): void => {
+    saveEditorMode(mode)
+    setEditorMode(mode)
+  }, [])
   const pluginInfo = usePluginUpdate(client)
   const updateInfo = updateHidden ? null : visibleUpdate(pluginInfo)
   const termSeed = updateInfo === null || updateInfo.latest === null
@@ -541,6 +547,7 @@ function WorkbenchInner(props: WorkbenchProps) {
           onCollapse={() => { patchWorkbenchChrome({ editorOpen: false }) }}
           notice={fileError}
           termSeed={termSeed}
+          editorMode={editorMode}
           onNewTerminal={openNewTerminal}
           aiTermIds={aiTermIds}
           onAiModeChange={(tabId, open) => {
@@ -626,6 +633,8 @@ function WorkbenchInner(props: WorkbenchProps) {
         plugin={pluginInfo}
         tabs={tabs}
         aiTermIds={aiTermIds}
+        editorMode={editorMode}
+        onEditorModeChange={changeEditorMode}
         onActivate={(id) => {
           patchWorkbenchChrome({ editorOpen: true })
           setActiveId(id)

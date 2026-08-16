@@ -4,6 +4,7 @@ import type { GitStatusSnapshot, PluginUpdateSnapshot } from '../../shared/types
 import { redactSecrets } from '../../shared/redact.ts'
 import { PLUGIN_PAGE_URL, PLUGIN_REPO_URL } from '../../shared/version.ts'
 import { IconChevron, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
+import { EDITOR_MODES, type EditorModeId } from './editor-mode.ts'
 import { fileName, shortPath, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
 import { terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import css from './StatusBar.module.css'
@@ -20,6 +21,8 @@ export function StatusBar({
   plugin,
   tabs,
   aiTermIds,
+  editorMode,
+  onEditorModeChange,
   onActivate,
   onPrepareUpdate,
   t,
@@ -31,13 +34,26 @@ export function StatusBar({
   plugin: PluginUpdateSnapshot | null
   tabs?: FileTab[]
   aiTermIds?: readonly string[]
+  editorMode?: EditorModeId
+  onEditorModeChange?: (mode: EditorModeId) => void
   onActivate?: (id: string) => void
   onPrepareUpdate?: () => void
   t: Translate
 }) {
   const [status, setStatus] = useState<GitStatusSnapshot | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [modeMenuOpen, setModeMenuOpen] = useState(false)
   const [updateNote, setUpdateNote] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!modeMenuOpen) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      setModeMenuOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('keydown', onKey) }
+  }, [modeMenuOpen])
 
   useEffect(() => {
     if (workspaceId === undefined) {
@@ -198,6 +214,47 @@ export function StatusBar({
       <span className={css.item} title={dirty > 0 ? t('status.dirtyTitle', { count: dirty }) : t('status.cleanTitle')}>
         {dirty > 0 ? t('status.dirty', { count: dirty }) : t('status.clean')}
       </span>
+      {active?.kind === 'file' && editorMode !== undefined ? (
+        <span className={css.modeWrap}>
+          <button
+            type="button"
+            className={css.mode}
+            data-open={modeMenuOpen || undefined}
+            aria-haspopup="menu"
+            aria-expanded={modeMenuOpen}
+            title={t('editor.modeMenu')}
+            aria-label={t('editor.mode', { name: t(`editor.mode.${editorMode}`) })}
+            onClick={() => { setModeMenuOpen(open => !open) }}
+          >
+            {t(`editor.mode.${editorMode}`)}
+            <IconChevron open={modeMenuOpen} />
+          </button>
+          {modeMenuOpen ? (
+            <>
+              <div className={css.menuBackdrop} onClick={() => { setModeMenuOpen(false) }} />
+              <div className={css.menu} role="menu" aria-label={t('editor.modeMenu')}>
+                {EDITOR_MODES.map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="menuitem"
+                    className={css.menuItem}
+                    data-active={editorMode === mode || undefined}
+                    title={t(`editor.mode.${mode}Hint`)}
+                    onClick={() => {
+                      setModeMenuOpen(false)
+                      onEditorModeChange?.(mode)
+                    }}
+                  >
+                    <span className={css.modeName}>{t(`editor.mode.${mode}`)}</span>
+                    <span className={css.modeHint}>{t(`editor.mode.${mode}Hint`)}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </span>
+      ) : null}
     </footer>
   )
 }
