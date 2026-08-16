@@ -33,6 +33,7 @@ describe('layoutGraphLanes', () => {
       { hash: 'c1', parents: [] },
     ])
     expect(rows.map(row => row.lane)).toEqual([0, 0, 0])
+    expect(rows.map(row => row.fromAbove)).toEqual([false, true, true])
     expect(rows.every(row => row.laneCount === 1)).toBe(true)
     expect(rows[0]?.outgoing).toEqual([{ from: 0, to: 0 }])
   })
@@ -43,9 +44,9 @@ describe('layoutGraphLanes', () => {
       { hash: 'remote', parents: ['base'] },
       { hash: 'base', parents: [] },
     ])
-    expect(rows[0]).toMatchObject({ lane: 0, outgoing: [{ from: 0, to: 0 }] })
-    expect(rows[1]).toMatchObject({ lane: 1, outgoing: [{ from: 1, to: 0 }] })
-    expect(rows[2]).toMatchObject({ lane: 0 })
+    expect(rows[0]).toMatchObject({ lane: 0, fromAbove: false, outgoing: [{ from: 0, to: 0 }] })
+    expect(rows[1]).toMatchObject({ lane: 1, fromAbove: false, outgoing: [{ from: 1, to: 0 }] })
+    expect(rows[2]).toMatchObject({ lane: 0, fromAbove: true })
     expect(rows[1]?.laneCount).toBeGreaterThanOrEqual(2)
   })
 

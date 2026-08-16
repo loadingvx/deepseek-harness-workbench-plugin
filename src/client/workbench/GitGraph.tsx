@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { GitClient } from '../api.ts'
 import type { GitFail, GitFileChange, GitLogEntry } from '../../shared/types.ts'
 import { formatCommitTooltip } from './commit-stamp.ts'
 import { toRefMark } from './git-refs.ts'
 import {
-  graphNodesFromEntries, LANE_COL_W, laneColor, layoutGraphLanes, type GraphLaneRow,
+  graphNodesFromEntries, laneColor, layoutGraphLanes, type GraphLaneRow,
 } from './graph-lanes.ts'
+import { buildGraphRailDraw, graphRailMetrics } from './graph-rail.ts'
 import type { Translate } from './types.ts'
 import css from './GitSidebar.module.css'
 
@@ -91,12 +92,18 @@ export function GitGraph({
 
   const layouts = useMemo(() => layoutGraphLanes(graphNodesFromEntries(entries)), [entries])
   const railLanes = Math.max(1, ...layouts.map(row => row.laneCount))
+  const metrics = graphRailMetrics(compact === true)
 
   if (entries.length === 0) {
     return <p className={css.hint}>{emptyLabel}</p>
   }
   return (
-    <ol className={css.graph} data-compact={compact || undefined} aria-label={t('section.graph')}>
+    <ol
+      className={css.graph}
+      data-compact={compact || undefined}
+      aria-label={t('section.graph')}
+      style={{ ['--dsw-graph-row-h' as string]: `${metrics.rowH}px` }}
+    >
       {entries.map((entry, index) => {
         const when = formatCommitTooltip(entry.date)
         const justCopied = flash?.hash === entry.hash && flash.ok
@@ -233,71 +240,53 @@ function GraphRail({
   head: boolean
   title: string
 }) {
-  const width = Math.max(1, lanes) * LANE_COL_W
-  const headH = compact ? 18 : 22
-  const cy = compact ? 10 : 12
-  const r = compact ? 3.5 : 4
-  const color = (index: number): string => laneColor(index)
-  const xOf = (index: number): number => index * LANE_COL_W + LANE_COL_W / 2
-  const drawDown = !isLast
+  const hostRef = useRef<HTMLSpanElement>(null)
+  const fallbackH = graphRailMetrics(compact).rowH
+  const [height, setHeight] = useState(fallbackH)
+
+  useLayoutEffect(() => {
+    const el = hostRef.current
+    if (el === null) return
+    const sync = (): void => {
+      const next = el.getBoundingClientRect().height
+      if (next > 0) setHeight(prev => (Math.abs(prev - next) < 0.25 ? prev : next))
+    }
+    sync()
+    const observer = new ResizeObserver(sync)
+    observer.observe(el)
+    return () => { observer.disconnect() }
+  }, [compact])
+
+  const draw = buildGraphRailDraw(row, lanes, { height, compact, isLast })
 
   return (
-    <span className={css.graphRail} style={{ width }} aria-hidden title={title}>
-      {row.passing.map(index => (
-        <span
-          key={`pass-${index}`}
-          className={css.graphStem}
-          style={{ left: xOf(index) - 1, background: color(index), top: 0, bottom: drawDown ? 0 : cy }}
-        />
-      ))}
-      {drawDown
-        ? row.outgoing.map((edge, edgeIndex) => (
-          <span
-            key={`down-${edgeIndex}`}
-            className={css.graphStem}
-            style={{ left: xOf(edge.to) - 1, background: color(edge.to), top: headH, bottom: 0 }}
-          />
-        ))
-        : null}
-      <svg className={css.graphBends} width={width} height={headH} viewBox={`0 0 ${width} ${headH}`}>
-        {row.incoming.map(index => (
+    <span ref={hostRef} className={css.graphRail} style={{ width: draw.width }} aria-hidden title={title}>
+      <svg
+        className={css.graphBends}
+        width={draw.width}
+        height={draw.height}
+        viewBox={`0 0 ${draw.width} ${draw.height}`}
+      >
+        {draw.strokes.map(stroke => (
           <path
-            key={`in-${index}`}
-            d={bend(xOf(index), 0, xOf(row.lane), cy)}
+            key={stroke.key}
+            d={stroke.d}
             fill="none"
-            stroke={color(index)}
+            stroke={laneColor(stroke.lane)}
             strokeWidth="2"
           />
         ))}
-        {drawDown
-          ? row.outgoing.map((edge, edgeIndex) => (
-            <path
-              key={`out-${edgeIndex}`}
-              d={edge.from === edge.to
-                ? `M ${xOf(edge.from)} ${cy} V ${headH}`
-                : bend(xOf(edge.from), cy, xOf(edge.to), headH)}
-              fill="none"
-              stroke={color(edge.to)}
-              strokeWidth="2"
-            />
-          ))
-          : null}
         <circle
-          cx={xOf(row.lane)}
-          cy={cy}
-          r={r}
-          fill={head ? 'transparent' : color(row.lane)}
-          stroke={color(row.lane)}
+          cx={draw.dot.x}
+          cy={draw.dot.y}
+          r={draw.dot.r}
+          fill={head ? 'transparent' : laneColor(draw.dot.lane)}
+          stroke={laneColor(draw.dot.lane)}
           strokeWidth={head ? 2 : 0}
         />
       </svg>
     </span>
   )
-}
-
-function bend(x1: number, y1: number, x2: number, y2: number): string {
-  const midY = (y1 + y2) / 2
-  return `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`
 }
 
 function RemoteCloudIcon() {

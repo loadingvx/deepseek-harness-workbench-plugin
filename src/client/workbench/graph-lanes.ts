@@ -14,6 +14,8 @@ export interface GraphLaneRow {
   lane: number
   /** Columns this row must reserve so rails line up. */
   laneCount: number
+  /** A parent above already reserved this commit — draw a stem from the row top to the node. */
+  fromAbove: boolean
   /** Open lanes that pass through without a node. */
   passing: number[]
   /** Other lanes that also pointed at this commit (join in from above). */
@@ -52,6 +54,7 @@ export function layoutGraphLanes(commits: readonly GraphNode[]): GraphLaneRow[] 
 
   for (const commit of commits) {
     let lane = open.indexOf(commit.hash)
+    const fromAbove = lane !== -1
     if (lane === -1) {
       lane = firstEmpty(open)
       if (lane === -1) {
@@ -96,7 +99,7 @@ export function layoutGraphLanes(commits: readonly GraphNode[]): GraphLaneRow[] 
 
     while (next.length > 0 && next[next.length - 1] === null) next.pop()
     const laneCount = Math.max(next.length, open.length, lane + 1, 1)
-    rows.push({ lane, laneCount, passing, incoming, outgoing })
+    rows.push({ lane, laneCount, fromAbove, passing, incoming, outgoing })
     open = next
   }
 
