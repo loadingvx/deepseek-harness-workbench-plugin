@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { toRefMark } from '../src/client/workbench/git-refs.ts'
+import { parseParents } from '../src/host/git-service.ts'
 
 describe('toRefMark', () => {
   it('keeps typed marks from the host', () => {
@@ -16,5 +17,21 @@ describe('toRefMark', () => {
   it('drops empty values so the pill is not blank', () => {
     expect(toRefMark('')).toBeNull()
     expect(toRefMark({ name: '  ', kind: 'tag' })).toBeNull()
+  })
+
+  it('hides origin/HEAD', () => {
+    expect(toRefMark('origin/HEAD')).toBeNull()
+    expect(toRefMark({ name: 'origin/HEAD', kind: 'remote' })).toBeNull()
+  })
+})
+
+describe('parseParents', () => {
+  it('reads space-separated hashes and drops junk', () => {
+    expect(parseParents('aaaabbbbccccddddaaaabbbbccccddddaaaabbbb ccccaaaabbbbddddccccffff')).toEqual([
+      'aaaabbbbccccddddaaaabbbbccccddddaaaabbbb',
+      'ccccaaaabbbbddddccccffff',
+    ])
+    expect(parseParents('')).toEqual([])
+    expect(parseParents('not-a-hash')).toEqual([])
   })
 })

@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GitClient } from '../api.ts'
 import type { GitFail, GitFileChange, GitLogEntry } from '../../shared/types.ts'
 import { formatCommitTooltip } from './commit-stamp.ts'
 import { toRefMark } from './git-refs.ts'
+import {
+  graphNodesFromEntries, LANE_COL_W, laneColor, layoutGraphLanes, type GraphLaneRow,
+} from './graph-lanes.ts'
 import type { Translate } from './types.ts'
 import css from './GitSidebar.module.css'
 
@@ -86,6 +89,9 @@ export function GitGraph({
     })
   }
 
+  const layouts = useMemo(() => layoutGraphLanes(graphNodesFromEntries(entries)), [entries])
+  const railLanes = Math.max(1, ...layouts.map(row => row.laneCount))
+
   if (entries.length === 0) {
     return <p className={css.hint}>{emptyLabel}</p>
   }
@@ -99,12 +105,19 @@ export function GitGraph({
         const fileList = files[entry.hash]
         const fileLoading = filesLoading[entry.hash] === true
         const fileError = filesError[entry.hash]
+        const row = layouts[index]
         return (
           <li key={entry.hash} className={css.graphRow} data-head={entry.head || undefined} data-open={open || undefined}>
-            <span className={css.graphRail} aria-hidden>
-              {index < entries.length - 1 ? <span className={css.graphLine} /> : null}
-              <span className={css.graphDot} data-head={entry.head || undefined} title={entry.head ? t('graph.head') : entry.shortHash} />
-            </span>
+            {row !== undefined ? (
+              <GraphRail
+                row={row}
+                lanes={railLanes}
+                compact={compact === true}
+                isLast={index === entries.length - 1}
+                head={entry.head}
+                title={entry.head ? t('graph.head') : entry.shortHash}
+              />
+            ) : null}
             <div className={css.graphBody} title={when || undefined}>
               <button
                 type="button"
@@ -123,13 +136,19 @@ export function GitGraph({
                   {entry.refs.map((raw, refIndex) => {
                     const ref = toRefMark(raw)
                     if (ref === null) return null
+                    const title = ref.kind === 'tag'
+                      ? `tag ${ref.name}`
+                      : ref.kind === 'remote'
+                        ? t('graph.remoteRef', { name: ref.name })
+                        : ref.name
                     return (
                       <span
                         key={`${ref.kind}:${ref.name}:${refIndex}`}
                         className={css.refPill}
                         data-kind={ref.kind}
-                        title={ref.kind === 'tag' ? `tag ${ref.name}` : ref.name}
+                        title={title}
                       >
+                        {ref.kind === 'remote' ? <RemoteCloudIcon /> : null}
                         {ref.name}
                       </span>
                     )
@@ -202,4 +221,92 @@ export function GitGraph({
 
 function compactTitle(entry: GitLogEntry, when: string): string {
   return [entry.subject, entry.author, entry.shortHash, when].filter(Boolean).join(' · ')
+}
+
+function GraphRail({
+  row, lanes, compact, isLast, head, title,
+}: {
+  row: GraphLaneRow
+  lanes: number
+  compact: boolean
+  isLast: boolean
+  head: boolean
+  title: string
+}) {
+  const width = Math.max(1, lanes) * LANE_COL_W
+  const headH = compact ? 18 : 22
+  const cy = compact ? 10 : 12
+  const r = compact ? 3.5 : 4
+  const color = (index: number): string => laneColor(index)
+  const xOf = (index: number): number => index * LANE_COL_W + LANE_COL_W / 2
+  const drawDown = !isLast
+
+  return (
+    <span className={css.graphRail} style={{ width }} aria-hidden title={title}>
+      {row.passing.map(index => (
+        <span
+          key={`pass-${index}`}
+          className={css.graphStem}
+          style={{ left: xOf(index) - 1, background: color(index), top: 0, bottom: drawDown ? 0 : cy }}
+        />
+      ))}
+      {drawDown
+        ? row.outgoing.map((edge, edgeIndex) => (
+          <span
+            key={`down-${edgeIndex}`}
+            className={css.graphStem}
+            style={{ left: xOf(edge.to) - 1, background: color(edge.to), top: headH, bottom: 0 }}
+          />
+        ))
+        : null}
+      <svg className={css.graphBends} width={width} height={headH} viewBox={`0 0 ${width} ${headH}`}>
+        {row.incoming.map(index => (
+          <path
+            key={`in-${index}`}
+            d={bend(xOf(index), 0, xOf(row.lane), cy)}
+            fill="none"
+            stroke={color(index)}
+            strokeWidth="2"
+          />
+        ))}
+        {drawDown
+          ? row.outgoing.map((edge, edgeIndex) => (
+            <path
+              key={`out-${edgeIndex}`}
+              d={edge.from === edge.to
+                ? `M ${xOf(edge.from)} ${cy} V ${headH}`
+                : bend(xOf(edge.from), cy, xOf(edge.to), headH)}
+              fill="none"
+              stroke={color(edge.to)}
+              strokeWidth="2"
+            />
+          ))
+          : null}
+        <circle
+          cx={xOf(row.lane)}
+          cy={cy}
+          r={r}
+          fill={head ? 'transparent' : color(row.lane)}
+          stroke={color(row.lane)}
+          strokeWidth={head ? 2 : 0}
+        />
+      </svg>
+    </span>
+  )
+}
+
+function bend(x1: number, y1: number, x2: number, y2: number): string {
+  const midY = (y1 + y2) / 2
+  return `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`
+}
+
+function RemoteCloudIcon() {
+  return (
+    <svg className={css.refPillIcon} viewBox="0 0 16 16" width="10" height="10" aria-hidden>
+      <path
+        fill="currentColor"
+        d="M12.2 7.1A3.1 3.1 0 0 0 6.4 5.6 3 3 0 0 0 3 8.6c0 .1 0 .3.1.4A2.6 2.6 0 0 0 4.6 13h7.2A2.7 2.7 0 0 0 14.4 10.4a2.6 2.6 0 0 0-2.2-3.3z"
+      />
+    </svg>
+  )
 }

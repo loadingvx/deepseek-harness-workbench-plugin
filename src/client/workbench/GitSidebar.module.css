@@ -470,6 +470,7 @@
   margin: 0;
   padding: 0;
   list-style: none;
+  overflow-x: auto;
 }
 
 .graphRow {
@@ -485,39 +486,23 @@
 .graphRail {
   position: relative;
   flex: none;
-  width: 14px;
+  align-self: stretch;
+  min-width: 14px;
 }
 
-.graphLine {
+.graphStem {
   position: absolute;
-  top: 16px;
-  bottom: -4px;
-  left: 6px;
   width: 2px;
-  background: #3b82f6;
+  border-radius: 1px;
+  pointer-events: none;
 }
 
-.graph[data-compact] .graphLine {
-  top: 12px;
-}
-
-.graphDot {
+.graphBends {
   position: absolute;
-  top: 8px;
-  left: 3px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #3b82f6;
-}
-
-.graph[data-compact] .graphDot {
-  top: 6px;
-}
-
-.graphDot[data-head] {
-  background: transparent;
-  box-shadow: 0 0 0 2px #3b82f6;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
 }
 
 .graphBody {
@@ -593,8 +578,16 @@
 }
 
 .refPill[data-kind='remote'] {
-  background: var(--dsw-alias-button-ghost-active-fill);
-  color: var(--dsw-alias-label-tertiary);
+  gap: 3px;
+  padding-left: 5px;
+  border-radius: 8px 12px 12px 8px;
+  background: color-mix(in srgb, #8b5cf6 22%, var(--dsw-alias-button-ghost-active-fill));
+  color: #c4b5fd;
+}
+
+.refPillIcon {
+  flex: none;
+  display: block;
 }
 
 .hash {
@@ -626,8 +619,9 @@
   inset: 0;
   z-index: 20;
   display: flex;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
+  overflow: auto;
   padding: 24px;
   background: color-mix(in srgb, var(--dsw-alias-bg-base) 55%, transparent);
 }
@@ -643,15 +637,34 @@
 
 .dialogWide {
   width: min(880px, calc(100vw - 48px));
-  max-height: min(80vh, 720px);
+  max-height: min(calc(100vh - 48px), 720px);
   display: flex;
   flex-direction: column;
-  padding: 20px 24px;
+  overflow: hidden;
+  padding: 20px 24px 16px;
+}
+
+.dialogBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
 }
 
 .dialogWide .field {
-  flex: 1;
-  min-height: 0;
+  flex: none;
+  margin-bottom: 0;
+}
+
+.dialogWide .dialogRow {
+  flex: none;
+  flex-shrink: 0;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
 }
 
 .choiceSet {
@@ -720,11 +733,11 @@
 
 .templateInput {
   box-sizing: border-box;
+  display: block;
   width: 100%;
-  min-height: 120px;
-  max-height: none;
-  flex: 1;
-  height: 22vh;
+  min-height: 160px;
+  height: 320px;
+  max-height: 560px;
   resize: vertical;
   padding: 10px 12px;
   border: 1px solid var(--dsw-alias-border-l2);
@@ -741,6 +754,7 @@
 }
 
 .dialog h2 {
+  flex: none;
   margin: 0 0 6px;
   font-size: 14px;
   font-weight: 600;

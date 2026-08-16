@@ -1023,56 +1023,58 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
             onClick={(event) => { event.stopPropagation() }}
           >
             <h2 id="git-commit-template-title">{t('gitSettings.title')}</h2>
-            <p>{t('gitSettings.hint')}</p>
-            <fieldset className={css.choiceSet}>
-              <legend>{t('gitSettings.pullTitle')}</legend>
-              <p className={css.choiceLead}>{t('gitSettings.pullHint')}</p>
-              {(['merge', 'ff-only', 'rebase'] as const).map((mode: PullMode) => (
-                <label key={mode} className={css.choice} data-active={prefsDraft.pullMode === mode || undefined}>
-                  <input
-                    type="radio"
-                    name="dsw-pull-mode"
-                    checked={prefsDraft.pullMode === mode}
-                    onChange={() => { setPrefsDraft(current => ({ ...current, pullMode: mode })) }}
-                  />
-                  <span>
-                    <strong>{t(`gitSettings.pull.${mode}`)}</strong>
-                    <code>{pullCommandPreview(mode)}</code>
-                    <em>{t(`gitSettings.pull.${mode}Help`)}</em>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-            <fieldset className={css.choiceSet}>
-              <legend>{t('gitSettings.pushTitle')}</legend>
-              <p className={css.choiceLead}>{t('gitSettings.pushHint')}</p>
-              {(['safe', 'lease'] as const).map((mode: PushMode) => (
-                <label key={mode} className={css.choice} data-active={prefsDraft.pushMode === mode || undefined}>
-                  <input
-                    type="radio"
-                    name="dsw-push-mode"
-                    checked={prefsDraft.pushMode === mode}
-                    onChange={() => { setPrefsDraft(current => ({ ...current, pushMode: mode })) }}
-                  />
-                  <span>
-                    <strong>{t(`gitSettings.push.${mode}`)}</strong>
-                    <code>{pushCommandPreview(mode)}</code>
-                    <em>{t(`gitSettings.push.${mode}Help`)}</em>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-            <label className={css.field}>
-              <span>{t('commit.templateTitle')}</span>
-              <textarea
-                className={css.templateInput}
-                value={templateDraft}
-                onChange={(event) => { setTemplateDraft(event.target.value) }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Escape') closeTemplate()
-                }}
-              />
-            </label>
+            <div className={css.dialogBody}>
+              <p>{t('gitSettings.hint')}</p>
+              <fieldset className={css.choiceSet}>
+                <legend>{t('gitSettings.pullTitle')}</legend>
+                <p className={css.choiceLead}>{t('gitSettings.pullHint')}</p>
+                {(['merge', 'ff-only', 'rebase'] as const).map((mode: PullMode) => (
+                  <label key={mode} className={css.choice} data-active={prefsDraft.pullMode === mode || undefined}>
+                    <input
+                      type="radio"
+                      name="dsw-pull-mode"
+                      checked={prefsDraft.pullMode === mode}
+                      onChange={() => { setPrefsDraft(current => ({ ...current, pullMode: mode })) }}
+                    />
+                    <span>
+                      <strong>{t(`gitSettings.pull.${mode}`)}</strong>
+                      <code>{pullCommandPreview(mode)}</code>
+                      <em>{t(`gitSettings.pull.${mode}Help`)}</em>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+              <fieldset className={css.choiceSet}>
+                <legend>{t('gitSettings.pushTitle')}</legend>
+                <p className={css.choiceLead}>{t('gitSettings.pushHint')}</p>
+                {(['safe', 'lease'] as const).map((mode: PushMode) => (
+                  <label key={mode} className={css.choice} data-active={prefsDraft.pushMode === mode || undefined}>
+                    <input
+                      type="radio"
+                      name="dsw-push-mode"
+                      checked={prefsDraft.pushMode === mode}
+                      onChange={() => { setPrefsDraft(current => ({ ...current, pushMode: mode })) }}
+                    />
+                    <span>
+                      <strong>{t(`gitSettings.push.${mode}`)}</strong>
+                      <code>{pushCommandPreview(mode)}</code>
+                      <em>{t(`gitSettings.push.${mode}Help`)}</em>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+              <label className={css.field}>
+                <span>{t('commit.templateTitle')}</span>
+                <textarea
+                  className={css.templateInput}
+                  value={templateDraft}
+                  onChange={(event) => { setTemplateDraft(event.target.value) }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') closeTemplate()
+                  }}
+                />
+              </label>
+            </div>
             <div className={css.dialogRow}>
               <button
                 type="button"

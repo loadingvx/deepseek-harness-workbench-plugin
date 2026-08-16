@@ -52,9 +52,24 @@ export function parseDecorations(raw: string): { head: boolean; refs: GitRefMark
       refs.push({ name: part.slice('tag: '.length), kind: 'tag' })
       continue
     }
+    // origin/HEAD is a symbolic remote tip, not a real branch to draw.
+    if (part.includes('/') && part.endsWith('/HEAD')) continue
     refs.push({ name: part, kind: part.includes('/') ? 'remote' : 'branch' })
   }
   return { head, refs }
+}
+
+/** Parse `git log --format=%P` parent hashes. */
+export function parseParents(raw: string | undefined): string[] {
+  if (raw === undefined || raw.trim() === '') return []
+  const seen = new Set<string>()
+  const parents: string[] = []
+  for (const part of raw.trim().split(/\s+/)) {
+    if (!/^[0-9a-f]{7,64}$/i.test(part) || seen.has(part)) continue
+    seen.add(part)
+    parents.push(part)
+  }
+  return parents
 }
 
 function parsePath(raw: string): string {
@@ -226,18 +241,29 @@ export class GitService {
     return { staged, text, empty: text.trim() === '', ...safePath !== undefined ? { path: safePath } : {} }
   }
 
-  async log(root: string, limit = 20, signal?: AbortSignal): Promise<GitLogEntry[]> {
+  async log(root: string, limit = 80, signal?: AbortSignal): Promise<GitLogEntry[]> {
     await this.requireRepo(root, signal)
     const safeLimit = Math.min(Math.max(1, Math.floor(limit)), 100)
     const result = await runGit({
       cwd: root,
-      args: ['log', `-n${safeLimit}`, '--format=%H%x1f%h%x1f%an%x1f%ad%x1f%s%x1f%D', '--date=iso-strict'],
+      args: [
+        'log',
+        `--max-count=${safeLimit}`,
+        '--decorate=short',
+        '--topo-order',
+        '--format=%H%x1f%h%x1f%an%x1f%ad%x1f%s%x1f%D%x1f%P',
+        '--date=iso-strict',
+        'HEAD',
+        '--branches',
+        '--remotes',
+        '--tags',
+      ],
       signal,
       allowNonZero: true,
     })
     if (result.exitCode !== 0) return []
     return result.stdout.split(/\r?\n/).filter(Boolean).map((line) => {
-      const [hash, shortHash, author, date, subject, decorations] = line.split('\x1f')
+      const [hash, shortHash, author, date, subject, decorations, parentRaw] = line.split('\x1f')
       const marks = parseDecorations(decorations ?? '')
       return {
         hash: hash ?? '',
@@ -247,6 +273,7 @@ export class GitService {
         subject: subject ?? '',
         head: marks.head,
         refs: marks.refs,
+        parents: parseParents(parentRaw),
       }
     })
   }
@@ -330,9 +357,8 @@ export class GitService {
       }
       await this.assertNoMergeLock(root)
       await runGit({ cwd: root, args: ['commit', '-m', trimmed], signal })
-      const log = await this.log(root, 1, signal)
-      const head = log[0]
-      return { hash: head?.hash ?? '', subject: trimmed }
+      const head = await runGit({ cwd: root, args: ['rev-parse', 'HEAD'], signal })
+      return { hash: head.stdout.trim(), subject: trimmed }
     })
   }
 

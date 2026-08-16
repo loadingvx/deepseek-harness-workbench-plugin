@@ -162,8 +162,8 @@ export function registerGitHttp(
         const staged = query(url, 'staged') === '1'
         result = await wrap(() => git.diff(rootOf(), path, staged))
       } else if (method === 'GET' && route === '/git/log') {
-        const limit = Number(query(url, 'limit') ?? '20')
-        result = await wrap(() => git.log(rootOf(), Number.isFinite(limit) ? limit : 20))
+        const limit = Number(query(url, 'limit') ?? '80')
+        result = await wrap(() => git.log(rootOf(), Number.isFinite(limit) ? limit : 80))
       } else if (method === 'GET' && route === '/git/branches') {
         result = await wrap(() => git.branches(rootOf()))
       } else if (method === 'POST' && route === '/git/stage') {

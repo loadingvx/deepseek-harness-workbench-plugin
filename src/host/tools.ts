@@ -68,7 +68,7 @@ export function registerGitTools(ctx: Context, git: GitService): () => void {
     name: 'git_log',
     description: 'Show recent git commits in the current workspace.',
     parameters: {
-      limit: { type: 'number', description: 'Number of commits, default 20, max 100' },
+      limit: { type: 'number', description: 'Number of commits, default 20, max 100. Includes local branches, remotes, and tags.' },
     },
     output: {
       schema: { type: 'object', additionalProperties: true, properties: {} },

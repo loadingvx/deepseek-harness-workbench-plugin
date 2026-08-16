@@ -47,6 +47,16 @@ describe('parseDecorations', () => {
   it('returns empty marks for a blank line', () => {
     expect(parseDecorations('')).toEqual({ head: false, refs: [] })
   })
+
+  it('hides origin/HEAD so the graph does not show a fake remote branch', () => {
+    expect(parseDecorations('HEAD -> main, origin/HEAD, origin/main')).toEqual({
+      head: true,
+      refs: [
+        { name: 'main', kind: 'branch' },
+        { name: 'origin/main', kind: 'remote' },
+      ],
+    })
+  })
 })
 
 describe('sanitizeCommitMessage', () => {

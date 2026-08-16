@@ -171,7 +171,7 @@ export function createGitClient(): GitClient {
       if (staged) query.set('staged', '1')
       return request(`/git/diff?${query.toString()}`)
     },
-    log: workspaceId => request(`/git/log?workspaceId=${encodeURIComponent(workspaceId)}&limit=40`),
+    log: workspaceId => request(`/git/log?workspaceId=${encodeURIComponent(workspaceId)}&limit=80`),
     branches: workspaceId => request(`/git/branches?workspaceId=${encodeURIComponent(workspaceId)}`),
     stage: (workspaceId, paths) => request('/git/stage', {
       method: 'POST', body: JSON.stringify({ workspaceId, paths }),

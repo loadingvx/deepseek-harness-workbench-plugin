@@ -111,6 +111,8 @@ export interface GitLogEntry {
   subject: string
   head: boolean
   refs: GitRefMark[]
+  /** Parent hashes, newest-first walk. Empty for the root commit. */
+  parents: string[]
 }
 
 export interface GitBranchInfo {
