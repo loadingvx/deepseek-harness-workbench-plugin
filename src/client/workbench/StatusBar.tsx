@@ -45,17 +45,47 @@ export function StatusBar({
       return
     }
     let live = true
+    let hasRemote = false
     const load = (): void => {
       void client.status(workspaceId).then((result) => {
         if (!live) return
-        setStatus(result.ok ? result.value : null)
+        if (!result.ok && result.code === 'BUSY') return
+        if (result.ok) {
+          hasRemote = result.value.probe.remote !== undefined
+          setStatus(result.value)
+          return
+        }
+        setStatus(null)
       })
     }
-    load()
-    const timer = window.setInterval(load, 8000)
+    const fetchRemote = (): void => {
+      if (!hasRemote) return
+      void client.fetch(workspaceId).then((result) => {
+        if (!live || !result.ok) return
+        load()
+      })
+    }
+    void client.status(workspaceId).then((result) => {
+      if (!live) return
+      if (!result.ok) {
+        if (result.code !== 'BUSY') setStatus(null)
+        return
+      }
+      hasRemote = result.value.probe.remote !== undefined
+      setStatus(result.value)
+      fetchRemote()
+    })
+    const statusTimer = window.setInterval(load, 8000)
+    const fetchTimer = window.setInterval(fetchRemote, 60_000)
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') fetchRemote()
+    }
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       live = false
-      window.clearInterval(timer)
+      window.clearInterval(statusTimer)
+      window.clearInterval(fetchTimer)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [client, workspaceId])
 

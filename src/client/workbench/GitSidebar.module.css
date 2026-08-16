@@ -64,6 +64,14 @@
   font-size: 11px;
 }
 
+.chip[data-kind='behind'] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.chip[data-kind='checking'] {
+  color: var(--dsw-alias-label-secondary);
+}
+
 .pane {
   display: flex;
   flex-direction: column;
@@ -213,6 +221,11 @@
 .bannerHint {
   margin-top: 4px;
   white-space: pre-wrap;
+}
+
+.banner[data-kind='warn'] {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
 }
 
 .commitArea {

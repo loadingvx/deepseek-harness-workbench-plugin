@@ -53,8 +53,16 @@ function findConversationColumn(): HTMLElement | null {
 }
 
 /** Header toggle + portal: native chat stays left; editor and files/git split to the right. */
+let __wbRenderCount = 0
 export function Workbench(props: WorkbenchProps) {
   const { client, t, useSessions, useWorkspaces } = props
+  __wbRenderCount += 1
+  console.log('[WB-DEBUG] render', __wbRenderCount, {
+    useSessionType: typeof props.useSession,
+    useSessionsType: typeof props.useSessions,
+    useWorkspacesType: typeof props.useWorkspaces,
+    hasClient: typeof props.client,
+  })
   const [enabled, setEnabled] = useState(true)
   const [chatOpen, setChatOpen] = useState(true)
   const [editorOpen, setEditorOpen] = useState(true)

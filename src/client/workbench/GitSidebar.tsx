@@ -180,8 +180,12 @@ function FileGroup({
 export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCommitDiff, t }: GitSidebarProps) {
   const rootRef = useRef<HTMLElement>(null)
   const [busy, setBusy] = useState(false)
-  const [pending, setPending] = useState<'commit' | 'push' | 'pull' | null>(null)
+  const [pending, setPending] = useState<'commit' | 'push' | 'pull' | 'fetch' | null>(null)
+  const [remoteSyncing, setRemoteSyncing] = useState(false)
+  const [remoteHint, setRemoteHint] = useState<GitFail | null>(null)
   const busyLock = useRef(false)
+  const remoteLock = useRef(false)
+  const hasRemoteRef = useRef(false)
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const generateAbort = useRef<AbortController | null>(null)
@@ -216,11 +220,12 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const [dragging, setDragging] = useState(false)
   const graphHFit = clampGraphHeight(graphH, hostH, reserved)
 
-  const refresh = async (): Promise<void> => {
+  const refresh = async (): Promise<GitStatusSnapshot | null> => {
     if (workspaceId === undefined) {
       setStatus(null)
       setError(null)
-      return
+      hasRemoteRef.current = false
+      return null
     }
     setLoading(true)
     const [statusResult, branchResult, logResult] = await Promise.all([
@@ -230,21 +235,69 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     ])
     setLoading(false)
     if (!statusResult.ok) {
+      if (statusResult.code === 'BUSY') return status
       setStatus(null)
       setError(statusResult)
-      return
+      hasRemoteRef.current = false
+      return null
     }
     setError(null)
     setStatus(statusResult.value)
+    hasRemoteRef.current = statusResult.value.probe.remote !== undefined
     setBranches(branchResult.ok ? branchResult.value : [])
     setLog(logResult.ok ? logResult.value : [])
+    return statusResult.value
+  }
+
+  const checkRemote = async (silent: boolean): Promise<void> => {
+    if (workspaceId === undefined || busyLock.current || remoteLock.current) return
+    if (!hasRemoteRef.current) return
+    remoteLock.current = true
+    setRemoteSyncing(true)
+    if (!silent) setPending('fetch')
+    try {
+      const result = await client.fetch(workspaceId)
+      if (!result.ok) {
+        if (result.code === 'BUSY') return
+        if (silent) setRemoteHint(result)
+        else setError(result)
+        return
+      }
+      setRemoteHint(null)
+      if (!busyLock.current) await refresh()
+    } finally {
+      remoteLock.current = false
+      setRemoteSyncing(false)
+      if (!silent) setPending(current => current === 'fetch' ? null : current)
+    }
   }
 
   useEffect(() => {
-    void refresh()
-    const timer = window.setInterval(() => { void refresh() }, 8000)
+    let live = true
+    const tickStatus = (): void => {
+      if (!live || busyLock.current) return
+      void refresh()
+    }
+    const tickRemote = (): void => {
+      if (!live || busyLock.current) return
+      void checkRemote(true)
+    }
+    void (async () => {
+      const snap = await refresh()
+      if (!live) return
+      if (snap?.probe.remote !== undefined) await checkRemote(true)
+    })()
+    const statusTimer = window.setInterval(tickStatus, 8000)
+    const remoteTimer = window.setInterval(tickRemote, 60_000)
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') tickRemote()
+    }
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
-      window.clearInterval(timer)
+      live = false
+      window.clearInterval(statusTimer)
+      window.clearInterval(remoteTimer)
+      document.removeEventListener('visibilitychange', onVisible)
       generateAbort.current?.abort()
       generateAbort.current = null
     }
@@ -334,36 +387,51 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     hasHead: probe?.hasHead === true,
   })
   const remoteLabel = probe?.upstream ?? (probe?.remote !== undefined ? `${probe.remote}/${branchName}` : branchName)
-  const pushDisabledReason = busy
-    ? t('action.disabledBusy')
-    : probe?.detached === true
-      ? t('push.disabledDetached')
-      : probe?.remote === undefined
-        ? t('push.disabledNoRemote')
-        : (probe?.behind ?? 0) > 0
-          ? t('push.disabledBehind')
-          : (probe?.ahead ?? 0) === 0 && probe?.upstream !== undefined
-            ? t('push.disabledNothing')
-            : !probe?.hasHead
+  const behindCount = probe?.behind ?? 0
+  const aheadCount = probe?.ahead ?? 0
+  const pushDisabledReason = remoteSyncing
+    ? t('action.fetching')
+    : busy
+      ? t('action.disabledBusy')
+      : probe?.detached === true
+        ? t('push.disabledDetached')
+        : probe?.remote === undefined
+          ? t('push.disabledNoRemote')
+          : behindCount > 0
+            ? t('push.disabledBehind', { count: behindCount })
+            : aheadCount === 0 && probe?.upstream !== undefined
               ? t('push.disabledNothing')
-              : null
-  const pullDisabledReason = busy
-    ? t('action.disabledBusy')
-    : probe?.detached === true
-      ? t('pull.disabledDetached')
+              : !probe?.hasHead
+                ? t('push.disabledNothing')
+                : null
+  const pullDisabledReason = remoteSyncing
+    ? t('action.fetching')
+    : busy
+      ? t('action.disabledBusy')
+      : probe?.detached === true
+        ? t('pull.disabledDetached')
+        : probe?.remote === undefined
+          ? t('pull.disabledNoRemote')
+          : probe?.upstream === undefined
+            ? t('pull.disabledNoUpstream')
+            : dirtyCount > 0 && behindCount > 0
+              ? t('pull.disabledDirtyBehind', { count: behindCount })
+              : dirtyCount > 0
+                ? t('pull.disabledDirty')
+                : behindCount === 0
+                  ? t('pull.disabledNothing')
+                  : null
+  const fetchDisabledReason = remoteSyncing
+    ? t('action.fetching')
+    : busy
+      ? t('action.disabledBusy')
       : probe?.remote === undefined
-        ? t('pull.disabledNoRemote')
-        : probe?.upstream === undefined
-          ? t('pull.disabledNoUpstream')
-          : dirtyCount > 0
-            ? t('pull.disabledDirty')
-            : (probe?.behind ?? 0) === 0
-              ? t('pull.disabledNothing')
-              : null
-  const fetchDisabledReason = busy
-    ? t('action.disabledBusy')
-    : probe?.remote === undefined
-      ? t('fetch.disabledNoRemote')
+        ? t('fetch.disabledNoRemote')
+        : null
+  const refreshDisabledReason = remoteSyncing
+    ? t('action.fetching')
+    : loading || busy
+      ? t('action.disabledBusy')
       : null
   const mergeTargets = branches.filter(branch => !branch.current && branch.name !== probe?.branch)
   const mergeDisabledReason = busy
@@ -446,7 +514,15 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
 
   const fetchRemote = (): void => {
     if (workspaceId === undefined || fetchDisabledReason !== null) return
-    void runWrite(() => client.fetch(workspaceId))
+    void checkRemote(false)
+  }
+
+  const refreshAll = (): void => {
+    if (refreshDisabledReason !== null) return
+    void (async () => {
+      const snap = await refresh()
+      if (snap?.probe.remote !== undefined) await checkRemote(true)
+    })()
   }
 
   const runPromptWrite = async (
@@ -583,10 +659,15 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
             ))}
           </select>
         </label>
-        {status !== null && status.probe.ahead > 0 ? <span className={css.chip}>{t('panel.ahead', { count: status.probe.ahead })}</span> : null}
-        {status !== null && status.probe.behind > 0 ? <span className={css.chip}>{t('panel.behind', { count: status.probe.behind })}</span> : null}
-        <IconButton label={t('panel.refresh')} disabled={loading || busy} onClick={() => { void refresh() }}>
-          <IconRefresh />
+        {status !== null && status.probe.ahead > 0 ? <span className={css.chip} data-kind="ahead">{t('panel.ahead', { count: status.probe.ahead })}</span> : null}
+        {status !== null && status.probe.behind > 0 ? <span className={css.chip} data-kind="behind">{t('panel.behind', { count: status.probe.behind })}</span> : null}
+        {remoteSyncing ? <span className={css.chip} data-kind="checking">{t('panel.checkingRemote')}</span> : null}
+        <IconButton
+          label={refreshDisabledReason ?? t('panel.refresh')}
+          disabled={refreshDisabledReason !== null}
+          onClick={refreshAll}
+        >
+          {remoteSyncing ? <span className={css.spinner} aria-hidden /> : <IconRefresh />}
         </IconButton>
       </header>
 
@@ -595,6 +676,11 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
         <div className={css.banner} data-git-chrome="banner">
           <div>{error.messageZh}</div>
           <div className={css.bannerHint}>{error.hintZh}</div>
+        </div>
+      ) : remoteHint !== null ? (
+        <div className={css.banner} data-kind="warn" data-git-chrome="banner">
+          <div>{t('remote.checkFail')}</div>
+          <div className={css.bannerHint}>{remoteHint.messageZh}</div>
         </div>
       ) : null}
       {loading && status === null ? <p className={css.hint} data-git-chrome="hint" style={{ padding: '8px 10px' }}>{t('panel.loading')}</p> : null}
@@ -824,7 +910,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                   disabled={writesDisabled || fetchDisabledReason !== null}
                   onClick={fetchRemote}
                 >
-                  <IconFetch />
+                  {remoteSyncing || pending === 'fetch' ? <span className={css.spinner} aria-hidden /> : <IconFetch />}
                 </IconButton>
                 <IconButton
                   dense

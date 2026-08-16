@@ -335,13 +335,21 @@ export class GitService {
     })
   }
 
+  /** Update remote-tracking refs, then re-read ahead/behind. Caller must already hold the mutex. */
+  private async refreshTracking(root: string, probe: GitProbe, signal?: AbortSignal): Promise<GitProbe> {
+    if (probe.remote === undefined) return probe
+    await runGit({ cwd: root, args: ['fetch', '--prune', probe.remote], signal, timeoutMs: 90_000 })
+    return this.probe(root, signal)
+  }
+
   async push(root: string, signal?: AbortSignal): Promise<GitPushResult> {
     return this.mutex.run(async () => {
       await this.requireRepo(root, signal)
-      const probe = await this.probe(root, signal)
+      let probe = await this.probe(root, signal)
       if (probe.detached) throw new GitError('DETACHED_HEAD')
       if (probe.remote === undefined) throw new GitError('NO_REMOTE')
       if (!probe.hasHead) throw new GitError('NOTHING_TO_PUSH')
+      probe = await this.refreshTracking(root, probe, signal)
       if (probe.behind > 0) throw new GitError('REMOTE_AHEAD')
       if (probe.ahead === 0 && probe.upstream !== undefined) throw new GitError('NOTHING_TO_PUSH')
       const branch = probe.branch
@@ -358,13 +366,14 @@ export class GitService {
   async pull(root: string, signal?: AbortSignal): Promise<GitPullResult> {
     return this.mutex.run(async () => {
       await this.requireRepo(root, signal)
-      const probe = await this.probe(root, signal)
+      let probe = await this.probe(root, signal)
       if (probe.detached) throw new GitError('DETACHED_HEAD')
       if (probe.remote === undefined) throw new GitError('NO_REMOTE')
       if (probe.upstream === undefined) throw new GitError('NO_UPSTREAM')
       const snapshot = await this.status(root, signal)
       const dirty = snapshot.staged.length + snapshot.unstaged.length + snapshot.untracked.length
       if (dirty > 0) throw new GitError('DIRTY_WORKTREE')
+      probe = await this.refreshTracking(root, probe, signal)
       if (probe.behind === 0) throw new GitError('NOTHING_TO_PULL')
       const branch = probe.branch
       if (branch === undefined || branch.trim() === '') throw new GitError('BRANCH_MISSING')
