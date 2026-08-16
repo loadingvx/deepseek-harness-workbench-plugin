@@ -1,15 +1,4 @@
-<p align="center">
-  <img src="docs/img/social-preview.jpg" width="128" alt="DeepSeek Harness 工作台标志" />
-</p>
-
-<h1 align="center">dsh-workbench-plugin</h1>
-
-<p align="center"><strong>对话铺开，右侧开工</strong><br />
-一屏三栏：左侧对话，右侧新增编辑器与文件 / Git。</p>
-
-<p align="center">
-  <a href="README.md">English</a> · <strong>中文</strong>
-</p>
+![preview](docs/img/social-preview.jpg)
 
 DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作台后，对话保留在左侧；右侧新增两栏，分别承载编辑器（含语法高亮与终端）以及文件与 Git。
 

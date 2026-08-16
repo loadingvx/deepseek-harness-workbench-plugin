@@ -1,15 +1,6 @@
-<p align="center">
-  <img src="docs/img/social-previwe.jpg" width="128" alt="DeepSeek Harness Workbench logo" />
-</p>
 
-<h1 align="center">dsh-workbench-plugin</h1>
+![preview](docs/img/social-preview.jpg)
 
-<p align="center"><strong>Chat unfolds. The right side goes to work.</strong><br />
-Three columns on one screen: conversation on the left; editor and files / Git added on the right.</p>
-
-<p align="center">
-  <strong>English</strong> · <a href="README.zh-CN.md">中文</a>
-</p>
 
 
 A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. After Workbench is opened in Conversation, chat stays on the left. Two new columns appear on the right: the editor (syntax highlighting and terminal) and files & Git.
