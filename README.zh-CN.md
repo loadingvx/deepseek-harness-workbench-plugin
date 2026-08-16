@@ -67,6 +67,8 @@ dsh plugin --profile web add dsh-workbench-plugin
 
 ![编辑器与文件树](docs/img/terminal.png)
 
+Markdown 预览（编辑器的 👁 模式）支持渲染图片：`http(s)` 地址直接加载，工作区内的相对路径图片（如 `./img/x.png`、`../img/x.png`、`/img/x.png`）会通过工作台接口按原字节加载；越界路径与 `data:`、`javascript:` 等来源会被跳过。
+
 社交预览静图见 [`docs/img/social-preview.png`](docs/img/social-preview.png)。
 
 ## 工作区终端

@@ -8,11 +8,13 @@ export function MarkdownPreview({
   markdown,
   onOpenFile,
   t,
+  workspaceId,
 }: {
   path: string
   markdown: string
   onOpenFile: (path: string) => void
   t: Translate
+  workspaceId?: string
 }) {
   const html = useMemo(() => {
     if (markdown.trim() === '') return ''
@@ -22,11 +24,11 @@ export function MarkdownPreview({
         imageSkip: t('editor.mdImageSkip'),
         fileLinkClass: css.fileLink,
         imgSkipClass: css.imgSkip,
-      })
+      }, workspaceId)
     } catch {
       return null
     }
-  }, [path, markdown, t])
+  }, [path, markdown, t, workspaceId])
 
   if (markdown.trim() === '') {
     return (

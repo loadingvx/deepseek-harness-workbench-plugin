@@ -288,6 +288,7 @@ export function EditorPane({
               markdown={buffer.draft}
               onOpenFile={onOpenFile}
               t={t}
+              workspaceId={workspaceId}
             />
           ) : null}
         </div>

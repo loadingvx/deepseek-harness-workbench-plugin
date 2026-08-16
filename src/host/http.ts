@@ -247,6 +247,22 @@ export function registerGitHttp(
         } else {
           result = await wrap(() => fs.read(rootOf(), path))
         }
+      } else if (method === 'GET' && route === '/git/fs/img') {
+        const path = query(url, 'path')
+        if (path === undefined) {
+          send(res, 400, fail('BAD_REQUEST'))
+          return
+        }
+        try {
+          const image = await fs.readImage(rootOf(), path)
+          res.statusCode = 200
+          res.setHeader('content-type', image.mime)
+          res.setHeader('cache-control', 'no-store')
+          res.end(image.buffer)
+        } catch (error) {
+          send(res, 400, toFail(error))
+        }
+        return
       } else if (method === 'POST' && route === '/git/fs/write') {
         const body = await readJson(req)
         const path = typeof body.path === 'string' ? body.path : ''

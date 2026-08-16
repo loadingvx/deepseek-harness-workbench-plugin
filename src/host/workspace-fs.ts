@@ -5,6 +5,8 @@ import { entryMatchesFilter, MAX_SEARCH_HITS, normalizeFileFilter, shouldSkipSea
 import type { FsDirEntry, FsFileSnapshot, FsListSnapshot, FsSearchSnapshot, FsWriteResult } from '../shared/types.ts'
 
 export const MAX_FILE_BYTES = 1_500_000
+/** Images may be larger than text buffers; cap at 8 MB to protect the server and browser. */
+export const MAX_IMAGE_BYTES = 8_000_000
 const MAX_DIR_ENTRIES = 400
 const MAX_SEARCH_VISITS = 4000
 
@@ -102,6 +104,52 @@ function looksBinary(buffer: Buffer, path: string): boolean {
 
 function languageOf(path: string): string {
   return LANGUAGE_BY_EXT[extname(path).toLowerCase()] ?? 'plaintext'
+}
+
+const IMAGE_EXT_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.ico': 'image/x-icon',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+}
+
+/** Map an image file to a MIME type, validating magic bytes so text can never be served as an image. */
+function imageMimeOf(path: string, buffer: Buffer): string | null {
+  const ext = extname(path).toLowerCase()
+  if (ext === '.svg') {
+    const sample = buffer.subarray(0, 512).toString('utf8').trimStart()
+    return sample.startsWith('<?xml') || sample.startsWith('<svg') || sample.startsWith('<') ? 'image/svg+xml' : null
+  }
+  const mime = IMAGE_EXT_MIME[ext]
+  if (mime === undefined) return null
+  if (mime === 'image/png') {
+    const magic = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    return buffer.length >= 8 && buffer.subarray(0, 8).equals(magic) ? mime : null
+  }
+  if (mime === 'image/jpeg') {
+    return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff ? mime : null
+  }
+  if (mime === 'image/gif') {
+    return buffer.length >= 4 && buffer.toString('ascii', 0, 4) === 'GIF8' ? mime : null
+  }
+  if (mime === 'image/webp') {
+    return buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP' ? mime : null
+  }
+  if (mime === 'image/avif') {
+    return buffer.length >= 12 && buffer.toString('ascii', 4, 12) === 'ftypavif' ? mime : null
+  }
+  if (mime === 'image/x-icon') {
+    return buffer.length >= 4 && buffer[0] === 0 && buffer[1] === 0 && buffer[2] === 1 && buffer[3] === 0 ? mime : null
+  }
+  if (mime === 'image/bmp') {
+    return buffer.length >= 2 && buffer[0] === 0x42 && buffer[1] === 0x4d ? mime : null
+  }
+  return null
 }
 
 function toPosix(rel: string): string {
@@ -242,6 +290,32 @@ export class WorkspaceFs {
     }
     if (looksBinary(buffer, rel)) throw new GitError('FS_BINARY')
     return { path: rel, content: buffer.toString('utf8'), size: buffer.length, language: languageOf(rel) }
+  }
+
+  /** Read a workspace image as raw bytes. Rejects non-images, directories, and files over the image cap. */
+  async readImage(root: string, filePath: string): Promise<{ buffer: Buffer; mime: string }> {
+    const rel = assertSafeWorkspacePath(root, filePath)
+    if (rel === '') throw new GitError('FS_IS_DIRECTORY')
+    const abs = await resolveInside(root, rel)
+    let info
+    try {
+      info = await stat(abs)
+    } catch (error) {
+      if (isNotFound(error)) throw new GitError('FS_NOT_FOUND')
+      throw new GitError('GIT_FAILED', error instanceof Error ? error.message : String(error))
+    }
+    if (info.isDirectory()) throw new GitError('FS_IS_DIRECTORY')
+    if (info.size > MAX_IMAGE_BYTES) throw new GitError('FS_TOO_LARGE')
+    let buffer: Buffer
+    try {
+      buffer = await readFile(abs)
+    } catch (error) {
+      if (isPermission(error)) throw new GitError('FS_WRITE_FAILED')
+      throw new GitError('GIT_FAILED', error instanceof Error ? error.message : String(error))
+    }
+    const mime = imageMimeOf(rel, buffer)
+    if (mime === null) throw new GitError('FS_BINARY')
+    return { buffer, mime }
   }
 
   async write(root: string, filePath: string, content: string): Promise<FsWriteResult> {

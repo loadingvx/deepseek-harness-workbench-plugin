@@ -70,6 +70,7 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 
 ![Editor and file tree](docs/img/terminal.png)
 
+Markdown preview (the 👁 mode in the editor) renders images: `http(s)` URLs load directly, and workspace-relative paths such as `./img/x.png`, `../img/x.png`, or `/img/x.png` are served as raw bytes through the workbench API. Sources escaping the workspace root and `data:`/ `javascript:` URLs are skipped.
 
 ## Workspace terminal
 

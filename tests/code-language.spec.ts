@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isMarkdownPath, languageIdFromPath } from '../src/client/workbench/code-language.ts'
-import { classifyMarkdownHref, isSafeMarkdownImageSrc } from '../src/client/workbench/markdown-href.ts'
+import { classifyMarkdownHref, classifyMarkdownImageSrc } from '../src/client/workbench/markdown-href.ts'
 import { MARKDOWN_FILE_ATTR, renderMarkdownHtml } from '../src/client/workbench/markdown-html.ts'
 
 describe('languageIdFromPath', () => {
@@ -65,11 +65,29 @@ describe('classifyMarkdownHref', () => {
   })
 })
 
-describe('isSafeMarkdownImageSrc', () => {
-  it('allows only http(s) images', () => {
-    expect(isSafeMarkdownImageSrc('https://example.com/a.png')).toBe(true)
-    expect(isSafeMarkdownImageSrc('./shot.png')).toBe(false)
-    expect(isSafeMarkdownImageSrc('javascript:alert(1)')).toBe(false)
+describe('classifyMarkdownImageSrc', () => {
+  it('keeps http(s) images and resolves workspace-relative paths', () => {
+    expect(classifyMarkdownImageSrc('docs/a.md', 'https://example.com/a.png')).toEqual({
+      kind: 'url',
+      value: 'https://example.com/a.png',
+    })
+    expect(classifyMarkdownImageSrc('docs/a.md', './img/shot.png')).toEqual({ kind: 'file', value: 'docs/img/shot.png' })
+    expect(classifyMarkdownImageSrc('README.md', 'docs/img/shot.png')).toEqual({ kind: 'file', value: 'docs/img/shot.png' })
+    expect(classifyMarkdownImageSrc('docs/a.md', '/img/shot.png')).toEqual({ kind: 'file', value: 'img/shot.png' })
+  })
+
+  it('resolves .. up to the workspace root', () => {
+    expect(classifyMarkdownImageSrc('docs/guide/a.md', '../img/shot.png')).toEqual({ kind: 'file', value: 'docs/img/shot.png' })
+    expect(classifyMarkdownImageSrc('docs/a.md', '../../secret.png')).toBe(null)
+    expect(classifyMarkdownImageSrc('README.md', '../secret.png')).toBe(null)
+  })
+
+  it('blocks script and data sources', () => {
+    expect(classifyMarkdownImageSrc('a.md', 'javascript:alert(1)')).toBe(null)
+    expect(classifyMarkdownImageSrc('a.md', 'data:image/png;base64,AAAA')).toBe(null)
+    expect(classifyMarkdownImageSrc('a.md', 'file:///etc/passwd')).toBe(null)
+    expect(classifyMarkdownImageSrc('a.md', '')).toBe(null)
+    expect(classifyMarkdownImageSrc('a.md', undefined)).toBe(null)
   })
 })
 
@@ -101,9 +119,34 @@ describe('renderMarkdownHtml', () => {
     expect(html).toContain('rel="noopener noreferrer"')
   })
 
-  it('does not emit workspace-relative images', () => {
-    const html = renderMarkdownHtml('a.md', '![shot](./shot.png)', previewLabels)
-    expect(html).not.toContain('<img')
-    expect(html).toContain('class="img-skip"')
+  it('renders workspace-relative images through /git/fs/img', () => {
+    const html = renderMarkdownHtml('docs/a.md', '![shot](./img/shot.png)', previewLabels, 'ws-1')
+    expect(html).toContain('<img src="/git/fs/img?workspaceId=ws-1&amp;path=docs%2Fimg%2Fshot.png" alt="shot">')
+  })
+
+  it('renders root-relative and parent-relative images', () => {
+    const html = renderMarkdownHtml(
+      'docs/guide/a.md',
+      '![one](/img/one.png) ![two](../img/two.png)',
+      previewLabels,
+      'ws-1',
+    )
+    expect(html).toContain('path=img%2Fone.png')
+    expect(html).toContain('path=docs%2Fimg%2Ftwo.png')
+  })
+
+  it('renders http(s) images directly', () => {
+    const html = renderMarkdownHtml('a.md', '![web](https://example.com/i.png)', previewLabels)
+    expect(html).toContain('<img src="https://example.com/i.png" alt="web">')
+  })
+
+  it('skips images without a workspace or with blocked sources', () => {
+    const noWs = renderMarkdownHtml('a.md', '![shot](./shot.png)', previewLabels)
+    expect(noWs).not.toContain('<img')
+    expect(noWs).toContain('class="img-skip"')
+
+    const blocked = renderMarkdownHtml('a.md', '![evil](javascript:alert(1))', previewLabels, 'ws-1')
+    expect(blocked).not.toContain('<img')
+    expect(blocked).toContain('class="img-skip"')
   })
 })

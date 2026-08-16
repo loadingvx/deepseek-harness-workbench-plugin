@@ -91,4 +91,25 @@ describe('WorkspaceFs', () => {
     await symlink(join(outside, 'secret.txt'), join(root, 'link.txt'))
     await expect(fs.read(root, 'link.txt')).rejects.toMatchObject({ code: 'INVALID_PATH' })
   })
+
+  it('reads real images with their MIME type and rejects fakes', async () => {
+    const root = await tempRoot()
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
+    await writeFile(join(root, 'shot.png'), png)
+    const image = await fs.readImage(root, 'shot.png')
+    expect(image.mime).toBe('image/png')
+    expect(image.buffer.equals(png)).toBe(true)
+
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0])
+    await writeFile(join(root, 'photo.jpg'), jpeg)
+    expect((await fs.readImage(root, 'photo.jpg')).mime).toBe('image/jpeg')
+
+    await writeFile(join(root, 'fake.png'), 'not an image at all')
+    await expect(fs.readImage(root, 'fake.png')).rejects.toMatchObject({ code: 'FS_BINARY' })
+
+    await writeFile(join(root, 'notes.txt'), 'text')
+    await expect(fs.readImage(root, 'notes.txt')).rejects.toMatchObject({ code: 'FS_BINARY' })
+
+    await expect(fs.readImage(root, 'missing.png')).rejects.toMatchObject({ code: 'FS_NOT_FOUND' })
+  })
 })
