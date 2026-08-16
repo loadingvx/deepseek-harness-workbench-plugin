@@ -20,11 +20,11 @@ A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/dee
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.7** (npm tag `latest`) |
+| Version | **0.1.8** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.7
++ dsh-workbench-plugin@0.1.8
 ```
 
 Maintainers publish with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -60,7 +60,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.7 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.8 manually using the command above. Later releases will prompt in the UI.
 
 ## Interface
 
