@@ -1,18 +1,25 @@
-# dsh-workbench-plugin
+<p align="center">
+  <img src="docs/img/social-previwe.jpg" width="128" alt="DeepSeek Harness Workbench logo" />
+</p>
 
-[English](README.md) | [中文](README.zh-CN.md)
+<h1 align="center">dsh-workbench-plugin</h1>
 
-A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. It provides a three-column layout in Conversation: chat, editor, and files & Git. The center editor applies syntax highlighting for common languages.
+<p align="center"><strong>Chat unfolds. The right side goes to work.</strong><br />
+Three columns on one screen: conversation on the left; editor and files / Git added on the right.</p>
 
-![Workbench: chat, terminal, files & Git](docs/img/workbench.png)
+<p align="center">
+  <strong>English</strong> · <a href="README.zh-CN.md">中文</a>
+</p>
 
-![Editor and file tree](docs/img/terminal.png)
+
+A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. After Workbench is opened in Conversation, chat stays on the left. Two new columns appear on the right: the editor (syntax highlighting and terminal) and files & Git.
 
 ## Contents
 
 - [Release](#release)
 - [Installation](#installation)
 - [Upgrade](#upgrade)
+- [Interface](#interface)
 - [Workspace terminal](#workspace-terminal)
 - [AI command assist](#ai-command-assist)
 - [License](#license)
@@ -63,6 +70,15 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 ### Upgrading from 0.1.1
 
 **Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.7 manually using the command above. Later releases will prompt in the UI.
+
+## Interface
+
+The workbench uses a three-column layout. Conversation stays on the left. The two columns on the right are the new capability area: editor and terminal in the center, file tree and Git on the far right.
+
+![Workbench: chat, terminal, files & Git](docs/img/workbench.png)
+
+![Editor and file tree](docs/img/terminal.png)
+
 
 ## Workspace terminal
 

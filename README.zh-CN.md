@@ -1,18 +1,24 @@
-# dsh-workbench-plugin
+<p align="center">
+  <img src="docs/img/social-preview.jpg" width="128" alt="DeepSeek Harness 工作台标志" />
+</p>
 
-[English](README.md) | [中文](README.zh-CN.md)
+<h1 align="center">dsh-workbench-plugin</h1>
 
-DeepSeek Harness Web UI 工作台插件。在「对话」视图中提供三栏布局：对话、编辑器、文件与 Git。中央编辑器对常见语言提供语法高亮。
+<p align="center"><strong>对话铺开，右侧开工</strong><br />
+一屏三栏：左侧对话，右侧新增编辑器与文件 / Git。</p>
 
-![工作台：对话、终端、文件与 Git](docs/img/workbench.png)
+<p align="center">
+  <a href="README.md">English</a> · <strong>中文</strong>
+</p>
 
-![编辑器与文件树](docs/img/terminal.png)
+DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作台后，对话保留在左侧；右侧新增两栏，分别承载编辑器（含语法高亮与终端）以及文件与 Git。
 
 ## 目录
 
 - [发行信息](#发行信息)
 - [安装](#安装)
 - [升级](#升级)
+- [界面](#界面)
 - [工作区终端](#工作区终端)
 - [AI 命令助手](#ai-命令助手)
 - [许可证](#许可证)
@@ -63,6 +69,16 @@ dsh plugin --profile web add dsh-workbench-plugin
 ### 从 0.1.1 升级
 
 **0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.7；此后版本将通过界面提示。
+
+## 界面
+
+工作台为三栏布局。左侧为系统对话；右侧两栏为本次新增的能力区：中央为编辑器与终端，最右侧为文件树与 Git。
+
+![工作台：对话、终端、文件与 Git](docs/img/workbench.png)
+
+![编辑器与文件树](docs/img/terminal.png)
+
+社交预览静图见 [`docs/img/social-preview.png`](docs/img/social-preview.png)。
 
 ## 工作区终端
 
