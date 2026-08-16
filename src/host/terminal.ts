@@ -11,7 +11,7 @@ import { redactSecrets } from '../shared/redact.ts'
 
 const MAX_BUFFER = 200_000
 const MAX_WRITE = 256_000
-const ALLOWED_SHELL = /^(bash|zsh|sh|dash)$/
+const ALLOWED_SHELL = /^(bash|zsh|sh|dash|pwsh|powershell|cmd)$/
 const ALLOWED_ABS = /^\/(bin|usr\/bin|usr\/local\/bin)\/(bash|zsh|sh|dash)$/
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
@@ -45,6 +45,8 @@ export interface TerminalDeps {
 function looksLikeAllowedShell(path: string): boolean {
   const trimmed = path.trim()
   if (ALLOWED_ABS.test(trimmed)) return true
+  // Windows: an absolute path to a shell executable (pwsh.exe / powershell.exe / Git bash.exe).
+  if (process.platform === 'win32' && /\.exe$/i.test(trimmed) && /[\\/]/.test(trimmed)) return true
   return !trimmed.includes('/') && !trimmed.includes('\\') && ALLOWED_SHELL.test(trimmed)
 }
 
@@ -58,13 +60,21 @@ export async function pickShell(env: NodeJS.ProcessEnv = process.env, exists?: (
     }
   })
   const preferred = env.SHELL !== undefined && looksLikeAllowedShell(env.SHELL) ? [env.SHELL] : []
-  const candidates = [...preferred, '/bin/bash', '/usr/bin/bash', '/bin/zsh', '/usr/bin/zsh', '/bin/sh', '/usr/bin/sh']
+  // Windows candidates: Git Bash first (existing install), then the system PowerShell.
+  const winCandidates = process.platform === 'win32'
+    ? [
+      'C:/Program Files/Git/bin/bash.exe',
+      'C:/Program Files/Git/usr/bin/bash.exe',
+      join(process.env.SYSTEMROOT ?? 'C:/Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+    ]
+    : []
+  const candidates = [...preferred, ...winCandidates, '/bin/bash', '/usr/bin/bash', '/bin/zsh', '/usr/bin/zsh', '/bin/sh', '/usr/bin/sh']
   const seen = new Set<string>()
   for (const item of candidates) {
     if (seen.has(item)) continue
     seen.add(item)
     if (!looksLikeAllowedShell(item)) continue
-    const abs = item.startsWith('/') ? item : undefined
+    const abs = item.startsWith('/') || (process.platform === 'win32' && /^[a-zA-Z]:[\\/]/.test(item)) ? item : undefined
     if (abs === undefined) continue
     if (await check(abs)) return abs
   }
