@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useSyncExternalStore, type ReactNode } from 'react'
 import type { GitClient } from '../api.ts'
 import type { PluginUpdateSnapshot } from '../../shared/types.ts'
 import { FileTree } from './FileTree.tsx'
@@ -8,6 +8,13 @@ import { IconFiles, IconGit, IconPanelOff, IconUsage } from './icons.tsx'
 import type { Translate } from './types.ts'
 import { UpdateBanner } from './UpdateBanner.tsx'
 import { UsagePanel } from './UsagePanel.tsx'
+import {
+  isNavHostReady,
+  readUsageDock,
+  subscribeNavHost,
+  subscribeUsageDock,
+  usageTabVisible,
+} from './usage-dock.ts'
 import css from './SideDock.module.css'
 
 export type SideTab = 'files' | 'git' | 'usage'
@@ -36,6 +43,14 @@ export function SideDock({
   onDismissUpdate?: () => void
   t: Translate
 }) {
+  const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, () => 'side' as const)
+  const navReady = useSyncExternalStore(subscribeNavHost, isNavHostReady, () => false)
+  const showUsageTab = usageTabVisible(dock, navReady)
+
+  useLayoutEffect(() => {
+    if (!showUsageTab && tab === 'usage') onTab('files')
+  }, [showUsageTab, tab, onTab])
+
   return (
     <aside className={css.root} data-git-ide-panel="side">
       {leadingSash}
@@ -47,27 +62,18 @@ export function SideDock({
         <IconButton label={t('ide.git')} active={tab === 'git'} onClick={() => { onTab('git') }}>
           <IconGit />
         </IconButton>
-        <IconButton label={t('ide.usage')} active={tab === 'usage'} onClick={() => { onTab('usage') }}>
-          <IconUsage />
-        </IconButton>
+        {showUsageTab ? (
+          <IconButton label={t('ide.usage')} active={tab === 'usage'} onClick={() => { onTab('usage') }}>
+            <IconUsage />
+          </IconButton>
+        ) : null}
         <span className={css.spacer} />
         <IconButton label={t('ide.hideSide')} onClick={onCollapse}>
           <IconPanelOff />
         </IconButton>
       </div>
       <div className={css.body}>
-        {tab === 'files' ? (
-          <FileTree
-            client={client}
-            workspaceId={workspaceId}
-            workspaceTitle={workspaceTitle}
-            activePath={activePath}
-            onOpenFile={onOpenFile}
-            onRenamed={onRenamed}
-            onDeleted={onDeleted}
-            t={t}
-          />
-        ) : tab === 'git' ? (
+        {tab === 'git' ? (
           <GitSidebar
             client={client}
             workspaceId={workspaceId}
@@ -76,12 +82,23 @@ export function SideDock({
             onOpenCommitDiff={onOpenCommitDiff}
             t={t}
           />
-        ) : (
+        ) : tab === 'usage' && showUsageTab ? (
           <UsagePanel
             client={client}
             sessionId={sessionId}
             running={running}
             useProjection={useProjection}
+            t={t}
+          />
+        ) : (
+          <FileTree
+            client={client}
+            workspaceId={workspaceId}
+            workspaceTitle={workspaceTitle}
+            activePath={activePath}
+            onOpenFile={onOpenFile}
+            onRenamed={onRenamed}
+            onDeleted={onDeleted}
             t={t}
           />
         )}

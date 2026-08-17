@@ -29,6 +29,14 @@
   overflow: visible;
 }
 
+.balance {
+  flex: none;
+  min-width: 2.5em;
+  padding: 0 8px 0 2px;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-tertiary));
+  font-variant-numeric: tabular-nums;
+}
+
 .version {
   display: inline-flex;
   align-items: center;

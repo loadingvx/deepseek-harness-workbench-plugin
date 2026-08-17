@@ -31,6 +31,8 @@ import { createTerminalTab, nextTerminalTab, TERMINAL_TAB_ID, type FileBuffer, t
 import { previewKindOfPath } from '../../shared/preview-kind.ts'
 import { isTermNewTabHotkey } from '../../shared/term-assist.ts'
 import { StatusBar } from './StatusBar.tsx'
+import { UsageNavPortal } from './UsagePanel.tsx'
+import { isNavHostReady, readUsageDock, subscribeNavHost, subscribeUsageDock, usageTabVisible } from './usage-dock.ts'
 import { STATUS_BAR_H } from './status-bar.ts'
 import { usePluginUpdate, visibleUpdate } from './UpdateBanner.tsx'
 import { updateTermSeed } from '../../shared/version.ts'
@@ -155,6 +157,9 @@ function WorkbenchInner(props: WorkbenchProps) {
   const { client, t, useSessions, useWorkspaces, sessionId } = props
   const chrome = useSyncExternalStore(subscribeWorkbenchChrome, getWorkbenchChrome, defaultWorkbenchChrome)
   const { enabled, chatOpen, editorOpen, sideOpen } = chrome
+  const usageDock = useSyncExternalStore(subscribeUsageDock, readUsageDock, () => 'side' as const)
+  const navReady = useSyncExternalStore(subscribeNavHost, isNavHostReady, () => false)
+  const showUsageTab = usageTabVisible(usageDock, navReady)
   const [sideTab, setSideTab] = useState<SideTab>('files')
   const [host, setHost] = useState<HTMLElement | null>(null)
   const [tabs, setTabs] = useState<FileTab[]>(() => [createTerminalTab()])
@@ -626,15 +631,25 @@ function WorkbenchInner(props: WorkbenchProps) {
           <IconButton label={t('ide.git')} onClick={() => { patchWorkbenchChrome({ sideOpen: true }); setSideTab('git') }}>
             <IconGit />
           </IconButton>
-          <IconButton label={t('ide.usage')} onClick={() => { patchWorkbenchChrome({ sideOpen: true }); setSideTab('usage') }}>
-            <IconUsage />
-          </IconButton>
+          {showUsageTab ? (
+            <IconButton label={t('ide.usage')} onClick={() => { patchWorkbenchChrome({ sideOpen: true }); setSideTab('usage') }}>
+              <IconUsage />
+            </IconButton>
+          ) : null}
         </div>
       )}
+      <UsageNavPortal
+        client={client}
+        sessionId={sessionId}
+        running={running}
+        useProjection={props.useProjection}
+        t={t}
+      />
       <StatusBar
         client={client}
         workspaceId={workspaceId}
         workspacePath={workspace?.path}
+        sessionId={sessionId}
         active={tabs.find(tab => tab.id === activeId) ?? null}
         plugin={pluginInfo}
         tabs={tabs}

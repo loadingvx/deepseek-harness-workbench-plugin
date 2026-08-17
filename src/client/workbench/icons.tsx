@@ -52,8 +52,9 @@ export function IconGit() {
 export function IconUsage() {
   return (
     <Icon>
-      <circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M8 5v6M6.3 6.4h2.3c.9 0 1.5.5 1.5 1.3s-.6 1.3-1.5 1.3H6.3" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M2.2 4.4h11.6v7.2H2.2z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="8" cy="8" r="1.65" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M4.1 6.2v3.6M11.9 6.2v3.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
     </Icon>
   )
 }
@@ -72,6 +73,14 @@ export function IconRefresh() {
     <Icon>
       <path d="M13.2 8A5.2 5.2 0 1 1 11 3.7" fill="none" stroke="currentColor" strokeWidth="1.3" />
       <path d="M11 1.6v3.2h3.2" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </Icon>
+  )
+}
+
+export function IconPin() {
+  return (
+    <Icon>
+      <path d="M6.2 2.4h3.6L11.4 6.2 13.2 7.4 8.8 11.2 8 14.4 7.2 11.2 2.8 7.4 4.6 6.2z" fill="none" stroke="currentColor" strokeWidth="1.2" />
     </Icon>
   )
 }

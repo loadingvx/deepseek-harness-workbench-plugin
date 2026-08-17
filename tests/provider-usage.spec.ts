@@ -6,8 +6,11 @@ import {
   billingUrls,
   cacheHitPercent,
   contextOccupancy,
+  foldObservedSpend,
   formatMoney,
+  formatStatusBalance,
   formatTokenCount,
+  hasObservedSpend,
   parseBalanceBody,
   spentFromRow,
   totalBilledTokens,
@@ -102,6 +105,32 @@ describe('formatMoney', () => {
   })
 })
 
+describe('formatStatusBalance', () => {
+  it('shows the official currency symbol with the remaining amount', () => {
+    expect(formatStatusBalance({
+      balanceStatus: 'ok',
+      balances: [{ currency: 'CNY', total: '1.95' }],
+    })).toBe('¥1.95')
+    expect(formatStatusBalance({
+      balanceStatus: 'ok',
+      balances: [{ currency: 'USD', total: '2.00' }],
+    })).toBe('$2.00')
+  })
+
+  it('keeps the currency mark and uses a dash when the API is unreachable', () => {
+    expect(formatStatusBalance(null)).toBe('—')
+    expect(formatStatusBalance({ balanceStatus: 'no_key', balances: [] })).toBe('—')
+    expect(formatStatusBalance({
+      balanceStatus: 'failed',
+      balances: [{ currency: 'CNY', total: '1.95' }],
+    })).toBe('¥—')
+    expect(formatStatusBalance({
+      balanceStatus: 'auth',
+      balances: [{ currency: 'USD', total: '0' }],
+    })).toBe('$—')
+  })
+})
+
 describe('spentFromRow', () => {
   it('uses an explicit used field', () => {
     expect(spentFromRow({ currency: 'USD', total: '12.5', used: '7.5' })).toBe('7.5')
@@ -116,8 +145,41 @@ describe('spentFromRow', () => {
     })).toBe('0.90')
   })
 
+  it('does not treat remaining = granted + topped-up as spend', () => {
+    expect(spentFromRow({
+      currency: 'CNY',
+      total: '1.95',
+      granted: '0.00',
+      toppedUp: '1.95',
+    })).toBeUndefined()
+  })
+
   it('does not invent spend when the payload has no cost basis', () => {
     expect(spentFromRow({ currency: 'CNY', total: '9.10' })).toBeUndefined()
+  })
+})
+
+describe('foldObservedSpend', () => {
+  it('takes the first reading as a baseline without spend', () => {
+    expect(foldObservedSpend(undefined, '1.95', 10)).toEqual({
+      lastTotal: '1.95',
+      observedSpent: '0',
+      updatedAt: 10,
+    })
+    expect(hasObservedSpend(foldObservedSpend(undefined, '1.95', 10))).toBe(false)
+  })
+
+  it('adds a balance drop and ignores a later top-up', () => {
+    const afterDrop = foldObservedSpend(
+      { lastTotal: '1.95', observedSpent: '0', updatedAt: 1 },
+      '1.00',
+      2,
+    )
+    expect(afterDrop.observedSpent).toBe('0.95')
+    expect(hasObservedSpend(afterDrop)).toBe(true)
+    const afterTopUp = foldObservedSpend(afterDrop, '10.00', 3)
+    expect(afterTopUp.lastTotal).toBe('10.00')
+    expect(afterTopUp.observedSpent).toBe('0.95')
   })
 })
 

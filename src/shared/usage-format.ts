@@ -59,6 +59,21 @@ export function formatMoney(row: Pick<UsageBalanceRow, 'currency' | 'total'>): s
   return `${currencySymbol(row.currency)}${row.total}`
 }
 
+const STATUS_DASH = '—'
+
+/** Compact status-bar balance: `¥1.95` / `$2.00`, or a dash when the API is unreachable. */
+export function formatStatusBalance(
+  snapshot: { balanceStatus: string; balances: readonly UsageBalanceRow[] } | null,
+): string {
+  if (snapshot === null) return STATUS_DASH
+  const row = snapshot.balances[0]
+  const symbol = row === undefined ? '' : currencySymbol(row.currency)
+  if (snapshot.balanceStatus !== 'ok' || row === undefined) {
+    return symbol === '' ? STATUS_DASH : `${symbol}${STATUS_DASH}`
+  }
+  return formatMoney(row)
+}
+
 function parseAmount(value: string): number | undefined {
   if (!/^-?\d+(\.\d+)?$/.test(value)) return undefined
   const n = Number(value)
@@ -75,16 +90,64 @@ function formatAmount(n: number, samples: readonly string[]): string {
   return n.toFixed(places)
 }
 
+const SPEND_EPS = 0.005
+
+/** True when remaining ≈ granted + topped-up: composition, not historical spend. */
+function isRemainingComposition(row: UsageBalanceRow): boolean {
+  const total = parseAmount(row.total)
+  const granted = parseAmount(row.granted ?? '0')
+  const toppedUp = parseAmount(row.toppedUp ?? '')
+  if (total === undefined || granted === undefined || toppedUp === undefined) return false
+  return Math.abs(granted + toppedUp - total) < SPEND_EPS
+}
+
 /** Account spend in the same currency, when the billing payload can support it. */
 export function spentFromRow(row: UsageBalanceRow): string | undefined {
   if (row.used !== undefined) return row.used
+  if (isRemainingComposition(row)) return undefined
   const total = parseAmount(row.total)
   const granted = parseAmount(row.granted ?? '0') ?? 0
   const toppedUp = parseAmount(row.toppedUp ?? '')
   if (total === undefined || toppedUp === undefined) return undefined
   const spent = granted + toppedUp - total
-  if (!Number.isFinite(spent) || spent < 0) return undefined
+  if (!Number.isFinite(spent) || spent < SPEND_EPS) return undefined
   return formatAmount(spent, [row.total, row.granted ?? '0', row.toppedUp ?? '0'])
+}
+
+/** Running total of balance drops observed on this machine. Not provider lifetime spend. */
+export interface ObservedSpend {
+  lastTotal: string
+  observedSpent: string
+  updatedAt: number
+}
+
+export function foldObservedSpend(
+  prev: ObservedSpend | undefined,
+  total: string,
+  now: number,
+): ObservedSpend {
+  if (prev === undefined) {
+    return { lastTotal: total, observedSpent: '0', updatedAt: now }
+  }
+  const last = parseAmount(prev.lastTotal)
+  const current = parseAmount(total)
+  const already = parseAmount(prev.observedSpent) ?? 0
+  if (last === undefined || current === undefined) {
+    return { lastTotal: total, observedSpent: prev.observedSpent, updatedAt: now }
+  }
+  const drop = last - current
+  const nextSpent = drop > SPEND_EPS ? already + drop : already
+  return {
+    lastTotal: total,
+    observedSpent: formatAmount(Math.max(0, nextSpent), [prev.lastTotal, total, prev.observedSpent]),
+    updatedAt: now,
+  }
+}
+
+export function hasObservedSpend(entry: ObservedSpend | undefined): boolean {
+  if (entry === undefined) return false
+  const n = parseAmount(entry.observedSpent)
+  return n !== undefined && n >= SPEND_EPS
 }
 
 /** Strip a trailing /v1 so DeepSeek-style `/user/balance` can be tried at the origin. */

@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { GitClient } from '../api.ts'
 import type { GitStatusSnapshot, PluginUpdateSnapshot } from '../../shared/types.ts'
 import { redactSecrets } from '../../shared/redact.ts'
+import { formatStatusBalance } from '../../shared/usage-format.ts'
 import { PLUGIN_ISSUES_URL, PLUGIN_PAGE_URL, PLUGIN_REPO_URL } from '../../shared/version.ts'
 import { IconChevron, IconFeedback, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
 import { EDITOR_MODES, type EditorModeId } from './editor-mode.ts'
 import { fileName, shortPath, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
 import { terminalTabLabel, type FileTab, type Translate } from './types.ts'
+import { readUsageLive, retainUsageLive, subscribeUsageLive } from './usage-live.ts'
 import css from './StatusBar.module.css'
 
 function openExternal(url: string): void {
@@ -17,6 +19,7 @@ export function StatusBar({
   client,
   workspaceId,
   workspacePath,
+  sessionId,
   active,
   plugin,
   tabs,
@@ -30,6 +33,7 @@ export function StatusBar({
   client: GitClient
   workspaceId?: string
   workspacePath?: string
+  sessionId?: string
   active?: FileTab | null
   plugin: PluginUpdateSnapshot | null
   tabs?: FileTab[]
@@ -44,6 +48,9 @@ export function StatusBar({
   const [menuOpen, setMenuOpen] = useState(false)
   const [modeMenuOpen, setModeMenuOpen] = useState(false)
   const [updateNote, setUpdateNote] = useState<string | null>(null)
+  const usage = useSyncExternalStore(subscribeUsageLive, readUsageLive, () => null)
+
+  useEffect(() => retainUsageLive(client, sessionId), [client, sessionId])
 
   useEffect(() => {
     if (!modeMenuOpen) return
@@ -120,6 +127,11 @@ export function StatusBar({
           ? t('panel.detached')
           : (probe.branch ?? t('status.noGit'))
   const openTabs = tabs ?? []
+  const balanceText = formatStatusBalance(usage)
+  const balanceOk = usage !== null && usage.balanceStatus === 'ok' && usage.balances[0] !== undefined
+  const balanceTitle = balanceOk
+    ? t('status.balanceTitle', { amount: balanceText })
+    : t('status.balanceUnavailable')
 
   return (
     <footer
@@ -130,6 +142,9 @@ export function StatusBar({
       <StatusTabs tabs={openTabs} activeId={active?.id} aiTermIds={aiTermIds} onActivate={onActivate} t={t} />
       <span className={css.grow} />
       <span className={`${css.item} ${css.itemLead}`}>
+        <span className={css.balance} title={balanceTitle} aria-label={balanceTitle}>
+          {balanceText}
+        </span>
         <button
           type="button"
           className={css.version}
