@@ -60,21 +60,21 @@ if [[ ! -f "$ROOT/package.json" ]]; then
   exit 1
 fi
 
-echo "正在检查官方源登录状态（$REGISTRY）…"
+echo "正在检查官方源登录状态（${REGISTRY}）…"
 if ! USERNAME="$(mise exec -- npm whoami --registry="$REGISTRY" 2>/dev/null | tail -n 1 | tr -d '\r')"; then
   echo "还没有登录 npm 官方源，发不了包。" >&2
   echo "请先在本机执行（不要把账号密码写进脚本或发给别人）：" >&2
   echo "  export BROWSER=true" >&2
-  echo "  mise exec -- npm login --registry=$REGISTRY" >&2
+  echo "  mise exec -- npm login --registry=${REGISTRY}" >&2
   echo "登录成功后再重新执行本脚本。" >&2
   exit 1
 fi
 if [[ -z "$USERNAME" || "$USERNAME" == *"error"* || "$USERNAME" == *"ENEEDAUTH"* ]]; then
   echo "读取 npm 登录态失败。请重新登录官方源后再试。" >&2
-  echo "  mise exec -- npm login --registry=$REGISTRY" >&2
+  echo "  mise exec -- npm login --registry=${REGISTRY}" >&2
   exit 1
 fi
-echo "将使用本机已登录的 npm 账号发布（账号名：$USERNAME）。"
+echo "将使用本机已登录的 npm 账号发布（账号名：${USERNAME}）。"
 
 if [[ -n "$BUMP" ]]; then
   echo "正在把版本递增一档：$BUMP"
@@ -88,8 +88,8 @@ if [[ -z "$NAME" || -z "$VERSION" ]]; then
   exit 1
 fi
 
-echo "准备发布：$NAME@$VERSION"
-echo "发布源：$REGISTRY"
+echo "准备发布：${NAME}@${VERSION}"
+echo "发布源：${REGISTRY}"
 
 if mise exec -- npm view "$NAME@$VERSION" version --registry="$REGISTRY" >/dev/null 2>&1; then
   echo "$NAME@$VERSION 已经在 npm 上了，同一版本不能重复发布。" >&2
@@ -112,11 +112,11 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   exit 0
 fi
 
-echo "正在发布到 $REGISTRY …"
+echo "正在发布到 ${REGISTRY} …"
 mise exec -- npm publish --registry="$REGISTRY"
 
 echo
-echo "已发布 $NAME@$VERSION"
+echo "已发布 ${NAME}@${VERSION}"
 echo "安装："
 echo "  dsh plugin --profile web add $NAME@$VERSION"
 echo "页面：https://www.npmjs.com/package/$NAME"
