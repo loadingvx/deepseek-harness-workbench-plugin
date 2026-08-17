@@ -67,8 +67,8 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     hintZh: '只能操作当前仓库内的相对路径，不能使用 .. 或仓库外的绝对路径。',
   },
   NETWORK: {
-    messageZh: '无法连接 Git 服务。',
-    hintZh: '请确认 DeepSeek Harness 网页仍在运行，然后点击重试。',
+    messageZh: '无法连接工作台服务。',
+    hintZh: '请确认 DeepSeek Harness 网页仍在运行，然后点击右上角刷新。',
   },
   BAD_REQUEST: {
     messageZh: '请求参数不完整。',

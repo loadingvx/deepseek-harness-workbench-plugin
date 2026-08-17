@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitClient } from '../api.ts'
 import type { GitStatusSnapshot, PluginUpdateSnapshot } from '../../shared/types.ts'
 import { redactSecrets } from '../../shared/redact.ts'
-import { PLUGIN_PAGE_URL, PLUGIN_REPO_URL } from '../../shared/version.ts'
-import { IconChevron, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
+import { PLUGIN_ISSUES_URL, PLUGIN_PAGE_URL, PLUGIN_REPO_URL } from '../../shared/version.ts'
+import { IconChevron, IconFeedback, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
 import { EDITOR_MODES, type EditorModeId } from './editor-mode.ts'
 import { fileName, shortPath, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
 import { terminalTabLabel, type FileTab, type Translate } from './types.ts'
@@ -130,6 +130,16 @@ export function StatusBar({
       <StatusTabs tabs={openTabs} activeId={active?.id} aiTermIds={aiTermIds} onActivate={onActivate} t={t} />
       <span className={css.grow} />
       <span className={`${css.item} ${css.itemLead}`}>
+        <button
+          type="button"
+          className={css.version}
+          title={t('status.feedbackTitle')}
+          aria-label={t('status.feedbackTitle')}
+          onClick={() => { openExternal(PLUGIN_ISSUES_URL) }}
+        >
+          <IconFeedback size={12} />
+          {t('status.feedback')}
+        </button>
         <button
           type="button"
           className={css.version}

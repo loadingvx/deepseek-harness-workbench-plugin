@@ -5,7 +5,7 @@ import type {
   FsDeleteResult, FsFileSnapshot, FsListSnapshot, FsRenameResult, FsSearchSnapshot, FsWriteResult,
   GitBranchInfo, GitCommitMessage, GitCommitResult, GitCreateBranchResult, GitDiffSnapshot,
   GitFail, GitFetchResult, GitFileChange, GitIdentity, GitInitInput, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
-  GitStatusSnapshot, GitSwitchResult, PluginUpdateSnapshot,
+  GitStatusSnapshot, GitSwitchResult, PluginUpdateSnapshot, ProviderUsageSnapshot,
 } from '../shared/types.ts'
 import type { PullMode, PushMode } from '../shared/git-sync-prefs.ts'
 
@@ -152,6 +152,7 @@ export interface GitClient {
   restartTerm(workspaceId: string, cols?: number, rows?: number, termId?: string): Promise<GitResult<{ cwd: string; shell: string; cols: number; rows: number }>>
   closeTerm(workspaceId: string, termId?: string): Promise<GitResult<{ ok: true }>>
   pluginUpdate(): Promise<GitResult<PluginUpdateSnapshot>>
+  usage(sessionId?: string): Promise<GitResult<ProviderUsageSnapshot>>
   assistTerm(
     workspaceId: string,
     text: string,
@@ -279,6 +280,12 @@ export function createGitClient(): GitClient {
       method: 'POST', body: JSON.stringify({ workspaceId, termId }),
     }),
     pluginUpdate: () => request('/git/update'),
+    usage: (sessionId) => {
+      const suffix = sessionId !== undefined && sessionId !== ''
+        ? `?sessionId=${encodeURIComponent(sessionId)}`
+        : ''
+      return request(`/git/usage${suffix}`)
+    },
     assistTerm: (workspaceId, text, options) => readLlmNdjsonStream(
       '/git/term/assist/stream',
       {

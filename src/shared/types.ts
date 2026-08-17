@@ -251,3 +251,57 @@ export interface PluginUpdateSnapshot {
   outdated: boolean
   command: string
 }
+
+/** How the host learned the session's current model. */
+export type UsageRouteSource = 'session' | 'default'
+
+/** Why the provider balance could not be shown as a number. */
+export type UsageBalanceStatus = 'ok' | 'unsupported' | 'no_key' | 'auth' | 'failed'
+
+/** One currency row from a provider billing API. */
+export interface UsageBalanceRow {
+  currency: string
+  total: string
+  granted?: string
+  toppedUp?: string
+  used?: string
+}
+
+/** Provider account snapshot for the model currently shown in this session. */
+export interface ProviderUsageSnapshot {
+  provider: string
+  providerName: string
+  model: string
+  modelName: string
+  reasoningEffort?: string
+  source: UsageRouteSource
+  /** Host + path only; credentials never appear. */
+  endpoint?: string
+  balanceStatus: UsageBalanceStatus
+  /** True when the provider says the key can still call models. */
+  accountAvailable?: boolean
+  balances: UsageBalanceRow[]
+  fetchedAt: number
+}
+
+/** Durable session token totals from the conversation projection. */
+export interface SessionTokenUsage {
+  uncachedInputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+}
+
+/** Approximate context occupancy for the next request. */
+export interface SessionContextPressure {
+  pressureTokens?: number
+  projectedTokens?: number
+  contextWindow?: number
+}
+
+/** Heuristic composition of the next request (not billed totals). */
+export interface SessionContextBreakdown {
+  systemTokens: number
+  toolsTokens: number
+  messageTokens: number
+}

@@ -31,10 +31,18 @@ declare module '@deepseek-ai/cordis' {
     agentDefaultModel?: {
       currentSelection(): { provider: string; model: string; reasoningEffort?: string }
     }
+    agents?: {
+      get(id: string): unknown
+    }
+    credentials?: {
+      resolve(ref: string): Promise<{ value?: string } | undefined>
+    }
     llm: {
       listProviders(): Array<{ id: string }>
-      listModels(provider: string): Promise<Array<{ id: string }>>
+      listConfigurableProviders?(): Array<{ provider: string; displayName: string }>
+      listModels(provider: string): Promise<Array<{ id: string; name?: string }>>
       resolveModelInfo?(provider: string, model: string, signal?: AbortSignal): Promise<{
+        name?: string
         reasoning?: { efforts: Array<{ id: string }>; defaultEffort?: string }
       }>
       stream(options: Record<string, unknown>): AsyncIterable<{
@@ -144,6 +152,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       }>
       recentWorkspaceId?: string
     }) => unknown) => unknown
+    useProjection?: (key: string, selector?: (value: unknown) => unknown) => unknown
   }
   export type PropsLocale<NS extends string = string> = {
     t: (key: string, vars?: Record<string, string | number>) => string

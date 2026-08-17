@@ -22,7 +22,7 @@ import {
 import { EditorPane } from './EditorPane.tsx'
 import { loadEditorMode, saveEditorMode, type EditorModeId } from './editor-mode.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconChat, IconEditor, IconFiles, IconGit, IconLayout } from './icons.tsx'
+import { IconChat, IconEditor, IconFiles, IconGit, IconLayout, IconUsage } from './icons.tsx'
 import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
 import { SideDock, type SideTab } from './SideDock.tsx'
@@ -593,6 +593,9 @@ function WorkbenchInner(props: WorkbenchProps) {
           client={client}
           workspaceId={workspaceId}
           workspaceTitle={workspace?.title}
+          sessionId={sessionId}
+          running={running}
+          useProjection={props.useProjection}
           activePath={tabs.find(tab => tab.id === activeId)?.path}
           selected={selectedDiff}
           tab={sideTab}
@@ -622,6 +625,9 @@ function WorkbenchInner(props: WorkbenchProps) {
           </IconButton>
           <IconButton label={t('ide.git')} onClick={() => { patchWorkbenchChrome({ sideOpen: true }); setSideTab('git') }}>
             <IconGit />
+          </IconButton>
+          <IconButton label={t('ide.usage')} onClick={() => { patchWorkbenchChrome({ sideOpen: true }); setSideTab('usage') }}>
+            <IconUsage />
           </IconButton>
         </div>
       )}

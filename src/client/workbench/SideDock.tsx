@@ -4,19 +4,23 @@ import type { PluginUpdateSnapshot } from '../../shared/types.ts'
 import { FileTree } from './FileTree.tsx'
 import { GitSidebar } from './GitSidebar.tsx'
 import { IconButton } from './IconButton.tsx'
-import { IconFiles, IconGit, IconPanelOff } from './icons.tsx'
+import { IconFiles, IconGit, IconPanelOff, IconUsage } from './icons.tsx'
 import type { Translate } from './types.ts'
 import { UpdateBanner } from './UpdateBanner.tsx'
+import { UsagePanel } from './UsagePanel.tsx'
 import css from './SideDock.module.css'
 
-export type SideTab = 'files' | 'git'
+export type SideTab = 'files' | 'git' | 'usage'
 
 export function SideDock({
-  client, workspaceId, workspaceTitle, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, t,
+  client, workspaceId, workspaceTitle, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, t,
 }: {
   client: GitClient
   workspaceId?: string
   workspaceTitle?: string
+  sessionId?: string
+  running?: boolean
+  useProjection?: (key: string, selector?: (value: unknown) => unknown) => unknown
   activePath?: string
   selected?: { path: string; staged: boolean } | null
   tab: SideTab
@@ -43,6 +47,9 @@ export function SideDock({
         <IconButton label={t('ide.git')} active={tab === 'git'} onClick={() => { onTab('git') }}>
           <IconGit />
         </IconButton>
+        <IconButton label={t('ide.usage')} active={tab === 'usage'} onClick={() => { onTab('usage') }}>
+          <IconUsage />
+        </IconButton>
         <span className={css.spacer} />
         <IconButton label={t('ide.hideSide')} onClick={onCollapse}>
           <IconPanelOff />
@@ -60,13 +67,21 @@ export function SideDock({
             onDeleted={onDeleted}
             t={t}
           />
-        ) : (
+        ) : tab === 'git' ? (
           <GitSidebar
             client={client}
             workspaceId={workspaceId}
             selected={selected}
             onOpenDiff={onOpenDiff}
             onOpenCommitDiff={onOpenCommitDiff}
+            t={t}
+          />
+        ) : (
+          <UsagePanel
+            client={client}
+            sessionId={sessionId}
+            running={running}
+            useProjection={useProjection}
             t={t}
           />
         )}

@@ -12,6 +12,7 @@ import { ExternalOpen } from './external-open.ts'
 import { TerminalHub } from './terminal.ts'
 import { sanitizeTermId } from '../shared/new-file-path.ts'
 import { checkPluginUpdate } from './update-check.ts'
+import { readProviderUsage } from './provider-usage.ts'
 import type { WorkspaceFs } from './workspace-fs.ts'
 
 function send(res: ServerResponse, status: number, body: unknown): void {
@@ -381,6 +382,8 @@ export function registerGitHttp(
         ))
       } else if (method === 'GET' && route === '/git/update') {
         result = await wrap(() => checkPluginUpdate())
+      } else if (method === 'GET' && route === '/git/usage') {
+        result = await wrap(() => readProviderUsage(ctx, query(url, 'sessionId')))
       } else if (method === 'POST' && route === '/git/term/restart') {
         const body = await readJson(req)
         result = await wrap(() => term.restart(
