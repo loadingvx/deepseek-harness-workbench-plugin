@@ -7,8 +7,8 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     hintZh: '请先安装 Git，并确认终端里执行 `git --version` 能成功。Debian/Ubuntu 可用 `sudo apt install git`。',
   },
   NOT_A_REPO: {
-    messageZh: '当前工作区不是 Git 仓库。',
-    hintZh: '请在仓库根目录打开工作区。本插件不会自动执行 git init，以免误伤普通文件夹。',
+    messageZh: '当前工作区还不是 Git 仓库。',
+    hintZh: '请在右侧「源代码管理」里初始化仓库，或打开一个已经是仓库的文件夹。不会自动执行 git init。',
   },
   NO_WORKSPACE: {
     messageZh: '还没有选中工作区。',
@@ -56,7 +56,11 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
   },
   IDENTITY_MISSING: {
     messageZh: '还没有配置 Git 用户信息，无法提交。',
-    hintZh: '请在终端执行：\ngit config --global user.name "你的名字"\ngit config --global user.email "you@example.com"',
+    hintZh: '请填写姓名和邮箱。新仓库可以在初始化时填写；已有仓库可在终端执行：\ngit config --global user.name "你的名字"\ngit config --global user.email "you@example.com"',
+  },
+  IDENTITY_INVALID: {
+    messageZh: '姓名或邮箱格式不正确。',
+    hintZh: '姓名不能为空，也不能包含换行。邮箱必须包含 @，例如 you@company.com。',
   },
   INVALID_PATH: {
     messageZh: '文件路径不合法。',

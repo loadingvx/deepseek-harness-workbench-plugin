@@ -4,7 +4,7 @@ import type {
   ExternalEditorId, ExternalEditorsSnapshot, ExternalOpenResult,
   FsDeleteResult, FsFileSnapshot, FsListSnapshot, FsRenameResult, FsSearchSnapshot, FsWriteResult,
   GitBranchInfo, GitCommitMessage, GitCommitResult, GitCreateBranchResult, GitDiffSnapshot,
-  GitFail, GitFetchResult, GitFileChange, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
+  GitFail, GitFetchResult, GitFileChange, GitIdentity, GitInitInput, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
   GitStatusSnapshot, GitSwitchResult, PluginUpdateSnapshot,
 } from '../shared/types.ts'
 import type { PullMode, PushMode } from '../shared/git-sync-prefs.ts'
@@ -114,6 +114,8 @@ async function readCommitMessageStream(
 
 export interface GitClient {
   status(workspaceId: string): Promise<GitResult<GitStatusSnapshot>>
+  identity(workspaceId: string): Promise<GitResult<GitIdentity>>
+  initRepo(workspaceId: string, input: GitInitInput): Promise<GitResult<GitStatusSnapshot>>
   diff(workspaceId: string, path?: string, staged?: boolean): Promise<GitResult<GitDiffSnapshot>>
   log(workspaceId: string): Promise<GitResult<GitLogEntry[]>>
   branches(workspaceId: string): Promise<GitResult<GitBranchInfo[]>>
@@ -167,6 +169,10 @@ export interface GitClient {
 export function createGitClient(): GitClient {
   return {
     status: workspaceId => request(`/git/status?workspaceId=${encodeURIComponent(workspaceId)}`),
+    identity: workspaceId => request(`/git/identity?workspaceId=${encodeURIComponent(workspaceId)}`),
+    initRepo: (workspaceId, input) => request('/git/init', {
+      method: 'POST', body: JSON.stringify({ workspaceId, ...input }),
+    }),
     diff: (workspaceId, path, staged) => {
       const query = new URLSearchParams({ workspaceId })
       if (path) query.set('path', path)

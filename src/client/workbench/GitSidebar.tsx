@@ -4,6 +4,7 @@ import type {
   GitBranchInfo, GitFail, GitFileChange, GitLogEntry, GitResult, GitStatusSnapshot,
 } from '../../shared/types.ts'
 import { GitGraph } from './GitGraph.tsx'
+import { GitInitPanel } from './GitInitPanel.tsx'
 import { IconButton } from './IconButton.tsx'
 import { isDefaultCommitTemplate, resolveCommitTemplate } from '../../shared/commit-template.ts'
 import { visibleSyncActions } from '../../shared/sync-actions.ts'
@@ -16,7 +17,7 @@ import {
   type GitSyncPrefs, type PullMode, type PushMode,
 } from '../../shared/git-sync-prefs.ts'
 import { invalidBranchName } from '../../shared/branch-name.ts'
-import { IconBranch, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRefresh, IconRestore, IconSparkle, IconTune } from './icons.tsx'
+import { IconBranch, IconCheck, IconChevron, IconCompact, IconFetch, IconGit, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRefresh, IconRestore, IconSparkle, IconTune } from './icons.tsx'
 import type { Translate } from './types.ts'
 import { clampGraphHeight, GRAPH_DEFAULT_H, GRAPH_MIN_H, measureReservedAboveGraph } from './graph-layout.ts'
 import css from './GitSidebar.module.css'
@@ -238,19 +239,43 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       return null
     }
     setLoading(true)
-    const [statusResult, branchResult, logResult] = await Promise.all([
-      client.status(workspaceId),
-      client.branches(workspaceId),
-      client.log(workspaceId),
-    ])
-    setLoading(false)
+    const statusResult = await client.status(workspaceId)
     if (!statusResult.ok) {
+      setLoading(false)
       if (statusResult.code === 'BUSY') return status
+      if (statusResult.code === 'NOT_A_REPO') {
+        setError(null)
+        const empty = {
+          probe: { gitAvailable: true, isRepo: false, detached: false, ahead: 0, behind: 0, hasHead: false },
+          staged: [] as GitFileChange[],
+          unstaged: [] as GitFileChange[],
+          untracked: [] as GitFileChange[],
+        }
+        setStatus(empty)
+        setBranches([])
+        setLog([])
+        hasRemoteRef.current = false
+        return empty
+      }
       setStatus(null)
       setError(statusResult)
       hasRemoteRef.current = false
       return null
     }
+    if (!statusResult.value.probe.isRepo) {
+      setLoading(false)
+      setError(null)
+      setStatus(statusResult.value)
+      setBranches([])
+      setLog([])
+      hasRemoteRef.current = false
+      return statusResult.value
+    }
+    const [branchResult, logResult] = await Promise.all([
+      client.branches(workspaceId),
+      client.log(workspaceId),
+    ])
+    setLoading(false)
     setError(null)
     setStatus(statusResult.value)
     hasRemoteRef.current = statusResult.value.probe.remote !== undefined
@@ -652,25 +677,32 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       style={{ '--git-graph-h': `${graphHFit}px`, '--git-graph-reserved': `${reserved}px` } as never}
     >
       <header className={css.head} data-git-chrome="head">
-        <label className={css.branchWrap}>
-          <IconBranch />
-          <select
-            className={css.branchSelect}
-            value={status?.probe.branch ?? ''}
-            disabled={writesDisabled}
-            aria-label={t('branch.switch')}
-            onChange={(event) => {
-              const name = event.target.value
-              if (workspaceId === undefined || name === status?.probe.branch) return
-              void runWrite(() => client.switchBranch(workspaceId, name))
-            }}
-          >
-            {status?.probe.detached ? <option value="">{t('panel.detached')}</option> : null}
-            {branches.map(branch => (
-              <option key={branch.name} value={branch.name}>{branch.name}</option>
-            ))}
-          </select>
-        </label>
+        {status !== null && !status.probe.isRepo ? (
+          <div className={css.branchWrap}>
+            <IconGit />
+            <span className={css.branchLabel}>{t('init.header')}</span>
+          </div>
+        ) : (
+          <label className={css.branchWrap}>
+            <IconBranch />
+            <select
+              className={css.branchSelect}
+              value={status?.probe.branch ?? ''}
+              disabled={writesDisabled}
+              aria-label={t('branch.switch')}
+              onChange={(event) => {
+                const name = event.target.value
+                if (workspaceId === undefined || name === status?.probe.branch) return
+                void runWrite(() => client.switchBranch(workspaceId, name))
+              }}
+            >
+              {status?.probe.detached ? <option value="">{t('panel.detached')}</option> : null}
+              {branches.map(branch => (
+                <option key={branch.name} value={branch.name}>{branch.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
         {status !== null && status.probe.ahead > 0 ? <span className={css.chip} data-kind="ahead">{t('panel.ahead', { count: status.probe.ahead })}</span> : null}
         {status !== null && status.probe.behind > 0 ? <span className={css.chip} data-kind="behind">{t('panel.behind', { count: status.probe.behind })}</span> : null}
         {remoteSyncing ? <span className={css.chip} data-kind="checking">{t('panel.checkingRemote')}</span> : null}
@@ -684,7 +716,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       </header>
 
       {workspaceId === undefined ? <p className={css.hint} data-git-chrome="hint" style={{ padding: '8px 10px' }}>{t('panel.noWorkspace')}</p> : null}
-      {error !== null ? (
+      {error !== null && error.code !== 'NOT_A_REPO' ? (
         <div className={css.banner} data-git-chrome="banner">
           <div>{error.messageZh}</div>
           <div className={css.bannerHint}>{error.hintZh}</div>
@@ -696,6 +728,15 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
         </div>
       ) : null}
       {loading && status === null ? <p className={css.hint} data-git-chrome="hint" style={{ padding: '8px 10px' }}>{t('panel.loading')}</p> : null}
+
+      {workspaceId !== undefined && status !== null && status.probe.gitAvailable && !status.probe.isRepo ? (
+        <GitInitPanel
+          client={client}
+          workspaceId={workspaceId}
+          t={t}
+          onReady={async () => { await refresh() }}
+        />
+      ) : null}
 
       {status !== null && status.probe.isRepo ? (
         <>

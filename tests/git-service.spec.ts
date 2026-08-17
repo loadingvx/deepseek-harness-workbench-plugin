@@ -47,7 +47,11 @@ describe('GitService', () => {
     const probe = await git.probe(dir)
     expect(probe.gitAvailable).toBe(true)
     expect(probe.isRepo).toBe(false)
-    await expect(git.status(dir)).rejects.toMatchObject({ code: 'NOT_A_REPO' })
+    const status = await git.status(dir)
+    expect(status.probe.isRepo).toBe(false)
+    expect(status.staged).toEqual([])
+    expect(status.unstaged).toEqual([])
+    expect(status.untracked).toEqual([])
   })
 
   it('stages, refuses empty commit, then commits', async () => {
@@ -560,5 +564,75 @@ describe('GitService commit file listing and diffs', () => {
     const absent = await git.commitDiff(root, hash, 'missing.txt')
     expect(absent.empty).toBe(true)
     await expect(git.commitDiff(root, hash, '../escape.txt')).rejects.toMatchObject({ code: 'INVALID_PATH' })
+  })
+})
+
+describe('GitService init', () => {
+  it('reads identity from an isolated global config and inits a repo', async () => {
+    const home = await tempDir('dsh-workbench-git-home-')
+    const globalFile = join(home, 'gitconfig')
+    await writeFile(globalFile, [
+      '[user]',
+      '\tname = Ada Lovelace',
+      '\temail = ada@example.com',
+      '[init]',
+      '\tdefaultBranch = develop',
+      '',
+    ].join('\n'))
+    const isolated = new GitService({
+      GIT_CONFIG_GLOBAL: globalFile,
+      GIT_CONFIG_NOSYSTEM: '1',
+    })
+    const dir = await tempDir('dsh-workbench-init-')
+    const identity = await isolated.identity(dir)
+    expect(identity.name).toBe('Ada Lovelace')
+    expect(identity.email).toBe('ada@example.com')
+    expect(identity.defaultBranch).toBe('develop')
+
+    await writeFile(join(dir, 'README.md'), 'hello\n')
+    const inited = await isolated.initRepo(dir, {
+      name: 'Ada Lovelace',
+      email: 'ada@example.com',
+      branch: 'develop',
+    })
+    expect(inited.probe.isRepo).toBe(true)
+    expect(inited.probe.branch).toBe('develop')
+    expect((await isolated.branches(dir)).map(branch => branch.name)).toEqual(['develop'])
+    expect(inited.untracked.map(file => file.path)).toContain('README.md')
+    const localName = await runGit({ cwd: dir, args: ['config', '--local', '--get', 'user.name'] })
+    const localEmail = await runGit({ cwd: dir, args: ['config', '--local', '--get', 'user.email'] })
+    expect(localName.stdout.trim()).toBe('Ada Lovelace')
+    expect(localEmail.stdout.trim()).toBe('ada@example.com')
+    expect(await readFile(globalFile, 'utf8')).toContain('ada@example.com')
+
+    const again = await isolated.initRepo(dir, {
+      name: 'Someone Else',
+      email: 'other@example.com',
+      branch: 'main',
+    })
+    expect(again.probe.isRepo).toBe(true)
+    const stillName = await runGit({ cwd: dir, args: ['config', '--local', '--get', 'user.name'] })
+    expect(stillName.stdout.trim()).toBe('Ada Lovelace')
+  })
+
+  it('refuses init without a usable identity', async () => {
+    const dir = await tempDir('dsh-workbench-init-bad-')
+    await expect(git.initRepo(dir, {
+      name: '',
+      email: 'ada@example.com',
+      branch: 'main',
+    })).rejects.toMatchObject({ code: 'IDENTITY_MISSING' })
+    await expect(git.initRepo(dir, {
+      name: 'Ada',
+      email: 'not-an-email',
+      branch: 'main',
+    })).rejects.toMatchObject({ code: 'IDENTITY_INVALID' })
+    await expect(git.initRepo(dir, {
+      name: 'Ada',
+      email: 'ada@example.com',
+      branch: 'foo bar',
+    })).rejects.toMatchObject({ code: 'BRANCH_INVALID' })
+    const probe = await git.probe(dir)
+    expect(probe.isRepo).toBe(false)
   })
 })

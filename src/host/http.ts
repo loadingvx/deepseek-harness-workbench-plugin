@@ -155,6 +155,14 @@ export function registerGitHttp(
     try {
       if (method === 'GET' && route === '/git/probe') {
         result = await wrap(() => git.probe(rootOf()))
+      } else if (method === 'GET' && route === '/git/identity') {
+        result = await wrap(() => git.identity(rootOf()))
+      } else if (method === 'POST' && route === '/git/init') {
+        const body = await readJson(req)
+        const name = typeof body.name === 'string' ? body.name : ''
+        const email = typeof body.email === 'string' ? body.email : ''
+        const branch = typeof body.branch === 'string' ? body.branch : ''
+        result = await wrap(() => git.initRepo(rootOf(body), { name, email, branch }))
       } else if (method === 'GET' && route === '/git/status') {
         result = await wrap(() => git.status(rootOf()))
       } else if (method === 'GET' && route === '/git/diff') {

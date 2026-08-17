@@ -112,11 +112,13 @@ export function StatusBar({
   const version = plugin?.current ?? '—'
   const branch = probe === undefined
     ? t('status.noGit')
-    : !probe.gitAvailable || !probe.isRepo
-      ? t('status.notRepo')
-      : probe.detached
-        ? t('panel.detached')
-        : (probe.branch ?? t('status.noGit'))
+    : !probe.gitAvailable
+      ? t('status.noGit')
+      : !probe.isRepo
+        ? t('status.notRepo')
+        : probe.detached
+          ? t('panel.detached')
+          : (probe.branch ?? t('status.noGit'))
   const openTabs = tabs ?? []
 
   return (

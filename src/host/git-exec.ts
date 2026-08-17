@@ -12,6 +12,8 @@ export interface GitExecOptions {
   allowNonZero?: boolean
   /** Written to git stdin, then closed. Used by `check-ignore --stdin`. */
   input?: string
+  /** Merged over the default git env. Tests use this to isolate `--global` writes. */
+  env?: NodeJS.ProcessEnv
 }
 
 export interface GitExecResult {
@@ -63,7 +65,7 @@ export function runGit(options: GitExecOptions): Promise<GitExecResult> {
     }
     const child = spawn('git', options.args, {
       cwd: options.cwd,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' },
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', ...options.env },
       stdio: [options.input !== undefined ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     })
     if (options.input !== undefined && child.stdin) {

@@ -10,28 +10,10 @@ if ! command -v mise >/dev/null 2>&1; then
   exit 1
 fi
 
-find_dsh() {
-  if command -v dsh >/dev/null 2>&1; then
-    command -v dsh
-    return
-  fi
-  if [[ -x "${HOME}/.dsh/profiles/node_modules/.bin/dsh" ]]; then
-    echo "${HOME}/.dsh/profiles/node_modules/.bin/dsh"
-    return
-  fi
-  if [[ -f "${HOME}/.dsh/profiles/node_modules/@deepseek-ai/dsh/lib/bin.js" ]]; then
-    echo "mise exec -- node ${HOME}/.dsh/profiles/node_modules/@deepseek-ai/dsh/lib/bin.js"
-    return
-  fi
-  if [[ -f "${ROOT}/deepseek-harness/apps/cli/lib/bin.js" ]]; then
-    echo "mise exec -- node ${ROOT}/deepseek-harness/apps/cli/lib/bin.js"
-    return
-  fi
-  return 1
-}
-
+# shellcheck source=find-dsh.sh
+source "${ROOT}/devops/find-dsh.sh"
 if ! DSH_CMD="$(find_dsh)"; then
-  echo "找不到 dsh 命令。请先安装 DeepSeek Harness。" >&2
+  explain_dsh_missing
   exit 1
 fi
 

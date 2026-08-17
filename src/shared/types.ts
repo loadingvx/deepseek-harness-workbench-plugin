@@ -15,6 +15,7 @@ export type GitErrorCode =
   | 'BRANCH_INVALID'
   | 'MERGE_CONFLICT'
   | 'IDENTITY_MISSING'
+  | 'IDENTITY_INVALID'
   | 'INVALID_PATH'
   | 'NETWORK'
   | 'BAD_REQUEST'
@@ -87,6 +88,19 @@ export interface GitStatusSnapshot {
   staged: GitFileChange[]
   unstaged: GitFileChange[]
   untracked: GitFileChange[]
+}
+
+/** Prefill for `git init`: name / email / default branch from this machine. */
+export interface GitIdentity {
+  name: string
+  email: string
+  defaultBranch: string
+}
+
+export interface GitInitInput {
+  name: string
+  email: string
+  branch: string
 }
 
 export interface GitDiffSnapshot {

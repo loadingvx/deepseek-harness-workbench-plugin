@@ -5,10 +5,15 @@ import { invalidBranchName, normalizeBranchName } from '../shared/branch-name.ts
 import { MAX_FILE_BYTES } from './workspace-fs.ts'
 import type {
   FileStatusKind, GitBranchInfo, GitCommitResult, GitCreateBranchResult, GitDiffSnapshot,
-  GitFetchResult, GitFileChange, GitLogEntry, GitMergeResult, GitProbe, GitPullResult,
+  GitFetchResult, GitFileChange, GitIdentity, GitInitInput, GitLogEntry, GitMergeResult, GitProbe, GitPullResult,
   GitPushResult, GitRefMark, GitStatusSnapshot, GitSwitchResult,
 } from '../shared/types.ts'
 import { parsePullMode, parsePushMode, pullArgs, pushArgs, type PullMode, type PushMode } from '../shared/git-sync-prefs.ts'
+import {
+  DEFAULT_INIT_BRANCH,
+  invalidGitUserEmail, invalidGitUserName, invalidInitBranch,
+  normalizeGitUserEmail, normalizeGitUserName, normalizeInitBranch,
+} from '../shared/git-identity.ts'
 import { gitAvailable, runGit } from './git-exec.ts'
 import { GitMutex } from './mutex.ts'
 
@@ -104,8 +109,9 @@ export function assertSafeRepoPath(root: string, filePath: string): string {
 
 function parseBranchLine(line: string): Pick<GitProbe, 'branch' | 'detached' | 'ahead' | 'behind' | 'upstream'> {
   // ## main...origin/main [ahead 1, behind 2]
-  const rest = line.slice(3)
-  if (rest.startsWith('HEAD (no branch)') || rest.startsWith('HEAD')) {
+  // ## No commits yet on main
+  const rest = line.startsWith('## ') ? line.slice(3) : line
+  if (rest.startsWith('HEAD (no branch)') || rest === 'HEAD' || rest.startsWith('HEAD...')) {
     const detachedMatch = /^HEAD(?: \(no branch\))?(?:\.\.\.(\S+))?/.exec(rest)
     return {
       branch: undefined,
@@ -115,7 +121,8 @@ function parseBranchLine(line: string): Pick<GitProbe, 'branch' | 'detached' | '
       ...detachedMatch?.[1] ? { upstream: detachedMatch[1] } : {},
     }
   }
-  const match = /^(\S+?)(?:\.\.\.(\S+))?(?: \[(.+)\])?$/.exec(rest)
+  const unborn = rest.replace(/^(?:No commits yet on |Initial commit on )/, '')
+  const match = /^(\S+?)(?:\.\.\.(\S+))?(?: \[(.+)\])?$/.exec(unborn)
   let ahead = 0
   let behind = 0
   const tracking = match?.[3]
@@ -170,6 +177,79 @@ function parsePorcelain(stdout: string): { header: string; files: GitFileChange[
 export class GitService {
   private readonly mutex = new GitMutex()
 
+  /**
+   * Extra env for git subprocesses. Tests pass `GIT_CONFIG_GLOBAL` so `--global`
+   * writes never touch the developer's real `~/.gitconfig`.
+   */
+  constructor(private readonly extraEnv: NodeJS.ProcessEnv = {}) {}
+
+  private run(options: Parameters<typeof runGit>[0]): ReturnType<typeof runGit> {
+    return runGit({ ...options, env: { ...this.extraEnv, ...options.env } })
+  }
+
+  private async readConfig(
+    cwd: string,
+    key: string,
+    file: 'local' | 'global' | 'system',
+    signal?: AbortSignal,
+  ): Promise<string | undefined> {
+    const result = await this.run({
+      cwd,
+      args: ['config', `--${file}`, '--null', '--get', key],
+      signal,
+      allowNonZero: true,
+    })
+    if (result.exitCode !== 0) return undefined
+    const value = result.stdout.replace(/\0+$/, '').trim()
+    return value === '' ? undefined : value
+  }
+
+  async identity(root: string, signal?: AbortSignal): Promise<GitIdentity> {
+    const available = await gitAvailable(signal)
+    if (!available.ok) throw new GitError('GIT_NOT_FOUND')
+    const [nameLocal, nameGlobal, nameSystem, emailLocal, emailGlobal, emailSystem, branchLocal, branchGlobal, branchSystem] = await Promise.all([
+      this.readConfig(root, 'user.name', 'local', signal),
+      this.readConfig(root, 'user.name', 'global', signal),
+      this.readConfig(root, 'user.name', 'system', signal),
+      this.readConfig(root, 'user.email', 'local', signal),
+      this.readConfig(root, 'user.email', 'global', signal),
+      this.readConfig(root, 'user.email', 'system', signal),
+      this.readConfig(root, 'init.defaultBranch', 'local', signal),
+      this.readConfig(root, 'init.defaultBranch', 'global', signal),
+      this.readConfig(root, 'init.defaultBranch', 'system', signal),
+    ])
+    const name = nameLocal ?? nameGlobal ?? nameSystem ?? ''
+    const email = emailLocal ?? emailGlobal ?? emailSystem ?? ''
+    const defaultBranch = normalizeInitBranch(branchLocal ?? branchGlobal ?? branchSystem ?? DEFAULT_INIT_BRANCH)
+    return { name, email, defaultBranch }
+  }
+
+  /** Create a repo in the workspace. Does not run unless the caller asked. Idempotent if already a repo. */
+  async initRepo(root: string, input: GitInitInput, signal?: AbortSignal): Promise<GitStatusSnapshot> {
+    return this.mutex.run(async () => {
+      const name = normalizeGitUserName(input.name)
+      const email = normalizeGitUserEmail(input.email)
+      const branch = normalizeInitBranch(input.branch)
+      if (invalidGitUserName(name) !== null || invalidGitUserEmail(email) !== null) {
+        throw new GitError(invalidGitUserName(name) === 'empty' || invalidGitUserEmail(email) === 'empty' ? 'IDENTITY_MISSING' : 'IDENTITY_INVALID')
+      }
+      if (invalidInitBranch(branch) !== null) throw new GitError('BRANCH_INVALID')
+      const available = await gitAvailable(signal)
+      if (!available.ok) throw new GitError('GIT_NOT_FOUND')
+      const probe = await this.probe(root, signal)
+      if (probe.isRepo) return this.status(root, signal)
+      try {
+        await this.run({ cwd: root, args: ['init', '-b', branch], signal })
+      } catch {
+        await this.run({ cwd: root, args: ['init'], signal })
+        await this.run({ cwd: root, args: ['symbolic-ref', 'HEAD', `refs/heads/${branch}`], signal })
+      }
+      await this.run({ cwd: root, args: ['config', 'user.email', email], signal })
+      await this.run({ cwd: root, args: ['config', 'user.name', name], signal })
+      return this.status(root, signal)
+    })
+  }
+
   async probe(root: string, signal?: AbortSignal): Promise<GitProbe> {
     const available = await gitAvailable(signal)
     if (!available.ok) {
@@ -213,7 +293,9 @@ export class GitService {
   async status(root: string, signal?: AbortSignal): Promise<GitStatusSnapshot> {
     const probe = await this.probe(root, signal)
     if (!probe.gitAvailable) throw new GitError('GIT_NOT_FOUND')
-    if (!probe.isRepo) throw new GitError('NOT_A_REPO')
+    if (!probe.isRepo) {
+      return { probe, staged: [], unstaged: [], untracked: [] }
+    }
     const result = await runGit({ cwd: root, args: ['status', '--porcelain=v1', '-b'], signal })
     const { files } = parsePorcelain(result.stdout)
     return {
@@ -281,10 +363,16 @@ export class GitService {
   async branches(root: string, signal?: AbortSignal): Promise<GitBranchInfo[]> {
     await this.requireRepo(root, signal)
     const result = await runGit({ cwd: root, args: ['branch', '--list', '--format=%(refname:short)%09%(HEAD)'], signal })
-    return result.stdout.split(/\r?\n/).filter(Boolean).map((line) => {
+    const list = result.stdout.split(/\r?\n/).filter(Boolean).map((line) => {
       const [name, head] = line.split('\t')
       return { name: name ?? '', current: head === '*' }
     }).filter(branch => branch.name !== '')
+    if (list.length > 0) return list
+    const head = await runGit({
+      cwd: root, args: ['symbolic-ref', '--short', 'HEAD'], signal, allowNonZero: true,
+    })
+    const name = head.exitCode === 0 ? head.stdout.trim() : ''
+    return name === '' ? [] : [{ name, current: true }]
   }
 
   async stage(root: string, paths: readonly string[], signal?: AbortSignal): Promise<void> {
@@ -304,7 +392,7 @@ export class GitService {
       try {
         await runGit({ cwd: root, args: ['restore', '--staged', '--', ...safe], signal })
       } catch (error) {
-        if (!(error instanceof GitError) || !/could not resolve 'HEAD'/i.test(error.message)) throw error
+        if (!(error instanceof GitError) || !/could not resolve '?HEAD'?/i.test(error.message)) throw error
         await runGit({ cwd: root, args: ['rm', '--cached', '-q', '--', ...safe], signal })
       }
     })
