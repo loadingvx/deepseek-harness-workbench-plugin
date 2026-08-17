@@ -9,6 +9,7 @@ import {
   formatMoney,
   formatTokenCount,
   parseBalanceBody,
+  spentFromRow,
   totalBilledTokens,
 } from '../src/shared/usage-format.ts'
 
@@ -98,6 +99,25 @@ describe('formatMoney', () => {
   it('uses ¥ / $ without repeating the currency code', () => {
     expect(formatMoney({ currency: 'CNY', total: '50.00' })).toBe('¥50.00')
     expect(formatMoney({ currency: 'USD', total: '1.2' })).toBe('$1.2')
+  })
+})
+
+describe('spentFromRow', () => {
+  it('uses an explicit used field', () => {
+    expect(spentFromRow({ currency: 'USD', total: '12.5', used: '7.5' })).toBe('7.5')
+  })
+
+  it('derives spend from topped-up plus granted minus remaining', () => {
+    expect(spentFromRow({
+      currency: 'CNY',
+      total: '9.10',
+      granted: '0.00',
+      toppedUp: '10.00',
+    })).toBe('0.90')
+  })
+
+  it('does not invent spend when the payload has no cost basis', () => {
+    expect(spentFromRow({ currency: 'CNY', total: '9.10' })).toBeUndefined()
   })
 })
 

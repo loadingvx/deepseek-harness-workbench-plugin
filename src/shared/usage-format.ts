@@ -59,6 +59,34 @@ export function formatMoney(row: Pick<UsageBalanceRow, 'currency' | 'total'>): s
   return `${currencySymbol(row.currency)}${row.total}`
 }
 
+function parseAmount(value: string): number | undefined {
+  if (!/^-?\d+(\.\d+)?$/.test(value)) return undefined
+  const n = Number(value)
+  return Number.isFinite(n) ? n : undefined
+}
+
+function decimalPlaces(value: string): number {
+  const dot = value.indexOf('.')
+  return dot === -1 ? 0 : value.length - dot - 1
+}
+
+function formatAmount(n: number, samples: readonly string[]): string {
+  const places = Math.min(4, Math.max(2, ...samples.map(decimalPlaces)))
+  return n.toFixed(places)
+}
+
+/** Account spend in the same currency, when the billing payload can support it. */
+export function spentFromRow(row: UsageBalanceRow): string | undefined {
+  if (row.used !== undefined) return row.used
+  const total = parseAmount(row.total)
+  const granted = parseAmount(row.granted ?? '0') ?? 0
+  const toppedUp = parseAmount(row.toppedUp ?? '')
+  if (total === undefined || toppedUp === undefined) return undefined
+  const spent = granted + toppedUp - total
+  if (!Number.isFinite(spent) || spent < 0) return undefined
+  return formatAmount(spent, [row.total, row.granted ?? '0', row.toppedUp ?? '0'])
+}
+
 /** Strip a trailing /v1 so DeepSeek-style `/user/balance` can be tried at the origin. */
 export function billingOrigin(baseURL: string): string {
   return baseURL.replace(/\/+$/, '').replace(/\/v1$/i, '')
