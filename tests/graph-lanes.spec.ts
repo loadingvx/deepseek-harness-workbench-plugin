@@ -45,8 +45,8 @@ describe('layoutGraphLanes', () => {
       { hash: 'base', parents: [] },
     ])
     expect(rows[0]).toMatchObject({ lane: 0, fromAbove: false, outgoing: [{ from: 0, to: 0 }] })
-    expect(rows[1]).toMatchObject({ lane: 1, fromAbove: false, outgoing: [{ from: 1, to: 0 }] })
-    expect(rows[2]).toMatchObject({ lane: 0, fromAbove: true })
+    expect(rows[1]).toMatchObject({ lane: 1, fromAbove: false, outgoing: [{ from: 1, to: 1 }] })
+    expect(rows[2]).toMatchObject({ lane: 0, fromAbove: true, incoming: [1] })
     expect(rows[1]?.laneCount).toBeGreaterThanOrEqual(2)
   })
 
@@ -64,7 +64,42 @@ describe('layoutGraphLanes', () => {
     ])
     expect(rows[1]?.lane).toBe(0)
     expect(rows[2]?.lane).toBe(1)
-    expect(rows[2]?.outgoing).toEqual([{ from: 1, to: 0 }])
-    expect(rows[3]?.lane).toBe(0)
+    expect(rows[2]?.outgoing).toEqual([{ from: 1, to: 1 }])
+    expect(rows[3]).toMatchObject({ lane: 0, incoming: [1] })
+  })
+
+  it('keeps HEAD on a straight left lane when another branch is newer', () => {
+    const rows = layoutGraphLanes([
+      { hash: 'remote', parents: ['base'] },
+      { hash: 'head', parents: ['base'] },
+      { hash: 'base', parents: [] },
+    ], { headHash: 'head' })
+    expect(rows.map(row => row.lane)).toEqual([1, 0, 0])
+    expect(rows[0]?.outgoing).toEqual([{ from: 1, to: 1 }])
+    expect(rows[1]?.outgoing).toEqual([{ from: 0, to: 0 }])
+    expect(rows[1]?.passing).toEqual([1])
+    expect(rows[2]).toMatchObject({ lane: 0, incoming: [1] })
+  })
+
+  it('does not bend the current branch toward a parent already on a side lane', () => {
+    const rows = layoutGraphLanes([
+      { hash: 'side', parents: ['base'] },
+      { hash: 'head', parents: ['base'] },
+      { hash: 'base', parents: [] },
+    ], { headHash: 'head' })
+    expect(rows[1]?.outgoing).toEqual([{ from: 0, to: 0 }])
+    expect(rows[1]?.outgoing.some(edge => edge.from !== edge.to)).toBe(false)
+  })
+
+  it('widens only the rows that actually use extra lanes so titles indent with the branch', () => {
+    const rows = layoutGraphLanes([
+      { hash: 'head', parents: ['base'] },
+      { hash: 'side', parents: ['base'] },
+      { hash: 'base', parents: [] },
+    ], { headHash: 'head' })
+    expect(rows[0]?.lane).toBe(0)
+    expect(rows[0]?.laneCount).toBe(1)
+    expect(rows[1]?.lane).toBe(1)
+    expect(rows[1]?.laneCount).toBeGreaterThanOrEqual(2)
   })
 })

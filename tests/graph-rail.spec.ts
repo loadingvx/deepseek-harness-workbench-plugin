@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { layoutGraphLanes } from '../src/client/workbench/graph-lanes.ts'
+import { LANE_COL_W, layoutGraphLanes } from '../src/client/workbench/graph-lanes.ts'
 import {
-  buildGraphRailDraw, GRAPH_NODE_CY, GRAPH_NODE_CY_COMPACT, GRAPH_ROW_H, GRAPH_ROW_H_COMPACT,
-  GRAPH_SEAM_PAD, graphRailMetrics, laneX,
+  branchOff, buildGraphRailDraw, GRAPH_CURVE_R, GRAPH_NODE_CY, GRAPH_NODE_CY_COMPACT,
+  GRAPH_ROW_H, GRAPH_ROW_H_COMPACT, GRAPH_SEAM_PAD, graphRailMetrics, joinIn, laneX,
 } from '../src/client/workbench/graph-rail.ts'
 
 describe('graphRailMetrics', () => {
@@ -53,5 +53,51 @@ describe('buildGraphRailDraw', () => {
     const draw = buildGraphRailDraw(rows[1]!, 2, { height: GRAPH_ROW_H, compact: false, isLast: false })
     expect(draw.strokes.some(stroke => stroke.key === `up-${rows[1]!.lane}`)).toBe(false)
     expect(draw.strokes.some(stroke => stroke.key === 'pass-0')).toBe(true)
+  })
+
+  it('sizes each row to its own lanes so commit titles indent with the graph', () => {
+    const rows = layoutGraphLanes([
+      { hash: 'head', parents: ['base'] },
+      { hash: 'side', parents: ['base'] },
+      { hash: 'base', parents: [] },
+    ], { headHash: 'head' })
+    const head = buildGraphRailDraw(rows[0]!, rows[0]!.laneCount, { height: GRAPH_ROW_H, compact: false, isLast: false })
+    const side = buildGraphRailDraw(rows[1]!, rows[1]!.laneCount, { height: GRAPH_ROW_H, compact: false, isLast: false })
+    expect(head.width).toBe(LANE_COL_W)
+    expect(side.width).toBeGreaterThan(head.width)
+    expect(side.dot.x).toBeGreaterThan(head.dot.x)
+  })
+
+  it('peels a merge parent off with a rounded elbow instead of a stretched S-curve', () => {
+    const rows = layoutGraphLanes([
+      { hash: 'merge', parents: ['left', 'right'] },
+      { hash: 'left', parents: ['base'] },
+      { hash: 'right', parents: ['base'] },
+      { hash: 'base', parents: [] },
+    ])
+    const merge = buildGraphRailDraw(rows[0]!, rows[0]!.laneCount, { height: GRAPH_ROW_H, compact: false, isLast: false })
+    const fork = merge.strokes.find(stroke => stroke.key === 'out-1')
+    expect(fork?.d).toBe(branchOff(laneX(0), GRAPH_NODE_CY, laneX(1), GRAPH_ROW_H + GRAPH_SEAM_PAD))
+    expect(fork?.d.includes(' C ')).toBe(false)
+    expect(fork?.d.includes(' A ')).toBe(true)
+
+    const join = buildGraphRailDraw(rows[3]!, rows[3]!.laneCount, { height: GRAPH_ROW_H, compact: false, isLast: true })
+    const incoming = join.strokes.find(stroke => stroke.key === 'in-1')
+    expect(incoming?.d).toBe(joinIn(laneX(1), -GRAPH_SEAM_PAD, laneX(0), GRAPH_NODE_CY))
+  })
+})
+
+describe('branch elbows', () => {
+  it('turns right then down from the node', () => {
+    const d = branchOff(6, 12, 18, 46)
+    expect(d.startsWith('M 6 12 H ')).toBe(true)
+    expect(d.includes(`A ${GRAPH_CURVE_R} ${GRAPH_CURVE_R}`)).toBe(true)
+    expect(d.endsWith('V 46')).toBe(true)
+  })
+
+  it('comes down then turns into the node', () => {
+    const d = joinIn(18, -0.5, 6, 12)
+    expect(d.startsWith('M 18 -0.5 V ')).toBe(true)
+    expect(d.endsWith('H 6')).toBe(true)
   })
 })

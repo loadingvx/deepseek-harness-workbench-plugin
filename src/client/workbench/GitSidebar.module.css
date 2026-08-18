@@ -483,13 +483,13 @@
 .remotePulse {
   flex: none;
   position: relative;
-  height: 2px;
+  height: 1.5px;
   overflow: hidden;
   background: var(--dsw-alias-border-l2);
 }
 
 .remotePulse[data-active] {
-  background-color: color-mix(in srgb, var(--dsw-alias-state-business-primary, #5b8def) 16%, var(--dsw-alias-border-l2));
+  background-color: light-dark(#ffffff, #1c1c1c);
 }
 
 .remotePulse[data-active]::after {
@@ -498,15 +498,15 @@
   inset: 0;
   background-image: repeating-linear-gradient(
     -45deg,
-    color-mix(in srgb, var(--dsw-alias-state-business-primary, #5b8def) 72%, transparent) 0 5px,
-    transparent 5px 10px
+    light-dark(#7a7a7a, #9a9a9a) 0 6px,
+    light-dark(#ffffff, #1c1c1c) 6px 12px
   );
-  background-size: 14px 14px;
-  animation: git-remote-stripe 0.55s linear infinite;
+  background-size: 17px 17px;
+  animation: git-remote-stripe 0.5s linear infinite;
 }
 
 @keyframes git-remote-stripe {
-  to { background-position: 14px 0; }
+  to { background-position: 17px 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -774,6 +774,7 @@
   flex: none;
   align-self: stretch;
   min-width: 14px;
+  overflow: visible;
 }
 
 .graphBends {

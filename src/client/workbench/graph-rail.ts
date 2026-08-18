@@ -15,6 +15,8 @@ export const GRAPH_NODE_R = 4
 export const GRAPH_NODE_R_COMPACT = 3.5
 /** Overlap adjacent rows so a 1px hairline does not appear at the seam. */
 export const GRAPH_SEAM_PAD = 0.5
+/** Rounded elbow, same idea as VS Code SCM graph (`SWIMLANE_CURVE_RADIUS`). */
+export const GRAPH_CURVE_R = 5
 
 export interface GraphRailMetrics {
   cy: number
@@ -75,7 +77,7 @@ export function buildGraphRailDraw(
   for (const index of row.incoming) {
     strokes.push({
       key: `in-${index}`,
-      d: bend(laneX(index), 0, laneX(row.lane), cy),
+      d: joinIn(laneX(index), top, laneX(row.lane), cy),
       lane: index,
     })
   }
@@ -85,7 +87,7 @@ export function buildGraphRailDraw(
         key: `out-${edgeIndex}`,
         d: edge.from === edge.to
           ? `M ${laneX(edge.from)} ${cy} V ${bottom}`
-          : bend(laneX(edge.from), cy, laneX(edge.to), bottom),
+          : branchOff(laneX(edge.from), cy, laneX(edge.to), bottom),
         lane: edge.to,
       })
     }
@@ -99,7 +101,24 @@ export function buildGraphRailDraw(
   }
 }
 
-export function bend(x1: number, y1: number, x2: number, y2: number): string {
-  const midY = (y1 + y2) / 2
-  return `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`
+/** Side branch peels off the node, then goes straight down (classic `|\`). */
+export function branchOff(x1: number, y1: number, x2: number, y2: number): string {
+  if (x1 === x2) return `M ${x1} ${y1} V ${y2}`
+  const r = curveRadius(x1, y1, x2, y2)
+  const sign = x2 > x1 ? 1 : -1
+  const sweep = x2 > x1 ? 1 : 0
+  return `M ${x1} ${y1} H ${x2 - sign * r} A ${r} ${r} 0 0 ${sweep} ${x2} ${y1 + r} V ${y2}`
+}
+
+/** Side lane comes down, then turns into the node (classic `|/`). */
+export function joinIn(x1: number, y1: number, x2: number, y2: number): string {
+  if (x1 === x2) return `M ${x1} ${y1} V ${y2}`
+  const r = curveRadius(x1, y1, x2, y2)
+  const sign = x2 > x1 ? 1 : -1
+  const sweep = x2 > x1 ? 0 : 1
+  return `M ${x1} ${y1} V ${y2 - r} A ${r} ${r} 0 0 ${sweep} ${x1 + sign * r} ${y2} H ${x2}`
+}
+
+function curveRadius(x1: number, y1: number, x2: number, y2: number): number {
+  return Math.max(0.5, Math.min(GRAPH_CURVE_R, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2))
 }

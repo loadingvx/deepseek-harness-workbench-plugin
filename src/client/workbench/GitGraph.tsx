@@ -99,8 +99,10 @@ export function GitGraph({
     })
   }
 
-  const layouts = useMemo(() => layoutGraphLanes(graphNodesFromEntries(entries)), [entries])
-  const railLanes = Math.max(1, ...layouts.map(row => row.laneCount))
+  const layouts = useMemo(() => {
+    const headHash = entries.find(entry => entry.head)?.hash
+    return layoutGraphLanes(graphNodesFromEntries(entries), { headHash })
+  }, [entries])
   const metrics = graphRailMetrics(compact === true)
 
   if (entries.length === 0) {
@@ -127,7 +129,7 @@ export function GitGraph({
             {row !== undefined ? (
               <GraphRail
                 row={row}
-                lanes={railLanes}
+                lanes={Math.max(1, row.laneCount)}
                 compact={compact === true}
                 isLast={index === entries.length - 1}
                 head={entry.head}
@@ -283,6 +285,8 @@ function GraphRail({
             fill="none"
             stroke={laneColor(stroke.lane)}
             strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           />
         ))}
         <circle

@@ -12,7 +12,7 @@ export interface GraphLaneEdge {
 export interface GraphLaneRow {
   /** Column of this commit's node. */
   lane: number
-  /** Columns this row must reserve so rails line up. */
+  /** Columns this row must reserve so the title sits just after the rails. */
   laneCount: number
   /** A parent above already reserved this commit — draw a stem from the row top to the node. */
   fromAbove: boolean
@@ -22,6 +22,11 @@ export interface GraphLaneRow {
   incoming: number[]
   /** Lines from this node down toward its parents. */
   outgoing: GraphLaneEdge[]
+}
+
+export interface GraphLaneOptions {
+  /** HEAD commit — its first-parent chain stays on lane 0 as a straight line. */
+  headHash?: string
 }
 
 export const LANE_COLORS = ['#3b82f6', '#a855f7', '#f59e0b', '#10b981', '#06b6d4', '#f43f5e'] as const
@@ -47,22 +52,35 @@ export function graphNodesFromEntries(entries: ReadonlyArray<{ hash: string; par
 
 /**
  * Assign swimlanes for a newest-first topo log (same order as `git log --topo-order`).
+ *
+ * Classic git-graph rules:
+ * - HEAD 的第一父链固定在第 0 列，画成直线
+ * - 其余分支只往右侧开新列，在汇合处拐回来
+ * - 第一父提交继续走当前列，不把当前分支拐去别人已经占的列
  */
-export function layoutGraphLanes(commits: readonly GraphNode[]): GraphLaneRow[] {
+export function layoutGraphLanes(commits: readonly GraphNode[], opts?: GraphLaneOptions): GraphLaneRow[] {
+  const currentLine = firstParentLine(commits, opts?.headHash)
   const rows: GraphLaneRow[] = []
   let open: (string | null)[] = []
 
-  for (const commit of commits) {
+  for (let commitIndex = 0; commitIndex < commits.length; commitIndex++) {
+    const commit = commits[commitIndex]!
+    const isCurrent = currentLine.has(commit.hash)
+    const reserveLeft = currentLine.size > 0 && commits.slice(commitIndex).some(item => currentLine.has(item.hash))
+
     let lane = open.indexOf(commit.hash)
-    const fromAbove = lane !== -1
-    if (lane === -1) {
-      lane = firstEmpty(open)
-      if (lane === -1) {
-        open.push(commit.hash)
-        lane = open.length - 1
-      } else {
-        open[lane] = commit.hash
+    let fromAbove = lane !== -1
+    if (isCurrent) {
+      const wasOnZero = lane === 0
+      if (lane !== 0) {
+        while (open.length < 1) open.push(null)
+        open[0] = commit.hash
+        lane = 0
+        fromAbove = wasOnZero
       }
+    } else if (lane === -1) {
+      lane = allocLane(open, reserveLeft ? 1 : 0)
+      open[lane] = commit.hash
     }
 
     const incoming = open
@@ -77,24 +95,20 @@ export function layoutGraphLanes(commits: readonly GraphNode[]): GraphLaneRow[] 
     const parents = unique(commit.parents.filter(hash => hash.length > 0))
 
     for (const [index, parent] of parents.entries()) {
+      if (index === 0) {
+        while (next.length <= lane) next.push(null)
+        next[lane] = parent
+        outgoing.push({ from: lane, to: lane })
+        continue
+      }
       const existing = next.indexOf(parent)
       if (existing !== -1) {
         outgoing.push({ from: lane, to: existing })
         continue
       }
-      if (index === 0) {
-        next[lane] = parent
-        outgoing.push({ from: lane, to: lane })
-        continue
-      }
-      const slot = firstEmpty(next)
-      if (slot === -1) {
-        next.push(parent)
-        outgoing.push({ from: lane, to: next.length - 1 })
-      } else {
-        next[slot] = parent
-        outgoing.push({ from: lane, to: slot })
-      }
+      const slot = allocLane(next, lane + 1)
+      next[slot] = parent
+      outgoing.push({ from: lane, to: slot })
     }
 
     while (next.length > 0 && next[next.length - 1] === null) next.pop()
@@ -106,8 +120,26 @@ export function layoutGraphLanes(commits: readonly GraphNode[]): GraphLaneRow[] 
   return rows
 }
 
-function firstEmpty(lanes: readonly (string | null)[]): number {
-  return lanes.findIndex(hash => hash === null)
+function firstParentLine(commits: readonly GraphNode[], headHash?: string): Set<string> {
+  const line = new Set<string>()
+  if (headHash === undefined || headHash === '') return line
+  const byHash = new Map(commits.map(commit => [commit.hash, commit] as const))
+  let current: string | undefined = headHash
+  while (current !== undefined && byHash.has(current) && !line.has(current)) {
+    line.add(current)
+    current = byHash.get(current)?.parents[0]
+  }
+  return line
+}
+
+function allocLane(lanes: (string | null)[], minIndex: number): number {
+  const start = Math.max(0, minIndex)
+  while (lanes.length < start) lanes.push(null)
+  for (let index = start; index < lanes.length; index++) {
+    if (lanes[index] === null) return index
+  }
+  lanes.push(null)
+  return lanes.length - 1
 }
 
 function unique(items: readonly string[]): string[] {
