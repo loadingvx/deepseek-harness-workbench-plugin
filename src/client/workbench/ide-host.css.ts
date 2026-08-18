@@ -93,6 +93,12 @@ export const IDE_HOST_CSS = `
   min-width: 0;
   overflow: visible;
 }
+/* File-tree drag over the composer: outline the input seat so dropping is obvious. */
+[data-composer-seat][data-dsh-drop-target]{
+  outline: 2px dashed var(--dsw-alias-accent-primary, #4c8dff);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
 `
 
 export function ensureIdeStyles(): void {

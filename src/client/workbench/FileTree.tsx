@@ -642,8 +642,17 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
       return
     }
     setDragSource(path)
-    event.dataTransfer.effectAllowed = 'move'
+    // copyMove, not move: the composer drop sets dropEffect 'copy', and per
+    // the HTML DnD effect-compatibility rule a dropEffect outside
+    // effectAllowed cancels the drop (Chrome shows the no-drop cursor and the
+    // drop event never fires), which silently broke drag-to-composer.
+    event.dataTransfer.effectAllowed = 'copyMove'
     event.dataTransfer.setData('application/x-dsh-path', path)
+    // Standard-type fallback: only text/* data is readable during dragover in
+    // Firefox, so a custom-type-only drag could never enable the drop there;
+    // text/plain also feeds the native drop-into-textarea path when our own
+    // drop handler cannot run (e.g. cross-document drags).
+    event.dataTransfer.setData('text/plain', path)
   }
 
   const handleDragEnd = (): void => {
