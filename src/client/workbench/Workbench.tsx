@@ -669,6 +669,7 @@ function WorkbenchInner(props: WorkbenchProps) {
           client={client}
           workspaceId={workspaceId}
           workspaceTitle={workspace?.title}
+          workspacePath={workspace?.path}
           sessionId={sessionId}
           running={running}
           useProjection={props.useProjection}

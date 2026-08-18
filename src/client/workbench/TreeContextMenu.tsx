@@ -14,6 +14,7 @@ export type TreeMenuTarget =
 export function TreeContextMenu({
   x, y, target, canPaste, pasteHint, editors, editorsReady, revealLabel, busy, t,
   onOpen, onReveal, onCut, onCopy, onPaste, onNewFile, onNewFolder, onRename, onDelete, onOpenExternal, onClose,
+  onCopyRelPath, onCopyAbsPath,
 }: {
   x: number
   y: number
@@ -36,6 +37,8 @@ export function TreeContextMenu({
   onDelete: () => void
   onOpenExternal: (app: ExternalEditorId) => void
   onClose: () => void
+  onCopyRelPath: () => void
+  onCopyAbsPath: () => void
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   const entry = target.scope === 'entry' ? target : null
@@ -76,6 +79,13 @@ export function TreeContextMenu({
           event.stopPropagation()
         }}
       >
+        {entry !== null ? (
+          <>
+            <MenuItem icon={<IconCopy />} label={t('tree.copyRelPath')} disabled={disabled} onClick={onCopyRelPath} />
+            <MenuItem icon={<IconCopy />} label={t('tree.copyAbsPath')} disabled={disabled} onClick={onCopyAbsPath} />
+            <div className={css.ctxSep} />
+          </>
+        ) : null}
         {entry !== null ? (
           <MenuItem
             icon={entry.kind === 'directory' ? <IconFiles /> : <IconEditor />}
