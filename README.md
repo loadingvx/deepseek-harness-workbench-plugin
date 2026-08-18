@@ -1,12 +1,14 @@
 
 ![preview](docs/img/social-preview.jpg)
 
-A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. After Workbench is opened in Conversation, chat stays on the left. Two columns appear on the right: the editor (syntax highlighting and terminal) and the side dock for files, Git, the **Usage** panel, and the **Ultra Slash** panel.
+A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. After Workbench is opened in Conversation, chat stays on the left. Two columns appear on the right: the editor (syntax highlighting and **smart terminal**) and the side dock for files, Git, the **Usage** panel, and the **Ultra Slash** panel.
 
-The two panels to look for first:
+Look for these first:
 
 - **Usage** — official API balance, this-machine observed spend, this-session tokens and context. Pin it above the left **Settings** button so you can see spend while chatting.
 - **Ultra Slash** — slash commands that inject guidance **without stopping the current turn**. Manage them in the right dock; send them from the bottom group of the chat `/` menu.
+- **Smart terminal** — a local PTY in the editor. Real shell lines (including pasted `$ ls`) run as-is. Natural language is translated by **AI command assist** (<kbd>Alt</kbd>+<kbd>I</kbd> or the ✨ button) and typed into the **current** terminal. Notes are never executed. A blacklist blocks destructive commands the assistant would otherwise type. <kbd>Alt</kbd>+<kbd>J</kbd> opens another terminal tab.
+- **AI commit messages** — in the right-dock **Source Control** tab, generate a message from staged changes; the text streams into the commit box. The template is editable.
 
 ## Contents
 
@@ -15,17 +17,18 @@ The two panels to look for first:
 - [Feature list](#feature-list)
 - [Usage panel](#usage-panel)
 - [Ultra Slash](#ultra-slash)
+- [Smart terminal](#smart-terminal)
+- [Workspace terminal](#workspace-terminal)
+- [AI command assist](#ai-command-assist)
 - [Capability matrix](#capability-matrix)
 - [Release](#release)
 - [Installation](#installation)
 - [Upgrade](#upgrade)
-- [Workspace terminal](#workspace-terminal)
-- [AI command assist](#ai-command-assist)
 - [License](#license)
 
 ## Interface
 
-The workbench uses a three-column layout. Conversation stays on the left. The two columns on the right are the capability area: editor and terminal in the center; file tree, Git, Usage, and Ultra Slash on the far right. The right dock tabs are **Files**, **Source Control**, **Usage**, and **Ultra Slash**.
+The workbench uses a three-column layout. Conversation stays on the left. The two columns on the right are the capability area: editor and smart terminal in the center; file tree, Git, Usage, and Ultra Slash on the far right. The right dock tabs are **Files**, **Source Control**, **Usage**, and **Ultra Slash**.
 
 ![screen_1](docs/img/screen_shot_1.png)
 ![screen_2](docs/img/screen_shot_2.png)
@@ -248,11 +251,11 @@ Rules the panel enforces (you will see a Chinese or English reason under the fie
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.19** (npm tag `latest`) |
+| Version | **0.1.20** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.19
++ dsh-workbench-plugin@0.1.20
 ```
 
 Maintainers publish npm with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -267,13 +270,13 @@ The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbenc
 
 ### Procedure
 
-1. Install the plugin (pin the version; do not omit `@0.1.19`):
+1. Install the plugin (pin the version; do not omit `@0.1.20`):
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.19
+dsh plugin --profile web add dsh-workbench-plugin@0.1.20
 ```
 
-`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.19` requests that release explicitly.
+`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.20` requests that release explicitly.
 
 If a pinned install is still refused as too new, add this to `~/.dsh/profiles/web/pnpm-workspace.yaml` and run the command again:
 
@@ -309,7 +312,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.19 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.20 manually using the command above. Later releases will prompt in the UI.
 
 ## Workspace terminal
 
