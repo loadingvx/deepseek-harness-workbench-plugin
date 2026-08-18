@@ -99,6 +99,12 @@ export const IDE_HOST_CSS = `
   outline-offset: -2px;
   border-radius: 8px;
 }
+/* Official chip is a fixed 4em box and centers the label, so a long name
+   shows the middle. Keep their box; align to the end so the suffix stays. */
+[data-decoration="chip"]>span{
+  justify-content:flex-end!important;
+  text-align:right!important;
+}
 `
 
 export function ensureIdeStyles(): void {

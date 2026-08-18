@@ -12,6 +12,8 @@ describe('workbench ultra-slash host wiring', () => {
   it('wires the browser slash menu to inputTriggers', () => {
     const client = readFileSync(new URL('../src/client/index.ts', import.meta.url), 'utf8')
     expect(client).toContain("'inputTriggers'")
+    expect(client).toContain("'sessions'")
     expect(client).toContain('installUltraSlashClient')
+    expect(client).toContain('installFileRefClient')
   })
 })

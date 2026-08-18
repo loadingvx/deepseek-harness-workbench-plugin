@@ -5,16 +5,18 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { createGitClient } from './api.ts'
 import { GitToolRow } from './GitToolRow.tsx'
 import { installUltraSlashClient } from './ultra-slash/install.ts'
+import { installFileRefClient } from './workbench/file-ref-client.ts'
 import { Workbench } from './workbench/Workbench.tsx'
 import { en, NS, zh } from './locales.ts'
 
-export const inject = ['slots', 'locale', 'inputTriggers']
+export const inject = ['slots', 'locale', 'inputTriggers', 'sessions']
 
 /** Browser half: native-chat split workbench, keyed git tool cards, and Ultra Slash. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workbench: dictionaries')
   const client = createGitClient()
   installUltraSlashClient(ctx)
+  const fileRefs = installFileRefClient(ctx, client)
 
   // Host lives in the composer overlay so a blank new-session hero still
   // mounts the workbench. The header utilities seat is hidden until the
@@ -23,7 +25,7 @@ export function apply(ctx: ClientContext): void {
     name: 'conversation.input.overlay',
     id: 'workbench-host',
     locale: NS,
-    inject: () => ({ client, mount: 'host' as const }),
+    inject: () => ({ client, mount: 'host' as const, fileRefs }),
   }, Workbench))
 
   ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({

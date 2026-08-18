@@ -6,6 +6,7 @@ import { joinWorkspaceFile } from '../../shared/new-file-path.ts'
 import { copyFileName, uniqueFileName } from '../../shared/copy-name.ts'
 import { fileManagerKind, fileManagerLocaleKey } from '../../shared/file-manager.ts'
 import { isExternalEditorId, type ExternalEditorId, type ExternalEditorInfo, type FsDirEntry, type GitFail } from '../../shared/types.ts'
+import { FILE_REF_KIND_TYPE, FILE_REF_PATH_TYPE } from '../../shared/file-ref.ts'
 import { FileKindIcon } from './file-icons.tsx'
 import { IconButton } from './IconButton.tsx'
 import { IconChevron, IconClose, IconExternal, IconEye, IconRefresh, IconRename, IconSearch, IconTrash } from './icons.tsx'
@@ -667,7 +668,7 @@ export function FileTree({ client, workspaceId, workspaceTitle, workspacePath, a
 
   const canDrag = workspaceId !== undefined && busyPath === null
 
-  const handleDragStart = (event: React.DragEvent<HTMLElement>, path: string): void => {
+  const handleDragStart = (event: React.DragEvent<HTMLElement>, path: string, kind: 'file' | 'directory'): void => {
     if (!canDrag) {
       event.preventDefault()
       return
@@ -678,7 +679,8 @@ export function FileTree({ client, workspaceId, workspaceTitle, workspacePath, a
     // effectAllowed cancels the drop (Chrome shows the no-drop cursor and the
     // drop event never fires), which silently broke drag-to-composer.
     event.dataTransfer.effectAllowed = 'copyMove'
-    event.dataTransfer.setData('application/x-dsh-path', path)
+    event.dataTransfer.setData(FILE_REF_PATH_TYPE, path)
+    event.dataTransfer.setData(FILE_REF_KIND_TYPE, kind)
     // Standard-type fallback: only text/* data is readable during dragover in
     // Firefox, so a custom-type-only drag could never enable the drop there;
     // text/plain also feeds the native drop-into-textarea path when our own
@@ -739,7 +741,7 @@ export function FileTree({ client, workspaceId, workspaceTitle, workspacePath, a
         data-dragover={dragOver === entry.path || undefined}
         data-drag-source={dragSource === entry.path || undefined}
         draggable={canDrag && !renaming}
-        onDragStart={(event) => { handleDragStart(event, entry.path) }}
+        onDragStart={(event) => { handleDragStart(event, entry.path, entry.kind) }}
         onDragEnd={handleDragEnd}
         onDragOver={(event) => { handleRowDragOver(event, entry) }}
         onDragLeave={(event) => {

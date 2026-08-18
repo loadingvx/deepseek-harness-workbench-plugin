@@ -488,6 +488,8 @@ export const zh = {
   'editor.mode.plainHint': '标准快捷键：方向键、Ctrl+Z/Y、Tab 缩进',
   'editor.mode.emacsHint': 'Emacs 风格：Ctrl+A/E/F/B/P/N 移动，Ctrl+K 删到行尾',
   'editor.mode.vimHint': 'Vim：Esc 进入普通模式，i 进入插入模式',
+  'fileRef.busy': '正在发送，请等这条发出去后再拖入文件。',
+  'fileRef.failed': '没能把文件放进输入框。请再拖一次。',
 } satisfies Record<string, string>
 
 export type WorkbenchKey = keyof typeof zh
@@ -983,4 +985,6 @@ export const en = {
   'editor.mode.plainHint': 'Standard keys: arrows, Ctrl+Z/Y, Tab indent',
   'editor.mode.emacsHint': 'Emacs-style keys: Ctrl+A/E/F/B/P/N to move, Ctrl+K deletes to end of line',
   'editor.mode.vimHint': 'Vim: Esc for normal mode, i to insert',
+  'fileRef.busy': 'A message is sending. Drop the file after it finishes.',
+  'fileRef.failed': 'Could not attach the file. Drop it on the input again.',
 } satisfies Record<WorkbenchKey, string>

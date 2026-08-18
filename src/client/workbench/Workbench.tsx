@@ -37,6 +37,14 @@ import { DEFAULT_TERM_AI_OPEN, TERM_AI_OPEN_KEY, readBoolFlag, writeBoolFlag } f
 import { usePluginUpdate, visibleUpdate } from './UpdateBanner.tsx'
 import { updateTermSeed } from '../../shared/version.ts'
 import { useWorkspace } from './useWorkspace.ts'
+import {
+  composerSeatOf,
+  composerSelection,
+  dragCarriesFileRef,
+  fileRefExisting,
+  readDragKind,
+  readDragPath,
+} from './file-ref-client.ts'
 import css from './Workbench.module.css'
 
 export type WorkbenchProps =
@@ -154,7 +162,7 @@ function WorkbenchToggle({ t }: Pick<WorkbenchProps, 't'>) {
 }
 
 function WorkbenchInner(props: WorkbenchProps) {
-  const { client, t, useSessions, useWorkspaces, sessionId } = props
+  const { client, t, useSessions, useWorkspaces, sessionId, fileRefs } = props
   const chrome = useSyncExternalStore(subscribeWorkbenchChrome, getWorkbenchChrome, defaultWorkbenchChrome)
   const { enabled, chatOpen, editorOpen, sideOpen, sideTab } = chrome
   const usageDock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
@@ -194,6 +202,25 @@ function WorkbenchInner(props: WorkbenchProps) {
 
   const workspace = useWorkspace(useSessions, useWorkspaces)
   const workspaceId = workspace?.workspaceId
+  const inputDraft = props.useInput?.(state => state.draft) ?? ''
+  const inputPhase = props.useInput?.(state => state.phase) ?? ''
+  const inputDraftRev = props.useInput?.(state => state.draftRev) ?? 0
+  const inputOccurrences = props.useInput?.(state => state.occurrences) ?? []
+  const fileRefDropRef = useRef({
+    sessionId,
+    draftLength: inputDraft.length,
+    draftRev: inputDraftRev,
+    phase: inputPhase,
+    existing: fileRefExisting(inputOccurrences),
+  })
+  fileRefDropRef.current = {
+    sessionId,
+    draftLength: inputDraft.length,
+    draftRev: inputDraftRev,
+    phase: inputPhase,
+    existing: fileRefExisting(inputOccurrences),
+  }
+  fileRefs?.rememberOccurrences(sessionId, fileRefDropRef.current.existing)
   const running = Boolean(props.useSession?.(state => state.running))
   const pending = (props.useSession?.(state => state.pending)?.length ?? 0) as number
   const split = shouldSplitWorkbench(enabled)
@@ -475,68 +502,51 @@ function WorkbenchInner(props: WorkbenchProps) {
     return () => { window.removeEventListener('keydown', onKey, true) }
   }, [openNewTerminal])
 
+  useEffect(() => {
+    fileRefs?.bindWorkspace(sessionId, workspaceId)
+    return () => { fileRefs?.bindWorkspace(sessionId, undefined) }
+  }, [fileRefs, sessionId, workspaceId])
+
   /**
-   * Dragging a file-tree node onto the composer appends the quoted absolute
-   * path to the draft. The composer is dsh shell UI ([data-composer-seat] >
-   * textarea), outside this plugin's React tree, so we listen on window in
-   * the capture phase and only act when the drop target sits inside it.
+   * Drag a file-tree node onto the composer: mint an official InputBar chip
+   * (U+FFFC + occurrence) via insert-reference. Do not write a path string.
    */
   useEffect(() => {
-    const workspacePath = workspace?.path
-    if (workspacePath === undefined) return
-    const root = workspacePath.replace(/\/+$/, '')
-    const relPathOf = (dt: DataTransfer | null): string | null => {
-      if (dt === null) return null
-      const rel = dt.getData('application/x-dsh-path')
-      return rel === '' ? null : rel
-    }
-    // Gate dragover on the TYPES list, not getData: the types array is
-    // readable during dragover in every engine, while custom-type DATA is not
-    // (Firefox only exposes text/* there) — a getData gate would never call
-    // preventDefault on Firefox and the drop would stay forbidden.
-    const dragCarriesPath = (dt: DataTransfer | null): boolean =>
-      dt !== null && dt.types.includes('application/x-dsh-path')
-    const seatOf = (target: EventTarget | null): HTMLElement | null => {
-      if (!(target instanceof Element)) return null
-      return target.closest<HTMLElement>('[data-composer-seat]')
-    }
+    if (fileRefs === undefined) return
     const clearMark = (seat: HTMLElement): void => {
       seat.removeAttribute('data-dsh-drop-target')
     }
     const onDragOver = (event: DragEvent): void => {
-      if (!dragCarriesPath(event.dataTransfer)) return
-      const seat = seatOf(event.target)
+      if (!dragCarriesFileRef(event.dataTransfer)) return
+      const seat = composerSeatOf(event.target)
       if (seat === null) return
       event.preventDefault()
-      // 'copy' is legal now: the drag source declares effectAllowed 'copyMove'.
       if (event.dataTransfer !== null) event.dataTransfer.dropEffect = 'copy'
       seat.setAttribute('data-dsh-drop-target', '')
     }
     const onDragLeave = (event: DragEvent): void => {
-      const seat = seatOf(event.target)
+      const seat = composerSeatOf(event.target)
       if (seat !== null) clearMark(seat)
     }
     const onDrop = (event: DragEvent): void => {
-      const rel = relPathOf(event.dataTransfer)
-      const seat = seatOf(event.target)
+      const rel = readDragPath(event.dataTransfer)
+      const seat = composerSeatOf(event.target)
       if (rel === null || seat === null) return
       event.preventDefault()
       event.stopPropagation()
       clearMark(seat)
-      const textarea = seat.querySelector<HTMLTextAreaElement>('textarea')
-      if (textarea === null) return
-      const full = root === '' ? rel : `${root}/${rel}`
-      const quoted = `"${full}"`
-      const current = textarea.value
-      const sep = current === '' || /\s$/.test(current) ? '' : ' '
-      const next = current + sep + quoted
-      // React-controlled textarea: write via the native setter, then dispatch
-      // an input event so the composer's onChange picks the draft up.
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
-      setter?.call(textarea, next)
-      textarea.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: quoted }))
-      textarea.focus()
-      textarea.setSelectionRange(next.length, next.length)
+      const live = fileRefDropRef.current
+      if (live.sessionId === undefined) return
+      const range = composerSelection(seat, live.draftLength)
+      const ok = fileRefs.insertChip({
+        sessionId: live.sessionId,
+        kind: readDragKind(event.dataTransfer),
+        relPath: rel,
+        span: { start: range.start, end: range.end, draftRev: live.draftRev },
+        existing: live.existing,
+        phase: live.phase,
+      }, t)
+      if (ok) seat.querySelector('textarea')?.focus()
     }
     window.addEventListener('dragover', onDragOver, true)
     window.addEventListener('dragleave', onDragLeave, true)
@@ -546,7 +556,7 @@ function WorkbenchInner(props: WorkbenchProps) {
       window.removeEventListener('dragleave', onDragLeave, true)
       window.removeEventListener('drop', onDrop, true)
     }
-  }, [workspace?.path])
+  }, [fileRefs, t])
 
   const closeTab = (id: string): void => {
     closeTabs([id])

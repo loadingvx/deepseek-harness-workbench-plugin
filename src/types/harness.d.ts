@@ -43,6 +43,10 @@ declare module '@deepseek-ai/cordis' {
         cancel: () => Promise<unknown>
         getSnapshot: () => { running?: boolean }
       } } | undefined
+      scope?(id: string): {
+        bail(thisArg: unknown, name: string, payload: unknown): unknown
+        get(name: string): unknown
+      } | undefined
     }
     agentDefaultModel?: {
       currentSelection(): { provider: string; model: string; reasoningEffort?: string }
@@ -151,7 +155,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       blank?: boolean
       composerPhase?: string
     }) => T) => T
-    useInput?: <T>(selector: (state: { draft: string; phase: string }) => T) => T
+    useInput?: <T>(selector: (state: {
+      draft: string
+      phase: string
+      draftRev?: number
+      occurrences?: ReadonlyArray<{ source?: string; label?: string; ref?: string }>
+    }) => T) => T
     inputActions?: {
       setDraft: (text: string) => void
       submit: () => void
