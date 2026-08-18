@@ -157,6 +157,8 @@ export function FileTree({ client, workspaceId, workspaceTitle, workspacePath, a
   const searchGen = useRef(0)
   const renameHandled = useRef(false)
   const createHandled = useRef(false)
+  const branchesRef = useRef(branches)
+  branchesRef.current = branches
 
   const chosen = pickPreferred(editors, pref)
 
@@ -174,6 +176,16 @@ export function FileTree({ client, workspaceId, workspaceTitle, workspacePath, a
         : { entries: [], truncated: false, loading: false, error: result },
     }))
   }, [client, workspaceId])
+
+  /**
+   * Reload the root and every branch already loaded, keeping the expansion
+   * state (`openDirs`) intact. Used by the toolbar refresh button.
+   */
+  const refreshAll = useCallback(async (): Promise<void> => {
+    if (workspaceId === undefined) return
+    const dirs = [...new Set(['', ...Object.keys(branchesRef.current)])]
+    await Promise.all(dirs.map(dir => load(dir)))
+  }, [load, workspaceId])
 
   const loadEditors = useCallback(async (): Promise<ExternalEditorInfo[]> => {
     const result = await client.listEditors()
@@ -998,6 +1010,13 @@ export function FileTree({ client, workspaceId, workspaceTitle, workspacePath, a
       <header className={css.head}>
         <div className={css.headRow}>
           <span className={css.title}>{workspaceTitle ?? t('tree.workspaceFallback')}</span>
+          <IconButton
+            label={t('tree.refresh')}
+            disabled={workspaceId === undefined}
+            onClick={() => { void refreshAll() }}
+          >
+            <IconRefresh />
+          </IconButton>
           <IconButton
             label={headerLabel}
             disabled={workspaceId === undefined || busyPath !== null}
