@@ -1,6 +1,6 @@
 {
   "name": "dsh-workbench-plugin",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "description": "DeepSeek Harness Web UI 工作台：聊天 / 编辑器（语法高亮） / 文件与 Git、侧边栏、模型工具",
   "type": "module",
   "main": "lib/index.js",
@@ -25,7 +25,8 @@
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-tool",
         "@deepseek-ai/dsh-client-ui-conversation",
-        "@deepseek-ai/dsh-client-locale"
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-input-trigger"
       ]
     }
   },

@@ -21,7 +21,7 @@ import {
 import { EditorPane } from './EditorPane.tsx'
 import { loadEditorMode, saveEditorMode, type EditorModeId } from './editor-mode.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconChat, IconEditor, IconFiles, IconGit, IconLayout, IconUsage } from './icons.tsx'
+import { IconChat, IconEditor, IconFiles, IconGit, IconLayout, IconSlash, IconUsage } from './icons.tsx'
 import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
 import { SideDock } from './SideDock.tsx'
@@ -634,6 +634,9 @@ function WorkbenchInner(props: WorkbenchProps) {
               <IconUsage />
             </IconButton>
           ) : null}
+          <IconButton label={t('ide.slash')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'slash' }) }}>
+            <IconSlash />
+          </IconButton>
         </div>
       )}
       <UsageNavPortal

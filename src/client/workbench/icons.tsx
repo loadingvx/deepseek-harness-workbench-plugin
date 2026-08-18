@@ -59,6 +59,15 @@ export function IconUsage() {
   )
 }
 
+export function IconSlash() {
+  return (
+    <Icon>
+      <path d="M2.4 3.2h11.2v9.6H2.4z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M9.6 4.8 6.4 11.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </Icon>
+  )
+}
+
 export function IconRestore() {
   return (
     <Icon>

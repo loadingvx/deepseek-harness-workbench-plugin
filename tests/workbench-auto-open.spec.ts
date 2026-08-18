@@ -117,6 +117,7 @@ describe('parseWorkbenchChrome', () => {
       sideOpen: false,
     })
     expect(isSideTab('usage')).toBe(true)
+    expect(isSideTab('slash')).toBe(true)
     expect(isSideTab('nope')).toBe(false)
   })
 })

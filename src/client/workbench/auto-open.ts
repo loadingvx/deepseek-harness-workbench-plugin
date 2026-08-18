@@ -2,7 +2,7 @@
 
 export type WorkbenchMount = 'host' | 'toggle'
 
-export const WORKBENCH_SIDE_TABS = ['files', 'git', 'usage'] as const
+export const WORKBENCH_SIDE_TABS = ['files', 'git', 'usage', 'slash'] as const
 export type SideTab = (typeof WORKBENCH_SIDE_TABS)[number]
 
 export interface WorkbenchChrome {

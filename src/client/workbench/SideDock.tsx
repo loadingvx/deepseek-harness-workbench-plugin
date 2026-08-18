@@ -5,10 +5,11 @@ import type { SideTab } from './auto-open.ts'
 import { FileTree } from './FileTree.tsx'
 import { GitSidebar } from './GitSidebar.tsx'
 import { IconButton } from './IconButton.tsx'
-import { IconFiles, IconGit, IconPanelOff, IconUsage } from './icons.tsx'
+import { IconFiles, IconGit, IconPanelOff, IconSlash, IconUsage } from './icons.tsx'
 import type { Translate } from './types.ts'
 import { UpdateBanner } from './UpdateBanner.tsx'
 import { UsagePanel } from './UsagePanel.tsx'
+import { SlashPanel } from '../ultra-slash/SlashPanel.tsx'
 import {
   defaultUsageDock,
   isNavHostReady,
@@ -69,6 +70,9 @@ export function SideDock({
             <IconUsage />
           </IconButton>
         ) : null}
+        <IconButton label={t('ide.slash')} active={tab === 'slash'} onClick={() => { onTab('slash') }}>
+          <IconSlash />
+        </IconButton>
         <span className={css.spacer} />
         <IconButton label={t('ide.hideSide')} onClick={onCollapse}>
           <IconPanelOff />
@@ -92,6 +96,8 @@ export function SideDock({
             useProjection={useProjection}
             t={t}
           />
+        ) : tab === 'slash' ? (
+          <SlashPanel />
         ) : (
           <FileTree
             client={client}

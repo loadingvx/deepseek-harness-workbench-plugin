@@ -1,13 +1,20 @@
 
 ![preview](docs/img/social-preview.jpg)
 
-A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. After Workbench is opened in Conversation, chat stays on the left. Two new columns appear on the right: the editor (syntax highlighting and terminal) and files, Git, and usage.
+A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. After Workbench is opened in Conversation, chat stays on the left. Two columns appear on the right: the editor (syntax highlighting and terminal) and the side dock for files, Git, the **Usage** panel, and the **Ultra Slash** panel.
+
+The two panels to look for first:
+
+- **Usage** — official API balance, this-machine observed spend, this-session tokens and context. Pin it above the left **Settings** button so you can see spend while chatting.
+- **Ultra Slash** — slash commands that inject guidance **without stopping the current turn**. Manage them in the right dock; send them from the bottom group of the chat `/` menu.
 
 ## Contents
 
 - [Interface](#interface)
 - [Core capabilities](#core-capabilities)
 - [Feature list](#feature-list)
+- [Usage panel](#usage-panel)
+- [Ultra Slash](#ultra-slash)
 - [Capability matrix](#capability-matrix)
 - [Release](#release)
 - [Installation](#installation)
@@ -18,7 +25,7 @@ A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/dee
 
 ## Interface
 
-The workbench uses a three-column layout. Conversation stays on the left. The two columns on the right are the new capability area: editor and terminal in the center; file tree, Git, and usage on the far right.
+The workbench uses a three-column layout. Conversation stays on the left. The two columns on the right are the capability area: editor and terminal in the center; file tree, Git, Usage, and Ultra Slash on the far right. The right dock tabs are **Files**, **Source Control**, **Usage**, and **Ultra Slash**.
 
 ![screen_1](docs/img/screen_shot_1.png)
 ![screen_2](docs/img/screen_shot_2.png)
@@ -26,24 +33,27 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 ![screen_4](docs/img/screen_shot_4.png)
 ![screen_5](docs/img/screen_shot_5.png)
 ![screen_6](docs/img/screen_shot_6.png)
+![screen_7](docs/img/screen_shot_7.png)
 
 
 ## Core capabilities
 
-1. **Workbench layout.** Three columns: Conversation on the left, editor and terminal in the center, files / Git / usage on the right. A new session opens the workbench immediately. By default the editor is collapsed, the files/Git sidebar is open, and usage is pinned above Settings. Columns can be resized, collapsed to icon rails, and restored. Collapse, the files/Git tab, and the usage pin are remembered globally across reload and new sessions.
+1. **Workbench layout.** Three columns: Conversation on the left, editor and terminal in the center, files / Git / Usage / Ultra Slash on the right. A new session opens the workbench immediately. By default the editor is collapsed, the files sidebar is open, and usage is pinned above Settings. Columns can be resized, collapsed to icon rails, and restored. Collapse, the side-dock tab, and the usage pin are remembered globally across reload and new sessions.
 2. **Smart terminal.** A local PTY. Real shell lines (including pasted `$ ls`) go straight to the terminal; natural language is translated and typed into the **current** shell. Notes are non-executable. A configurable blacklist blocks destructive commands the assistant would otherwise type.
 3. **Workspace editor.** CodeMirror 6 with syntax highlighting, Plain / Emacs / Vim keymaps, Markdown edit / preview / split, image and spreadsheet previews, Git diffs, tabs, breadcrumbs, save and dirty-close guards.
 4. **Files.** Tree browse, filter, hidden files, `.gitignore` marks, new / rename / delete, and open in a local editor (Cursor, VS Code, and others).
 5. **Git.** Status, stage, commit (including streamed AI messages), fetch / pull / push with safety checks, branches, merge, restore, commit graph, `git init`, and model-facing `git_*` tools.
-6. **Usage.** Official balance, this-machine observed spend, session tokens and context, pin above left Settings (including the collapsed rail), and a compact balance on the status bar.
-7. **Status bar.** Open-file tabs, balance, Feedback, version / upgrade, workspace path, branch, dirty count, editor mode.
-8. **Maintenance & privacy.** In-UI upgrade checker, Chinese / English UI, and redaction of tokens in paths and errors.
+6. **Usage panel.** Official API balance, this-machine observed spend, this-session tokens and context. Open the right-dock **Usage** tab, or pin the panel above the left **Settings** button (including the collapsed icon rail). The status bar always shows the balance next to **Feedback**.
+7. **Ultra Slash panel.** Slash commands that inject guidance into the next model step **without interrupting the current turn**. Open the right-dock **Ultra Slash** tab to manage them; type `/` in chat and pick from the bottom Ultra Slash group. Built-in: `/steer`, `/new`, `/skill`, `/docs`. Custom `/name` shortcuts are stored on this machine and shared by every session.
+8. **Status bar.** Open-file tabs, balance, Feedback, version / upgrade, workspace path, branch, dirty count, editor mode.
+9. **Maintenance & privacy.** In-UI upgrade checker, Chinese / English UI, and redaction of tokens in paths and errors.
 
 ## Feature list
 
 ### Workbench
 
-- Three-column layout: Conversation | editor + terminal | files / Git / usage
+- Three-column layout: Conversation | editor + terminal | files / Git / Usage / Ultra Slash
+- Right-dock tabs: **Files**, **Source Control**, **Usage**, **Ultra Slash**
 - Opens as soon as you create a session; no first message required
 - Header **Workbench** button shows or hides the whole workbench
 - Drag column widths; double-click a sash to reset; widths are remembered
@@ -88,14 +98,26 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 
 ### Usage
 
+- Right-dock **Usage** tab (gauge icon). Pin it above left **Settings** so you can watch spend while chatting
 - Official API balance; currency mark follows the API (`¥` for CNY, `$` for USD)
-- Observed spend on this machine (top-ups do not erase it). The official key API does not return lifetime spend
-- Session tokens: input / output / cache hit / cache write / hit rate
+- Observed spend on this machine (top-ups do not erase it). The official key API does not return lifetime spend — this is a local running total, not the website figure
+- Session tokens: input / output / cache hit / cache write / hit rate (this conversation only)
 - Context occupancy
-- Link to the official usage page
-- Pin above the left **Settings** control; unpin back to the right dock. Pin still works when the left rail is collapsed (compact strip)
-- Drag height without covering the session list; content scrolls without a visible scrollbar
+- **Official usage** opens the DeepSeek usage page
+- Unpin to send the panel back to the right dock. Pin still works when the left rail is collapsed (compact strip: balance / spend / tokens)
+- Drag height without covering the session list; double-click the handle to reset
 - Status-bar balance to the left of **Feedback**; `—` (or `¥—` / `$—`) when the balance cannot be read
+- See [Usage panel](#usage-panel) for where to click and what the numbers mean
+
+### Ultra Slash panel
+
+- Right-dock **Ultra Slash** tab (`/` icon). Chinese UI label: **插件命令**
+- Type `/` in the chat box: plugin commands sit in the **bottom** group, below a divider
+- Built-in, cannot be renamed or deleted: `/steer` (inject guidance), `/new` (blank session), `/skill` (save a project skill after the task), `/docs` (write cause and fix under `docs/` after the task)
+- Custom `/name` shortcuts send a fixed `/steer` payload. Fill `review` in the panel — do not type the slash — and `/review` appears in the menu
+- **Does not interrupt** the current turn. If the model is running, the text is queued for the next model access; you do not need **Stop**
+- Stored on this machine at `~/.dsh/ultra-slash/commands.json`; every session shares the same list (at most 40 custom commands)
+- See [Ultra Slash](#ultra-slash) for the command table and how to add your own
 
 ### Status bar
 
@@ -122,11 +144,69 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 - Dismissible upgrade notice; install command pasted into the terminal as a `#` comment
 - Tokens, passwords, and Bearer keys are redacted in UI text and errors; URLs keep host and path
 
+## Usage panel
+
+Open the right-dock **Usage** tab (gauge icon). To keep spend in view while you chat, click the pin: the panel moves above the left **Settings** button. Click pin again to send it back to the right dock. Pin still works when the left rail is collapsed — you get a compact strip with balance, spend, and tokens.
+
+| What you see | Meaning |
+| --- | --- |
+| Balance | Official API balance. Currency follows the API (`¥` for CNY, `$` for USD) |
+| Observed spend | Sum of balance **drops** recorded on this machine after you started watching. Top-ups do not erase it. This is **not** the lifetime total on the official website — the key API does not return that figure |
+| Session tokens | Input / output / cache hit / cache write / hit rate for **this conversation only**, not the whole account |
+| Context | How much of the current context window is used |
+| Official usage | Opens [platform.deepseek.com/usage](https://platform.deepseek.com/usage) |
+
+Drag the top handle to change height; double-click resets. The session list above stays visible. The status bar (left of **Feedback**) always shows the same balance; `—` means it could not be read.
+
+If the panel cannot load a balance:
+
+- **No API key** — fill the key environment variable in Settings
+- **Key rejected** — check for typos or extra spaces
+- **Endpoint failed** — click Refresh; this also happens when the network or provider is down
+- **Unsupported** — this provider has no usable balance API
+
+**Reset observed spend** only clears the local running total on this machine. It does not change the official account.
+
+## Ultra Slash
+
+Open the right-dock **Ultra Slash** tab (`/` icon; Chinese UI: **插件命令**). These commands also appear when you type `/` in the chat box: they sit in the **bottom** group, below a divider, titled Ultra Slash.
+
+They inject text into the **next** model step. The current turn is **not** stopped. You do not need **Stop**. If the model is running, the text is queued until the next model access; if it is idle, the next step starts immediately.
+
+### Built-in commands
+
+These four cannot be renamed or deleted.
+
+| Command | What it does |
+| --- | --- |
+| `/steer <guidance>` | Inject the guidance into the next model step without interrupting the turn. Example: `/steer list the files you would change, do not edit yet` |
+| `/new` | Switch to a blank session. A running turn is not stopped; switch back from the left session list |
+| `/skill` | After the current task, save the solution as a skill in this project. Same “do not interrupt” rule as `/steer` |
+| `/docs` | After the current task, write the cause and the fix as markdown under `docs/`. Same rule as `/steer` |
+
+If `/steer` is sent with empty text, the UI tells you to write the guidance first and shows a usage example. Nothing is injected.
+
+### Custom commands
+
+Give a short name to a `/steer` payload you use often. For example, fill `review` and a fixed paragraph; afterwards `/review` in chat sends that paragraph.
+
+1. Open the right-dock **Ultra Slash** tab.
+2. Under **Custom commands**, fill **Command name** (no slash: `review` becomes `/review`), optional **Menu description**, and **Guidance to inject**.
+3. Click **Add command**. A success line confirms the name; you can type it in chat immediately.
+4. Edit or delete a row from the same list. Delete asks for confirmation.
+
+Rules the panel enforces (you will see a Chinese or English reason under the field if something is wrong):
+
+- Name: start with a lowercase letter; then only letters, digits, hyphens, or underscores. Put Chinese or other languages in the guidance text, not the name.
+- Do not reuse `/steer`, `/new`, `/skill`, `/docs`, or DeepSeek Harness names such as `/help` and `/plan`.
+- At most 40 custom commands. Description at most 80 characters; guidance at most 8000.
+- The list is stored on this machine at `~/.dsh/ultra-slash/commands.json` (or `$DSH_HOME/ultra-slash/commands.json`) and is shared by every session. A damaged file is not overwritten — fix or delete it, then try again.
+
 ## Capability matrix
 
 | Area | Capability | Notes | Status |
 | --- | --- | --- | --- |
-| Workbench | Three-column layout | Chat \| editor + terminal \| files / Git / usage | Supported |
+| Workbench | Three-column layout | Chat \| editor + terminal \| files / Git / Usage / Ultra Slash | Supported |
 | Workbench | Auto-open | New session opens the workbench without a first message | Supported |
 | Workbench | Resize / collapse | Drag sashes (double-click resets); collapse to icon rails; widths remembered | Supported |
 | Editor | Syntax highlighting | JS / TS / JSX / TSX / JSON / HTML / CSS / Markdown / Python / XML / YAML | Supported |
@@ -143,8 +223,11 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 | Git | Branches | Switch / create / merge; `git init` + identity | Supported |
 | Git | GRAPH | Commit graph, compact mode, copy hash, commit file diffs | Supported |
 | Git | Model tools | `git_status` / `git_diff` / `git_log` / `git_branch` / `git_commit` | Supported |
-| Usage | Balance and tokens | Official balance; observed spend; session tokens; context | Supported |
+| Usage | Balance and tokens | Official balance; local observed spend; this-session tokens; context | Supported |
 | Usage | Pin | Above left Settings, including collapsed rail; status-bar ¥ / $ | Supported |
+| Ultra Slash | Built-in commands | `/steer` / `/new` / `/skill` / `/docs`; do not interrupt the current turn | Supported |
+| Ultra Slash | `/` menu group | Bottom Ultra Slash group (Chinese: 插件命令), below a divider | Supported |
+| Ultra Slash | Custom commands | Named `/steer` shortcuts; local `commands.json`; at most 40 | Supported |
 | Status bar | Chrome | File tabs, Feedback, version, cwd, branch, dirty, editor mode | Supported |
 | Smart terminal | Local PTY | xterm.js; POSIX bash / zsh / sh / dash with path constraints | Supported |
 | Smart terminal | Command vs. natural language | Real argv lines go to the PTY; requests are translated | Supported |
@@ -165,11 +248,11 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.18** (npm tag `latest`) |
+| Version | **0.1.19** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.18
++ dsh-workbench-plugin@0.1.19
 ```
 
 Maintainers publish npm with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -184,13 +267,13 @@ The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbenc
 
 ### Procedure
 
-1. Install the plugin (pin the version; do not omit `@0.1.18`):
+1. Install the plugin (pin the version; do not omit `@0.1.19`):
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.18
+dsh plugin --profile web add dsh-workbench-plugin@0.1.19
 ```
 
-`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.18` requests that release explicitly.
+`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.19` requests that release explicitly.
 
 If a pinned install is still refused as too new, add this to `~/.dsh/profiles/web/pnpm-workspace.yaml` and run the command again:
 
@@ -226,7 +309,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.18 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.19 manually using the command above. Later releases will prompt in the UI.
 
 ## Workspace terminal
 

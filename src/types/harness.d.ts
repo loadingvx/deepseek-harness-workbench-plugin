@@ -6,6 +6,22 @@ declare module '@deepseek-ai/cordis' {
     tools: {
       register(tool: unknown): () => void
     }
+    commands: {
+      register(definition: {
+        name: string
+        description: string
+        input?: { hint: string }
+        handler: (invocation: {
+          agent: { status: 'idle' | 'running'; steer: (message: unknown) => void }
+          rawInput: string
+          signal: AbortSignal
+        }) => { kind: 'success' | 'error'; text?: string }
+      }): () => void
+    }
+    inputTriggers?: {
+      registerSource(src: unknown): () => void
+      live?: { sources: unknown[] }
+    }
     webServer?: {
       register(route: {
         kind: 'exact' | 'prefix'
