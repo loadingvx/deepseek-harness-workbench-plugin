@@ -23,11 +23,12 @@ import css from './SideDock.module.css'
 export type { SideTab }
 
 export function SideDock({
-  client, workspaceId, workspaceTitle, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, t,
+  client, workspaceId, workspaceTitle, workspacePath, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, t,
 }: {
   client: GitClient
   workspaceId?: string
   workspaceTitle?: string
+  workspacePath?: string
   sessionId?: string
   running?: boolean
   useProjection?: (key: string, selector?: (value: unknown) => unknown) => unknown
@@ -103,6 +104,7 @@ export function SideDock({
             client={client}
             workspaceId={workspaceId}
             workspaceTitle={workspaceTitle}
+            workspacePath={workspacePath}
             activePath={activePath}
             onOpenFile={onOpenFile}
             onRenamed={onRenamed}

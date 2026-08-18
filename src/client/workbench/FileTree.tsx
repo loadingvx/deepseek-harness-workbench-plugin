@@ -20,6 +20,8 @@ export interface FileTreeProps {
   client: GitClient
   workspaceId?: string
   workspaceTitle?: string
+  /** Absolute path of the workspace root, used for "copy full path". */
+  workspacePath?: string
   activePath?: string
   onOpenFile: (path: string) => void
   /** Editor tabs need to follow renames/moves of open files or folders. */
@@ -124,7 +126,7 @@ function isPasteIntoSelf(item: TreeClip, dir: string): boolean {
 }
 
 /** Lazy workspace explorer. Hidden files stay off until the user asks. */
-export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOpenFile, onRenamed, onDeleted, t }: FileTreeProps) {
+export function FileTree({ client, workspaceId, workspaceTitle, workspacePath, activePath, onOpenFile, onRenamed, onDeleted, t }: FileTreeProps) {
   const [showHidden, setShowHidden] = useState(false)
   const [openDirs, setOpenDirs] = useState<Record<string, boolean>>({ '': true })
   const [branches, setBranches] = useState<Record<string, Branch>>({})
@@ -278,6 +280,23 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
     clearTimer.current = setTimeout(() => {
       setNotice(current => current?.kind === 'info' ? null : current)
     }, 3200)
+  }
+
+  /** Copy a path to the clipboard with a legacy fallback; then show a toast. */
+  const copyPath = async (text: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      const area = document.createElement('textarea')
+      area.value = text
+      area.style.position = 'fixed'
+      area.style.opacity = '0'
+      document.body.appendChild(area)
+      area.select()
+      try { document.execCommand('copy') } catch { /* clipboard blocked */ }
+      document.body.removeChild(area)
+    }
+    showInfo(t('tree.copiedPath'))
   }
 
   /** Rewrite open folders + loaded branches after a rename/move so the tree stays coherent. */
@@ -654,8 +673,17 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
       return
     }
     setDragSource(path)
-    event.dataTransfer.effectAllowed = 'move'
+    // copyMove, not move: the composer drop sets dropEffect 'copy', and per
+    // the HTML DnD effect-compatibility rule a dropEffect outside
+    // effectAllowed cancels the drop (Chrome shows the no-drop cursor and the
+    // drop event never fires), which silently broke drag-to-composer.
+    event.dataTransfer.effectAllowed = 'copyMove'
     event.dataTransfer.setData('application/x-dsh-path', path)
+    // Standard-type fallback: only text/* data is readable during dragover in
+    // Firefox, so a custom-type-only drag could never enable the drop there;
+    // text/plain also feeds the native drop-into-textarea path when our own
+    // drop handler cannot run (e.g. cross-document drags).
+    event.dataTransfer.setData('text/plain', path)
   }
 
   const handleDragEnd = (): void => {
@@ -1161,6 +1189,17 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
           busy={busyPath !== null || workspaceId === undefined}
           t={t}
           onOpen={() => { openMenuTarget(ctxMenu.target) }}
+          onCopyRelPath={() => {
+            if (ctxMenu.target.scope !== 'entry') return
+            closeCtx()
+            void copyPath(ctxMenu.target.path)
+          }}
+          onCopyAbsPath={() => {
+            if (ctxMenu.target.scope !== 'entry') return
+            closeCtx()
+            const root = (workspacePath ?? '').replace(/\/+$/, '')
+            void copyPath(root === '' ? ctxMenu.target.path : `${root}/${ctxMenu.target.path}`)
+          }}
           onReveal={() => {
             void revealPath(ctxMenu.target.scope === 'root' ? '' : ctxMenu.target.path)
           }}
