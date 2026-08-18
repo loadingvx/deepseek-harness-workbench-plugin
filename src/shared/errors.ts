@@ -193,7 +193,7 @@ export class GitError extends Error {
   constructor(code: GitErrorCode, detail?: string) {
     const copy = COPY[code]
     const safe = detail === undefined ? undefined : redactSecrets(detail)
-    const messageZh = safe && (code === 'GIT_FAILED' || code === 'LLM_FAILED')
+    const messageZh = safe && (code === 'GIT_FAILED' || code === 'LLM_FAILED' || code === 'TERM_FAILED')
       ? `${copy.messageZh} ${safe}`
       : copy.messageZh
     super(`${code}: ${messageZh}`)

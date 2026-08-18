@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it } from 'vitest'
-import { clampSize, pickShell, termColorEnv, TerminalHub, type PtyHandle } from '../src/host/terminal.ts'
+import { assertNodePtyAvailable, clampSize, pickShell, termColorEnv, TerminalHub, type PtyHandle } from '../src/host/terminal.ts'
 
 function fakePty() {
   const written: string[] = []
@@ -42,6 +42,37 @@ describe('clampSize', () => {
     expect(clampSize(Number.NaN, 10, 400, 80)).toBe(80)
     expect(clampSize(2, 10, 400, 80)).toBe(10)
     expect(clampSize(9999, 10, 400, 80)).toBe(400)
+  })
+})
+
+
+describe('assertNodePtyAvailable', () => {
+  it('generates a real multiline probe script for node -e', async () => {
+    let probeCode = ''
+    await assertNodePtyAvailable('/bin/sh', '/repo', {
+      DSH_WORKBENCH_SKIP_PTY_PROBE: '0',
+    }, async (code) => {
+      probeCode = code
+      return { ok: true }
+    })
+    expect(probeCode).toContain('\nconst pty =')
+    expect(probeCode).not.toContain('\\nconst pty =')
+  })
+
+  it('turns a failed out-of-process node-pty probe into a structured terminal error', async () => {
+    await expect(assertNodePtyAvailable('/bin/sh', '/repo', {}, async () => ({
+      ok: false,
+      detail: 'posix_spawn failed: No such file or directory',
+    }))).rejects.toMatchObject({
+      code: 'TERM_FAILED',
+      messageZh: expect.stringContaining('posix_spawn failed'),
+    })
+  })
+
+  it('allows explicit probe bypass for known-good host environments', async () => {
+    await expect(assertNodePtyAvailable('/bin/sh', '/repo', {
+      DSH_WORKBENCH_SKIP_PTY_PROBE: '1',
+    }, async () => ({ ok: false, detail: 'should not run' }))).resolves.toBeUndefined()
   })
 })
 

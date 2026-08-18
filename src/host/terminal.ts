@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -15,6 +16,9 @@ const ALLOWED_SHELL = /^(bash|zsh|sh|dash|pwsh|powershell|cmd)$/
 const ALLOWED_ABS = /^\/(bin|usr\/bin|usr\/local\/bin)\/(bash|zsh|sh|dash)$/
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
+const PTY_PROBE_TIMEOUT_MS = 5000
+const MAX_PROBE_STDERR = 4096
+const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
 
 export interface TerminalHello {
   cwd: string
@@ -114,17 +118,21 @@ function writeSse(res: ServerResponse, event: TerminalEvent): void {
   res.write(`data: ${JSON.stringify(event)}\n\n`)
 }
 
-async function loadNodePty(): Promise<{ spawn: (file: string, args: string[], options: Record<string, unknown>) => {
-  write(data: string): void
-  resize(cols: number, rows: number): void
-  kill(): void
-  onData(handler: (data: string) => void): { dispose(): void }
-  onExit(handler: (event: { exitCode: number; signal?: number }) => void): { dispose(): void }
-} }> {
+interface NodePtyModule {
+  spawn(file: string, args: string[], options: Record<string, unknown>): PtyHandle
+}
+
+interface PtyProbeResult {
+  ok: boolean
+  detail?: string
+}
+
+async function loadNodePty(): Promise<NodePtyModule> {
   try {
     return await import('node-pty')
   } catch {
     const candidates = [
+      join(homedir(), '.dsh/profiles/desktop/node_modules/node-pty'),
       join(homedir(), '.dsh/profiles/node_modules/node-pty'),
       join(process.cwd(), 'node_modules/node-pty'),
     ]
@@ -137,7 +145,118 @@ async function loadNodePty(): Promise<{ spawn: (file: string, args: string[], op
   }
 }
 
+
+async function resolveNodePtyManifest(): Promise<string> {
+  const require = createRequire(import.meta.url)
+  try {
+    return require.resolve('node-pty/package.json')
+  } catch {
+    const candidates = [
+      join(homedir(), '.dsh/profiles/desktop/node_modules/node-pty/package.json'),
+      join(homedir(), '.dsh/profiles/node_modules/node-pty/package.json'),
+      join(process.cwd(), 'node_modules/node-pty/package.json'),
+    ]
+    for (const manifest of candidates) {
+      try {
+        await access(manifest, constants.R_OK)
+        return manifest
+      } catch { /* try next */ }
+    }
+    throw new GitError('TERM_FAILED', 'node-pty is not installed or cannot be resolved')
+  }
+}
+
+function ptyProbeCode(manifest: string, bin: string, cwd: string, env: NodeJS.ProcessEnv): string {
+  const childEnv = termColorEnv(env, cwd)
+  return [
+    "const { createRequire } = require('node:module')",
+    'const pty = createRequire(' + JSON.stringify(manifest) + ")('node-pty')",
+    'const term = pty.spawn(' + JSON.stringify(bin) + ', [], {',
+    "  name: 'xterm-256color',",
+    '  cols: 10,',
+    '  rows: 4,',
+    '  cwd: ' + JSON.stringify(cwd) + ',',
+    '  env: ' + JSON.stringify(childEnv) + ',',
+    '})',
+    'let done = false',
+    'term.onExit((event) => {',
+    '  if (done) return',
+    '  done = true',
+    '  process.exit(event.exitCode === 0 ? 0 : 1)',
+    '})',
+    "term.write('exit\\n')",
+    'setTimeout(() => {',
+    '  if (done) return',
+    '  done = true',
+    '  try { term.kill() } catch {}',
+    '  process.exit(0)',
+    '}, 250)',
+    '',
+  ].join('\n')
+}
+
+function runNodePtyProbe(code: string, cwd: string, env: NodeJS.ProcessEnv): Promise<PtyProbeResult> {
+  return new Promise((resolve) => {
+    const childEnv = { ...env }
+    if (process.versions.electron !== undefined) childEnv[RUN_AS_NODE] = '1'
+    const child = spawn(process.execPath, ['-e', code], { cwd, env: childEnv, stdio: ['ignore', 'ignore', 'pipe'] })
+    let stderr = ''
+    let settled = false
+    const finish = (result: PtyProbeResult): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      resolve(result)
+    }
+    const timeout = setTimeout(() => {
+      try { child.kill() } catch {}
+      finish({ ok: false, detail: 'node-pty self-check timed out' })
+    }, PTY_PROBE_TIMEOUT_MS)
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString('utf8')).slice(-MAX_PROBE_STDERR)
+    })
+    child.on('error', error => { finish({ ok: false, detail: error.message }) })
+    child.on('exit', (code, signal) => {
+      if (code === 0) finish({ ok: true })
+      else finish({
+        ok: false,
+        detail: stderr.trim() || `node-pty self-check exited with ${signal ?? code ?? 'unknown status'}`,
+      })
+    })
+  })
+}
+
+let ptyProbe: Promise<void> | undefined
+
+export async function assertNodePtyAvailable(
+  bin: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  runProbe: (code: string, cwd: string, env: NodeJS.ProcessEnv) => Promise<PtyProbeResult> = runNodePtyProbe,
+): Promise<void> {
+  if (env.DSH_WORKBENCH_DISABLE_PTY === '1') {
+    throw new GitError('TERM_FAILED', 'DSH_WORKBENCH_DISABLE_PTY is set')
+  }
+  if (env.DSH_WORKBENCH_SKIP_PTY_PROBE === '1') return
+  const run = async (): Promise<void> => {
+    const manifest = runProbe === runNodePtyProbe ? await resolveNodePtyManifest() : 'node-pty/package.json'
+    const result = await runProbe(ptyProbeCode(manifest, bin, cwd, env), cwd, env)
+    if (!result.ok) throw new GitError('TERM_FAILED', result.detail ?? 'node-pty self-check failed')
+  }
+  if (runProbe !== runNodePtyProbe) {
+    await run()
+    return
+  }
+  if (ptyProbe === undefined) {
+    ptyProbe = run().catch(error => {
+      ptyProbe = undefined
+      throw error
+    })
+  }
+  await ptyProbe
+}
 async function defaultSpawnPty(bin: string, cwd: string, cols: number, rows: number, env: NodeJS.ProcessEnv): Promise<PtyHandle> {
+  await assertNodePtyAvailable(bin, cwd, env)
   const pty = await loadNodePty()
   return pty.spawn(bin, [], {
     name: 'xterm-256color',
