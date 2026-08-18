@@ -248,10 +248,6 @@
   color: var(--dsw-alias-state-business-primary);
 }
 
-.chip[data-kind='checking'] {
-  color: var(--dsw-alias-label-secondary);
-}
-
 .pane {
   display: flex;
   flex-direction: column;
@@ -482,7 +478,42 @@
   gap: 8px;
   min-width: 0;
   padding: 8px 8px 10px;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.remotePulse {
+  flex: none;
+  position: relative;
+  height: 2px;
+  overflow: hidden;
+  background: var(--dsw-alias-border-l2);
+}
+
+.remotePulse[data-active] {
+  background-color: color-mix(in srgb, var(--dsw-alias-state-business-primary, #5b8def) 16%, var(--dsw-alias-border-l2));
+}
+
+.remotePulse[data-active]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--dsw-alias-state-business-primary, #5b8def) 72%, transparent) 0 5px,
+    transparent 5px 10px
+  );
+  background-size: 14px 14px;
+  animation: git-remote-stripe 0.55s linear infinite;
+}
+
+@keyframes git-remote-stripe {
+  to { background-position: 14px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .remotePulse[data-active]::after {
+    animation: none;
+    opacity: 0.85;
+  }
 }
 
 .commitBox {
@@ -711,6 +742,11 @@
 
 .fileAction:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.fileAction:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .graph {

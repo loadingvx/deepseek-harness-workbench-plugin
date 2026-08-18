@@ -34,3 +34,8 @@ export function tabStripOverflow(
 export function tabStripScrollDelta(clientWidth: number): number {
   return Math.max(80, Math.round(Math.max(0, clientWidth) * 0.6))
 }
+
+/** Tabs, the tab list, overflow triangles and the keymap menu belong to an open editor column. */
+export function showEditorStatusChrome(editorOpen: boolean): boolean {
+  return editorOpen
+}

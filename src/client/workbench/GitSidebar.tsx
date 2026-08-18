@@ -89,7 +89,7 @@ function restoreFilesLabel(paths: string[], t: Translate): string {
 }
 
 function FileRow({
-  file, active, action, actionLabel, restoreLabel, onSelect, onAction, onRestore, disabled,
+  file, active, action, actionLabel, restoreLabel, onSelect, onAction, onRestore, disabled, disabledReason,
 }: {
   file: GitFileChange
   active: boolean
@@ -100,6 +100,7 @@ function FileRow({
   onAction: () => void
   onRestore?: () => void
   disabled: boolean
+  disabledReason?: string
 }) {
   return (
     <li className={css.file} data-active={active || undefined}>
@@ -110,11 +111,11 @@ function FileRow({
         {file.path}
       </button>
       {onRestore !== undefined && restoreLabel !== undefined ? (
-        <IconButton dense label={restoreLabel} disabled={disabled} onClick={onRestore}>
+        <IconButton dense label={disabled ? (disabledReason ?? restoreLabel) : restoreLabel} disabled={disabled} onClick={onRestore}>
           <IconRestore />
         </IconButton>
       ) : null}
-      <button type="button" className={css.fileAction} disabled={disabled} onClick={onAction} title={actionLabel}>
+      <button type="button" className={css.fileAction} disabled={disabled} onClick={onAction} title={disabled ? (disabledReason ?? actionLabel) : actionLabel}>
         {action === 'stage' ? '+' : '−'}
       </button>
     </li>
@@ -123,7 +124,7 @@ function FileRow({
 
 function FileGroup({
   title, files, selected, staged, action, actionLabel, bulkLabel, restoreLabel, bulkRestoreLabel,
-  rowKey, disabled, onOpenDiff, onFileAction, onBulkAction, onRestore, onBulkRestore,
+  rowKey, disabled, disabledReason, onOpenDiff, onFileAction, onBulkAction, onRestore, onBulkRestore,
 }: {
   title: string
   files: GitFileChange[]
@@ -136,6 +137,7 @@ function FileGroup({
   bulkRestoreLabel?: string
   rowKey: string
   disabled: boolean
+  disabledReason?: string
   onOpenDiff: (path: string, staged: boolean) => void
   onFileAction: (path: string) => void
   onBulkAction: () => void
@@ -150,11 +152,11 @@ function FileGroup({
         <span className={css.sectionCount}>{files.length}</span>
         <span className={css.sectionGrow} />
         {onBulkRestore !== undefined && bulkRestoreLabel !== undefined ? (
-          <IconButton label={bulkRestoreLabel} disabled={disabled} onClick={onBulkRestore}>
+          <IconButton label={disabled ? (disabledReason ?? bulkRestoreLabel) : bulkRestoreLabel} disabled={disabled} onClick={onBulkRestore}>
             <IconRestore />
           </IconButton>
         ) : null}
-        <IconButton label={bulkLabel} disabled={disabled} onClick={onBulkAction}>
+        <IconButton label={disabled ? (disabledReason ?? bulkLabel) : bulkLabel} disabled={disabled} onClick={onBulkAction}>
           {action === 'stage' ? <IconPlus /> : <IconMinus />}
         </IconButton>
       </div>
@@ -168,6 +170,7 @@ function FileGroup({
             actionLabel={actionLabel}
             restoreLabel={restoreLabel}
             disabled={disabled}
+            disabledReason={disabledReason}
             onSelect={() => { onOpenDiff(file.path, staged) }}
             onAction={() => { onFileAction(file.path) }}
             onRestore={onRestore === undefined ? undefined : () => { onRestore(file.path) }}
@@ -371,14 +374,14 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     action: () => Promise<GitResult<unknown>>,
     kind: 'commit' | 'push' | 'pull' | null = null,
   ): Promise<void> => {
-    if (busy || busyLock.current) return
+    if (workspaceId === undefined || busyLock.current || remoteLock.current) return
     busyLock.current = true
     setBusy(true)
     setPending(kind)
     try {
       const result = await action()
       if (!result.ok) {
-        setError(result as GitFail)
+        if (result.code !== 'BUSY') setError(result as GitFail)
         return
       }
       setError(null)
@@ -422,15 +425,18 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const stageAllPaths = [...(status?.unstaged ?? []), ...(status?.untracked ?? [])].map(file => file.path)
   const branchName = status?.probe.detached ? t('panel.detached') : (status?.probe.branch ?? t('panel.title'))
   const commitAll = stagedCount === 0 && dirtyCount > 0
+  const writeBlockReason = remoteSyncing
+    ? t('panel.checkingRemote')
+    : busy
+      ? t('action.disabledBusy')
+      : null
   const commitDisabledReason = generating
     ? t('commit.generating')
     : message.trim() === ''
       ? t('commit.disabledEmpty')
       : dirtyCount === 0
         ? t('commit.disabledNothing')
-        : busy
-          ? t('action.disabledBusy')
-          : null
+        : writeBlockReason
   const probe = status?.probe
   const actions = visibleSyncActions({
     dirtyCount,
@@ -444,61 +450,50 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const remoteLabel = probe?.upstream ?? (probe?.remote !== undefined ? `${probe.remote}/${branchName}` : branchName)
   const behindCount = probe?.behind ?? 0
   const aheadCount = probe?.ahead ?? 0
-  const pushDisabledReason = remoteSyncing
-    ? t('action.fetching')
-    : busy
-      ? t('action.disabledBusy')
-      : probe?.detached === true
-        ? t('push.disabledDetached')
-        : probe?.remote === undefined
-          ? t('push.disabledNoRemote')
-          : behindCount > 0 && syncPrefs.pushMode !== 'lease'
-            ? t('push.disabledBehind', { count: behindCount })
-            : aheadCount === 0 && probe?.upstream !== undefined
-              ? t('push.disabledNothing')
-              : !probe?.hasHead
-                ? t('push.disabledNothing')
-                : null
-  const pullDisabledReason = remoteSyncing
-    ? t('action.fetching')
-    : busy
-      ? t('action.disabledBusy')
-      : probe?.detached === true
-        ? t('pull.disabledDetached')
-        : probe?.remote === undefined
-          ? t('pull.disabledNoRemote')
-          : probe?.upstream === undefined
-            ? t('pull.disabledNoUpstream')
-            : dirtyCount > 0 && behindCount > 0
-              ? t('pull.disabledDirtyBehind', { count: behindCount })
-              : dirtyCount > 0
-                ? t('pull.disabledDirty')
-                : behindCount === 0
-                  ? t('pull.disabledNothing')
-                  : null
-  const fetchDisabledReason = remoteSyncing
-    ? t('action.fetching')
-    : busy
-      ? t('action.disabledBusy')
+  const pushDisabledReason = writeBlockReason
+    ?? (probe?.detached === true
+      ? t('push.disabledDetached')
       : probe?.remote === undefined
-        ? t('fetch.disabledNoRemote')
-        : null
-  const refreshDisabledReason = remoteSyncing
-    ? t('action.fetching')
-    : loading || busy
+        ? t('push.disabledNoRemote')
+        : behindCount > 0 && syncPrefs.pushMode !== 'lease'
+          ? t('push.disabledBehind', { count: behindCount })
+          : aheadCount === 0 && probe?.upstream !== undefined
+            ? t('push.disabledNothing')
+            : !probe?.hasHead
+              ? t('push.disabledNothing')
+              : null)
+  const pullDisabledReason = writeBlockReason
+    ?? (probe?.detached === true
+      ? t('pull.disabledDetached')
+      : probe?.remote === undefined
+        ? t('pull.disabledNoRemote')
+        : probe?.upstream === undefined
+          ? t('pull.disabledNoUpstream')
+          : dirtyCount > 0 && behindCount > 0
+            ? t('pull.disabledDirtyBehind', { count: behindCount })
+            : dirtyCount > 0
+              ? t('pull.disabledDirty')
+              : behindCount === 0
+                ? t('pull.disabledNothing')
+                : null)
+  const fetchDisabledReason = writeBlockReason
+    ?? (probe?.remote === undefined
+      ? t('fetch.disabledNoRemote')
+      : null)
+  const refreshDisabledReason = writeBlockReason
+    ?? (loading || busy
       ? t('action.disabledBusy')
-      : null
+      : null)
   const mergeTargets = branches.filter(branch => !branch.current && branch.name !== probe?.branch)
-  const mergeDisabledReason = busy
-    ? t('action.disabledBusy')
-    : probe?.detached === true
+  const mergeDisabledReason = writeBlockReason
+    ?? (probe?.detached === true
       ? t('merge.disabledDetached')
       : dirtyCount > 0
         ? t('merge.disabledDirty')
         : mergeTargets.length === 0
           ? t('merge.disabledNone')
-          : null
-  const writesDisabled = busy || status === null || !status.probe.gitAvailable || !status.probe.isRepo
+          : null)
+  const writesDisabled = writeBlockReason !== null || status === null || !status.probe.gitAvailable || !status.probe.isRepo
   const generateDisabled = writesDisabled || dirtyCount === 0
   const graphFills = changesOpen === false && graphOpen
 
@@ -585,7 +580,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     action: () => Promise<GitResult<unknown>>,
     keepCodes: readonly string[],
   ): Promise<void> => {
-    if (busy) return
+    if (busy || busyLock.current || remoteLock.current) return
     setBusy(true)
     const result = await action()
     setBusy(false)
@@ -729,13 +724,12 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
         />
         {status !== null && status.probe.ahead > 0 ? <span className={css.chip} data-kind="ahead">{t('panel.ahead', { count: status.probe.ahead })}</span> : null}
         {status !== null && status.probe.behind > 0 ? <span className={css.chip} data-kind="behind">{t('panel.behind', { count: status.probe.behind })}</span> : null}
-        {remoteSyncing ? <span className={css.chip} data-kind="checking">{t('panel.checkingRemote')}</span> : null}
         <IconButton
           label={refreshDisabledReason ?? t('panel.refresh')}
           disabled={refreshDisabledReason !== null}
           onClick={refreshAll}
         >
-          {remoteSyncing ? <span className={css.spinner} aria-hidden /> : <IconRefresh />}
+          <IconRefresh />
         </IconButton>
       </header>
       {skippedParent !== null ? (
@@ -864,8 +858,22 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
               <p className={css.hint}>{t('sync.clean')}</p>
             ) : null}
           </div>
+          <div
+            className={css.remotePulse}
+            data-active={remoteSyncing || undefined}
+            data-git-chrome="remote-pulse"
+            role={remoteSyncing ? 'progressbar' : undefined}
+            aria-hidden={remoteSyncing ? undefined : true}
+            aria-label={remoteSyncing ? t('panel.checkingRemote') : undefined}
+          />
 
-          <section className={css.pane} data-kind="changes" data-open={changesOpen || undefined}>
+          <section
+            className={css.pane}
+            data-kind="changes"
+            data-open={changesOpen || undefined}
+            data-syncing={remoteSyncing || undefined}
+            aria-busy={remoteSyncing || undefined}
+          >
             <div className={css.sectionHead} data-git-chrome="changes-head">
               <button type="button" className={css.sectionToggle} aria-expanded={changesOpen} onClick={toggleChanges}>
                 <IconChevron open={changesOpen} />
@@ -884,7 +892,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                 {stageAllPaths.length > 0 ? (
                   <IconButton
                     dense
-                    label={writesDisabled ? t('action.disabledBusy') : t('action.stageAll')}
+                    label={writeBlockReason ?? t('action.stageAll')}
                     disabled={writesDisabled}
                     onClick={() => {
                       if (workspaceId) void runWrite(() => client.stage(workspaceId, stageAllPaths, repoId))
@@ -908,6 +916,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                   bulkLabel={t('action.unstageAllStaged')}
                   rowKey="s"
                   disabled={writesDisabled}
+                  disabledReason={writeBlockReason ?? undefined}
                   onOpenDiff={openFileDiff}
                   onFileAction={(path) => { if (workspaceId) void runWrite(() => client.unstage(workspaceId, [path], repoId)) }}
                   onBulkAction={() => {
@@ -926,6 +935,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                   bulkRestoreLabel={t('action.restoreAll')}
                   rowKey="u"
                   disabled={writesDisabled}
+                  disabledReason={writeBlockReason ?? undefined}
                   onOpenDiff={openFileDiff}
                   onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path], repoId)) }}
                   onBulkAction={() => {
@@ -948,6 +958,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                   bulkRestoreLabel={t('action.restoreAllUntracked')}
                   rowKey="n"
                   disabled={writesDisabled}
+                  disabledReason={writeBlockReason ?? undefined}
                   onOpenDiff={openFileDiff}
                   onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path], repoId)) }}
                   onBulkAction={() => {
@@ -995,7 +1006,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                   disabled={writesDisabled || fetchDisabledReason !== null}
                   onClick={fetchRemote}
                 >
-                  {remoteSyncing || pending === 'fetch' ? <span className={css.spinner} aria-hidden /> : <IconFetch />}
+                  {pending === 'fetch' ? <span className={css.spinner} aria-hidden /> : <IconFetch />}
                 </IconButton>
                 <IconButton
                   dense
@@ -1015,7 +1026,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                 </IconButton>
                 <IconButton
                   dense
-                  label={busy ? t('action.disabledBusy') : t('action.newBranch')}
+                  label={writeBlockReason ?? t('action.newBranch')}
                   disabled={writesDisabled}
                   onClick={() => { openPrompt('branch') }}
                 >
@@ -1099,7 +1110,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
               <button
                 type="button"
                 className={`${css.dialogOk} ${css.dialogDanger}`}
-                disabled={busy}
+                disabled={busy || remoteSyncing}
                 onClick={confirmRestore}
               >
                 {restoreAsk.untracked ? t('restore.delete') : t('restore.ok')}
@@ -1268,7 +1279,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
               <button
                 type="button"
                 className={css.dialogOk}
-                disabled={busy || (prompt === 'merge' && promptValue.trim() === '')}
+                disabled={busy || remoteSyncing || (prompt === 'merge' && promptValue.trim() === '')}
                 onClick={submitPrompt}
               >
                 {prompt === 'branch' ? t('branch.newConfirm') : t('merge.confirm')}

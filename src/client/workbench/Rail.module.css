@@ -4,7 +4,8 @@
   align-items: center;
   gap: 6px;
   height: 100%;
-  padding: 8px 0;
+  /* 28px icon centered in the same 36px header band as SideDock tabs / breadcrumb. */
+  padding: 4px 0 8px;
   border-left: 1px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-base);
 }

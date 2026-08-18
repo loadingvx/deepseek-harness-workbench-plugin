@@ -7,7 +7,7 @@ import { PLUGIN_ISSUES_URL, PLUGIN_PAGE_URL, PLUGIN_REPO_URL } from '../../share
 import { IconChevron, IconFeedback, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
 import { EDITOR_MODES, type EditorModeId } from './editor-mode.ts'
 import { readNearbyGit, retainNearbyGit, subscribeNearbyGit } from './nearby-git.ts'
-import { fileName, shortPath, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
+import { fileName, shortPath, showEditorStatusChrome, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
 import { terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import { readUsageLive, retainUsageLive, subscribeUsageLive } from './usage-live.ts'
 import css from './StatusBar.module.css'
@@ -26,6 +26,7 @@ export function StatusBar({
   tabs,
   aiTermIds,
   editorMode,
+  editorOpen = true,
   onEditorModeChange,
   onActivate,
   onPrepareUpdate,
@@ -40,6 +41,8 @@ export function StatusBar({
   tabs?: FileTab[]
   aiTermIds?: readonly string[]
   editorMode?: EditorModeId
+  /** When the editor column is a rail, hide tabs, overflow triangles, and the mode menu. */
+  editorOpen?: boolean
   onEditorModeChange?: (mode: EditorModeId) => void
   onActivate?: (id: string) => void
   onPrepareUpdate?: () => void
@@ -55,6 +58,10 @@ export function StatusBar({
 
   useEffect(() => retainUsageLive(client, sessionId), [client, sessionId])
   useEffect(() => retainNearbyGit(client, workspaceId), [client, workspaceId])
+
+  useEffect(() => {
+    if (!editorOpen) setModeMenuOpen(false)
+  }, [editorOpen])
 
   useEffect(() => {
     if (!modeMenuOpen) return
@@ -143,9 +150,12 @@ export function StatusBar({
     <footer
       className={css.bar}
       data-git-ide-panel="status"
+      data-editor={editorOpen ? 'on' : 'off'}
       aria-label={t('status.label')}
     >
-      <StatusTabs tabs={openTabs} activeId={active?.id} aiTermIds={aiTermIds} onActivate={onActivate} t={t} />
+      {showEditorStatusChrome(editorOpen) ? (
+        <StatusTabs tabs={openTabs} activeId={active?.id} aiTermIds={aiTermIds} onActivate={onActivate} t={t} />
+      ) : null}
       <span className={css.grow} />
       <span className={`${css.item} ${css.itemLead}`}>
         <span className={css.balance} title={balanceTitle} aria-label={balanceTitle}>
@@ -247,7 +257,7 @@ export function StatusBar({
       <span className={css.item} title={dirty > 0 ? t('status.dirtyTitle', { count: dirty }) : t('status.cleanTitle')}>
         {dirty > 0 ? t('status.dirty', { count: dirty }) : t('status.clean')}
       </span>
-      {active?.kind === 'file' && editorMode !== undefined ? (
+      {showEditorStatusChrome(editorOpen) && active?.kind === 'file' && editorMode !== undefined ? (
         <span className={css.modeWrap}>
           <button
             type="button"

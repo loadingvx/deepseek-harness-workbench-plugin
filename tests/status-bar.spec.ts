@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fileName, shortPath, STATUS_BAR_H, tabStripOverflow, tabStripScrollDelta } from '../src/client/workbench/status-bar.ts'
+import { fileName, shortPath, STATUS_BAR_H, showEditorStatusChrome, tabStripOverflow, tabStripScrollDelta } from '../src/client/workbench/status-bar.ts'
 
 describe('STATUS_BAR_H', () => {
   it('matches the conversation stats line under the composer', () => {
@@ -46,5 +46,12 @@ describe('tabStripScrollDelta', () => {
   it('jumps at least one short tab', () => {
     expect(tabStripScrollDelta(40)).toBe(80)
     expect(tabStripScrollDelta(200)).toBe(120)
+  })
+})
+
+describe('showEditorStatusChrome', () => {
+  it('hides tabs, the tab list and overflow triangles when the editor is collapsed', () => {
+    expect(showEditorStatusChrome(true)).toBe(true)
+    expect(showEditorStatusChrome(false)).toBe(false)
   })
 })
