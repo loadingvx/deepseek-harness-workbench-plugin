@@ -3,7 +3,7 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { ExternalOpen, whichOnPath } from '../src/host/external-open.ts'
+import { ExternalOpen, detectWsl, whichOnPath, wslToWindowsPath } from '../src/host/external-open.ts'
 import { WorkspaceFs } from '../src/host/workspace-fs.ts'
 import { GitError } from '../src/shared/errors.ts'
 
@@ -26,6 +26,7 @@ describe('ExternalOpen', () => {
   it('lists allowlisted apps and marks what is on PATH', async () => {
     const opened = new ExternalOpen(fs, {
       platform: 'linux',
+      isWsl: false,
       which: async (bin) => bin === 'cursor' || bin === 'xdg-open' ? `/bin/${bin}` : undefined,
     })
     const listed = await opened.list()
@@ -43,6 +44,7 @@ describe('ExternalOpen', () => {
     const launched: { bin: string; args: readonly string[] }[] = []
     const opened = new ExternalOpen(fs, {
       platform: 'linux',
+      isWsl: false,
       which: async (bin) => bin === 'code' ? '/usr/bin/code' : undefined,
       launch: async (bin, args) => { launched.push({ bin, args }) },
     })
@@ -57,6 +59,7 @@ describe('ExternalOpen', () => {
     const launched: readonly string[][] = []
     const opened = new ExternalOpen(fs, {
       platform: 'linux',
+      isWsl: false,
       which: async (bin) => bin === 'cursor' ? '/usr/bin/cursor' : undefined,
       launch: async (_bin, args) => { launched.push([...args]) },
     })
@@ -70,6 +73,7 @@ describe('ExternalOpen', () => {
     const launched: string[] = []
     const opened = new ExternalOpen(fs, {
       platform: 'linux',
+      isWsl: false,
       which: async (bin) => bin === 'code' ? '/usr/bin/code' : undefined,
       launch: async (bin) => { launched.push(bin) },
     })
@@ -106,6 +110,7 @@ describe('ExternalOpen', () => {
     const root = await tempRoot()
     const opened = new ExternalOpen(fs, {
       platform: 'linux',
+      isWsl: false,
       which: async () => undefined,
       launch: async () => { throw new Error('should not launch') },
     })
@@ -119,6 +124,7 @@ describe('ExternalOpen', () => {
     const launched: string[] = []
     const opened = new ExternalOpen(fs, {
       platform: 'linux',
+      isWsl: false,
       which: async (bin) => bin === 'cursor' ? '/usr/bin/cursor' : undefined,
       launch: async (_bin, args) => { launched.push(String(args[0])) },
     })
@@ -148,10 +154,86 @@ describe('ExternalOpen', () => {
     launched.length = 0
     const linux = new ExternalOpen(fs, {
       platform: 'linux',
+      isWsl: false,
       which: async (bin) => bin === 'xdg-open' ? '/usr/bin/xdg-open' : undefined,
       launch: async (bin, args) => { launched.push({ bin, args: [...args] }) },
     })
     await linux.reveal(root, 'note.txt')
     expect(launched[0]?.args[0]).toBe(root)
+  })
+
+  it('on WSL reveals via explorer.exe with a Windows path', async () => {
+    const root = await tempRoot()
+    await writeFile(join(root, 'note.txt'), 'hi')
+    const launched: Array<{ bin: string; args: string[] }> = []
+    const opened = new ExternalOpen(fs, {
+      platform: 'linux',
+      isWsl: true,
+      toWindowsPath: async (abs) => `\\\\wsl.localhost\\Arch${abs.replace(/\//g, '\\')}`,
+      which: async (bin) => bin === 'explorer.exe' ? '/mnt/c/Windows/explorer.exe' : undefined,
+      launch: async (bin, args) => { launched.push({ bin, args: [...args] }) },
+    })
+    await opened.reveal(root, 'note.txt')
+    expect(launched).toHaveLength(1)
+    expect(launched[0]?.bin).toBe('/mnt/c/Windows/explorer.exe')
+    expect(launched[0]?.args[0]).toBe(`/select,\\\\wsl.localhost\\Arch${join(root, 'note.txt').replace(/\//g, '\\')}`)
+  })
+
+  it('on WSL still succeeds when explorer.exe exits non-zero', async () => {
+    const root = await tempRoot()
+    await writeFile(join(root, 'note.txt'), 'hi')
+    const opened = new ExternalOpen(fs, {
+      platform: 'linux',
+      isWsl: true,
+      toWindowsPath: async (abs) => abs,
+      which: async (bin) => bin === 'explorer.exe' ? '/mnt/c/Windows/explorer.exe' : undefined,
+      launch: async () => { throw new GitError('EDITOR_FAILED') },
+    })
+    await expect(opened.reveal(root, 'note.txt')).resolves.toEqual({ path: 'note.txt' })
+  })
+
+  it('on WSL falls back to xdg-open when explorer.exe is missing', async () => {
+    const root = await tempRoot()
+    await writeFile(join(root, 'note.txt'), 'hi')
+    const launched: string[] = []
+    const opened = new ExternalOpen(fs, {
+      platform: 'linux',
+      isWsl: true,
+      which: async (bin) => bin === 'xdg-open' ? '/usr/bin/xdg-open' : undefined,
+      launch: async (bin) => { launched.push(bin) },
+    })
+    await opened.reveal(root, 'note.txt')
+    expect(launched).toEqual(['/usr/bin/xdg-open'])
+  })
+
+  it('says the file manager is missing when no reveal binary exists', async () => {
+    const root = await tempRoot()
+    const opened = new ExternalOpen(fs, {
+      platform: 'linux',
+      isWsl: false,
+      which: async () => undefined,
+      launch: async () => { throw new Error('should not launch') },
+    })
+    await expect(opened.reveal(root, '')).rejects.toMatchObject({ code: 'FS_REVEAL_FAILED' })
+  })
+})
+
+describe('detectWsl', () => {
+  it('only treats Linux userland with WSL env as WSL', () => {
+    expect(detectWsl('linux', { WSL_DISTRO_NAME: 'Arch' })).toBe(true)
+    expect(detectWsl('linux', { WSL_INTEROP: '/run/WSL/1_interop' })).toBe(true)
+    expect(detectWsl('linux', {})).toBe(false)
+    expect(detectWsl('win32', { WSL_DISTRO_NAME: 'Arch' })).toBe(false)
+    expect(detectWsl('darwin', { WSLENV: 'FOO' })).toBe(false)
+  })
+})
+
+describe('wslToWindowsPath', () => {
+  it('maps /mnt/c paths and WSL filesystem UNC paths', () => {
+    expect(wslToWindowsPath('/mnt/c/Users/me/file.txt')).toBe('C:\\Users\\me\\file.txt')
+    expect(wslToWindowsPath('/mnt/c')).toBe('C:\\')
+    expect(wslToWindowsPath('/mnt/wsl/foo', 'Arch')).toBe('\\\\wsl.localhost\\Arch\\mnt\\wsl\\foo')
+    expect(wslToWindowsPath('/root/proj', 'Arch')).toBe('\\\\wsl.localhost\\Arch\\root\\proj')
+    expect(wslToWindowsPath('/root/proj')).toBeUndefined()
   })
 })

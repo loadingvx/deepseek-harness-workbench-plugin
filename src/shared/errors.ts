@@ -124,7 +124,7 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
   },
   FS_REVEAL_FAILED: {
     messageZh: '没法打开系统文件管理器。',
-    hintZh: '请确认本机访达 / 资源管理器 / 文件管理器能正常打开，然后重试。',
+    hintZh: '若在 Windows 或 WSL，请确认资源管理器能打开，并且终端里执行 explorer.exe 能启动。若在 Linux 桌面，请确认已安装文件管理器，且终端能执行 xdg-open。没有图形界面的远程或容器环境无法使用此功能。',
   },
   LLM_UNAVAILABLE: {
     messageZh: '现在没法调用模型。',
