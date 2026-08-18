@@ -30,7 +30,7 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 
 ## Core capabilities
 
-1. **Workbench layout.** Three columns: Conversation on the left, editor and terminal in the center, files / Git / usage on the right. A new session opens the workbench immediately. Columns can be resized, collapsed to icon rails, and restored.
+1. **Workbench layout.** Three columns: Conversation on the left, editor and terminal in the center, files / Git / usage on the right. A new session opens the workbench immediately. By default the editor is collapsed, the files/Git sidebar is open, and usage is pinned above Settings. Columns can be resized, collapsed to icon rails, and restored. Collapse, the files/Git tab, and the usage pin are remembered globally across reload and new sessions.
 2. **Smart terminal.** A local PTY. Real shell lines (including pasted `$ ls`) go straight to the terminal; natural language is translated and typed into the **current** shell. Notes are non-executable. A configurable blacklist blocks destructive commands the assistant would otherwise type.
 3. **Workspace editor.** CodeMirror 6 with syntax highlighting, Plain / Emacs / Vim keymaps, Markdown edit / preview / split, image and spreadsheet previews, Git diffs, tabs, breadcrumbs, save and dirty-close guards.
 4. **Files.** Tree browse, filter, hidden files, `.gitignore` marks, new / rename / delete, and open in a local editor (Cursor, VS Code, and others).
@@ -83,7 +83,7 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 - Pull mode: merge / fast-forward only / rebase. Push mode: normal / force-with-lease
 - Switch branch, create and switch, merge (conflicts abort cleanly)
 - Ahead / behind counts and remote probe
-- GRAPH: commit graph, compact or full rows, copy hash, expand files, open a commit diff, drag height
+- GRAPH: commit graph, compact by default (message-only; can switch to full), copy hash, expand files, open a commit diff, drag height; compact/open and Git settings are remembered
 - Conversation tools: `git_status`, `git_diff`, `git_log`, `git_branch`, `git_commit` (commit needs user approval; no delete / `reset --hard` / `clean`)
 
 ### Usage
@@ -165,11 +165,11 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.16** (npm tag `latest`) |
+| Version | **0.1.17** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.16
++ dsh-workbench-plugin@0.1.17
 ```
 
 Maintainers publish npm with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -184,13 +184,13 @@ The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbenc
 
 ### Procedure
 
-1. Install the plugin (pin the version; do not omit `@0.1.16`):
+1. Install the plugin (pin the version; do not omit `@0.1.17`):
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.16
+dsh plugin --profile web add dsh-workbench-plugin@0.1.17
 ```
 
-`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.16` requests that release explicitly.
+`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.17` requests that release explicitly.
 
 If a pinned install is still refused as too new, add this to `~/.dsh/profiles/web/pnpm-workspace.yaml` and run the command again:
 
@@ -226,7 +226,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.16 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.17 manually using the command above. Later releases will prompt in the UI.
 
 ## Workspace terminal
 

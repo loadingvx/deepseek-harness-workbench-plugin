@@ -207,6 +207,20 @@ describe('WorkspaceFs rename / move / delete', () => {
     await expect(fs.delete(root, '')).rejects.toMatchObject({ code: 'INVALID_PATH' })
   })
 
+  it('creates a folder and copies a file next to it', async () => {
+    const root = await tempRoot()
+    await writeFile(join(root, 'a.txt'), 'hello')
+    const dir = await fs.mkdir(root, 'docs')
+    expect(dir.path).toBe('docs')
+    await expect(fs.mkdir(root, 'docs')).rejects.toMatchObject({ code: 'FS_EXISTS' })
+    await expect(fs.mkdir(root, '')).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    const copied = await fs.copy(root, 'a.txt', 'docs/a 副本.txt')
+    expect(copied.path).toBe('docs/a 副本.txt')
+    await expect(fs.read(root, 'docs/a 副本.txt')).resolves.toMatchObject({ content: 'hello' })
+    await expect(fs.copy(root, 'a.txt', 'docs/a 副本.txt')).rejects.toMatchObject({ code: 'FS_EXISTS' })
+    await expect(fs.copy(root, 'docs', 'docs/nested')).rejects.toMatchObject({ code: 'INVALID_PATH' })
+  })
+
   it('marks gitignored paths so the explorer can dim them', async () => {
     const root = await tempRoot()
     await runGit({ cwd: root, args: ['init', '-b', 'main'] })

@@ -2,7 +2,7 @@ import { fail } from '../shared/errors.ts'
 import { parseCommitStreamLine } from '../shared/commit-stream.ts'
 import type {
   ExternalEditorId, ExternalEditorsSnapshot, ExternalOpenResult,
-  FsDeleteResult, FsFileSnapshot, FsListSnapshot, FsRenameResult, FsSearchSnapshot, FsWriteResult,
+  FsCopyResult, FsDeleteResult, FsFileSnapshot, FsListSnapshot, FsMkdirResult, FsRenameResult, FsRevealResult, FsSearchSnapshot, FsWriteResult,
   GitBranchInfo, GitCommitMessage, GitCommitResult, GitCreateBranchResult, GitDiffSnapshot,
   GitFail, GitFetchResult, GitFileChange, GitIdentity, GitInitInput, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
   GitStatusSnapshot, GitSwitchResult, NearbyGitSnapshot, PluginUpdateSnapshot, ProviderUsageSnapshot,
@@ -152,6 +152,9 @@ export interface GitClient {
   switchBranch(workspaceId: string, name: string, repo?: string): Promise<GitResult<GitSwitchResult>>
   renameFile(workspaceId: string, from: string, to: string): Promise<GitResult<FsRenameResult>>
   deleteFile(workspaceId: string, path: string): Promise<GitResult<FsDeleteResult>>
+  mkdir(workspaceId: string, path: string): Promise<GitResult<FsMkdirResult>>
+  copyFile(workspaceId: string, from: string, to: string): Promise<GitResult<FsCopyResult>>
+  revealInFolder(workspaceId: string, path?: string): Promise<GitResult<FsRevealResult>>
   commitFiles(workspaceId: string, hash: string, repo?: string): Promise<GitResult<GitFileChange[]>>
   commitDiff(workspaceId: string, hash: string, path: string, repo?: string): Promise<GitResult<GitDiffSnapshot>>
   listDir(workspaceId: string, path?: string): Promise<GitResult<FsListSnapshot>>
@@ -235,6 +238,15 @@ export function createGitClient(): GitClient {
     }),
     deleteFile: (workspaceId, path) => request('/git/fs/delete', {
       method: 'POST', body: JSON.stringify({ workspaceId, path }),
+    }),
+    mkdir: (workspaceId, path) => request('/git/fs/mkdir', {
+      method: 'POST', body: JSON.stringify({ workspaceId, path }),
+    }),
+    copyFile: (workspaceId, from, to) => request('/git/fs/copy', {
+      method: 'POST', body: JSON.stringify({ workspaceId, from, to }),
+    }),
+    revealInFolder: (workspaceId, path) => request('/git/fs/reveal', {
+      method: 'POST', body: JSON.stringify({ workspaceId, path: path ?? '' }),
     }),
     commitFiles: (workspaceId, hash, repo) => {
       return request(`/git/commit-files?${withRepoQuery(workspaceId, { hash }, repo)}`)

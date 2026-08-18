@@ -29,6 +29,9 @@ export type GitErrorCode =
   | 'FS_EXISTS'
   | 'FS_RENAME_FAILED'
   | 'FS_DELETE_FAILED'
+  | 'FS_MKDIR_FAILED'
+  | 'FS_COPY_FAILED'
+  | 'FS_REVEAL_FAILED'
   | 'LLM_UNAVAILABLE'
   | 'LLM_FAILED'
   | 'NOTHING_TO_DESCRIBE'
@@ -230,6 +233,18 @@ export interface FsRenameResult {
 }
 
 export interface FsDeleteResult {
+  path: string
+}
+
+export interface FsMkdirResult {
+  path: string
+}
+
+export interface FsCopyResult {
+  path: string
+}
+
+export interface FsRevealResult {
   path: string
 }
 

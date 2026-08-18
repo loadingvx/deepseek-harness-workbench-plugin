@@ -2,14 +2,18 @@
 
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  DEFAULT_USAGE_DOCK,
   ensureNavDockHost,
   findNativeSettingsArea,
   isNativeSettingsTrigger,
   measureNavContentPad,
   navHostIsSeated,
+  readUsageDock,
   releaseNavDockHost,
   USAGE_DOCK_HOST,
+  USAGE_DOCK_KEY,
   usageTabVisible,
+  writeUsageDock,
 } from '../src/client/workbench/usage-dock.ts'
 import { NAV_CONTENT_PAD } from '../src/client/workbench/nav-usage-layout.ts'
 
@@ -36,6 +40,7 @@ function mountSettings(label = 'Settings'): HTMLButtonElement {
 afterEach(() => {
   releaseNavDockHost()
   document.body.innerHTML = ''
+  try { localStorage.removeItem(USAGE_DOCK_KEY) } catch { /* ignore */ }
 })
 
 describe('native Settings lookup', () => {
@@ -136,6 +141,23 @@ describe('measureNavContentPad', () => {
       left: NAV_CONTENT_PAD,
       right: NAV_CONTENT_PAD,
     })
+  })
+})
+
+describe('usage pin persistence', () => {
+  it('pins above Settings by default', () => {
+    expect(DEFAULT_USAGE_DOCK).toBe('nav')
+    expect(readUsageDock()).toBe('nav')
+  })
+
+  it('remembers nav pin across a later read (reload / new session)', () => {
+    expect(readUsageDock()).toBe('nav')
+    expect(writeUsageDock('side')).toBe('side')
+    expect(localStorage.getItem(USAGE_DOCK_KEY)).toBe('side')
+    expect(readUsageDock()).toBe('side')
+    expect(writeUsageDock('nav')).toBe('nav')
+    expect(localStorage.getItem(USAGE_DOCK_KEY)).toBe('nav')
+    expect(readUsageDock()).toBe('nav')
   })
 })
 

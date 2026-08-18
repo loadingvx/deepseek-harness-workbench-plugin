@@ -322,6 +322,27 @@ export function registerGitHttp(
         } else {
           result = await wrap(() => fs.delete(rootOf(body), path))
         }
+      } else if (method === 'POST' && route === '/git/fs/mkdir') {
+        const body = await readJson(req)
+        const path = typeof body.path === 'string' ? body.path : ''
+        if (path === '') {
+          result = fail('BAD_REQUEST')
+        } else {
+          result = await wrap(() => fs.mkdir(rootOf(body), path))
+        }
+      } else if (method === 'POST' && route === '/git/fs/copy') {
+        const body = await readJson(req)
+        const from = typeof body.from === 'string' ? body.from : ''
+        const to = typeof body.to === 'string' ? body.to : ''
+        if (from === '' || to === '') {
+          result = fail('BAD_REQUEST')
+        } else {
+          result = await wrap(() => fs.copy(rootOf(body), from, to))
+        }
+      } else if (method === 'POST' && route === '/git/fs/reveal') {
+        const body = await readJson(req)
+        const path = typeof body.path === 'string' ? body.path : ''
+        result = await wrap(() => editors.reveal(rootOf(body), path))
       } else if (method === 'GET' && route === '/git/commit-files') {
         const hash = query(url, 'hash')
         if (hash === undefined) {

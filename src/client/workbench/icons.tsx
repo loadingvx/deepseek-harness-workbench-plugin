@@ -351,6 +351,62 @@ export function IconTrash() {
   )
 }
 
+export function IconCopy() {
+  return (
+    <Icon>
+      <path d="M5.2 5.2h8.2v8.2H5.2z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M3.2 10.2V2.8h7.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
+export function IconPaste() {
+  return (
+    <Icon>
+      <path d="M5.4 3.4h5.2v1.8H5.4z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M4.2 4.4h7.6v9H4.2z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
+export function IconCut() {
+  return (
+    <Icon>
+      <circle cx="4.2" cy="11.4" r="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="11.8" cy="11.4" r="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M5.6 10.2 12.2 2.8M10.4 10.2 3.8 2.8" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
+export function IconFilePlus() {
+  return (
+    <Icon>
+      <path d="M4 2.4h5.2L12.4 5.6v8H4z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M9.2 2.4V5.6h3.2M6.2 9.6h4M8.2 7.6v4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
+export function IconFolderPlus() {
+  return (
+    <Icon>
+      <path d="M2.4 4h4l1.2 1.4H13.6v7.2H2.4z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6.4 9.2h4M8.4 7.2v4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
+export function IconReveal() {
+  return (
+    <Icon>
+      <path d="M2.4 4.2h4l1.2 1.5H13.6v7.1H2.4z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="8" cy="9.2" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M9.6 10.8 11.4 12.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </Icon>
+  )
+}
+
 export function IconNpm({ size = 16 }: { size?: number }) {
   return (
     <Icon size={size}>

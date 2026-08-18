@@ -429,6 +429,15 @@
   opacity: 0.35;
 }
 
+.rowWrap[data-cut] {
+  opacity: 0.48;
+}
+
+.rowWrap[data-creating] .row {
+  flex: none;
+  cursor: default;
+}
+
 .renameInput {
   box-sizing: border-box;
   flex: 1;
@@ -524,4 +533,97 @@
 .dialogOk:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.ctxBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.ctxMenu {
+  position: fixed;
+  z-index: 31;
+  min-width: 228px;
+  max-width: min(280px, calc(100vw - 16px));
+  max-height: min(70vh, calc(100vh - 16px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: var(--dsw-shadow-lv2);
+}
+
+.ctxItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ctxItem:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.ctxItem:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ctxItem[data-danger] {
+  color: var(--dsw-alias-state-error-primary, #c62828);
+}
+
+.ctxIcon {
+  display: inline-flex;
+  flex: none;
+  color: inherit;
+  opacity: 0.88;
+}
+
+.ctxLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ctxLabelText {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ctxItemHint {
+  display: block;
+  margin-top: 1px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 14px;
+  white-space: normal;
+}
+
+.ctxSep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--dsw-alias-border-l2);
+}
+
+.ctxHint {
+  margin: 4px 10px 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
 }

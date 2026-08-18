@@ -1,6 +1,7 @@
 import { useLayoutEffect, useSyncExternalStore, type ReactNode } from 'react'
 import type { GitClient } from '../api.ts'
 import type { PluginUpdateSnapshot } from '../../shared/types.ts'
+import type { SideTab } from './auto-open.ts'
 import { FileTree } from './FileTree.tsx'
 import { GitSidebar } from './GitSidebar.tsx'
 import { IconButton } from './IconButton.tsx'
@@ -9,6 +10,7 @@ import type { Translate } from './types.ts'
 import { UpdateBanner } from './UpdateBanner.tsx'
 import { UsagePanel } from './UsagePanel.tsx'
 import {
+  defaultUsageDock,
   isNavHostReady,
   readUsageDock,
   subscribeNavHost,
@@ -17,7 +19,7 @@ import {
 } from './usage-dock.ts'
 import css from './SideDock.module.css'
 
-export type SideTab = 'files' | 'git' | 'usage'
+export type { SideTab }
 
 export function SideDock({
   client, workspaceId, workspaceTitle, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, t,
@@ -43,7 +45,7 @@ export function SideDock({
   onDismissUpdate?: () => void
   t: Translate
 }) {
-  const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, () => 'side' as const)
+  const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
   const navReady = useSyncExternalStore(subscribeNavHost, isNavHostReady, () => false)
   const showUsageTab = usageTabVisible(dock, navReady)
 

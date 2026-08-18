@@ -4,6 +4,7 @@ export type UsageDock = 'side' | 'nav'
 
 export const USAGE_DOCK_KEY = 'dsh-workbench-usage-dock'
 export const USAGE_DOCK_HOST = 'data-dsw-usage-dock'
+export const DEFAULT_USAGE_DOCK: UsageDock = 'nav'
 
 const SETTINGS_LABELS = new Set(['Settings', '设置'])
 
@@ -46,16 +47,20 @@ export function usageTabVisible(dock: UsageDock, navReady: boolean): boolean {
   return dock !== 'nav' || !navReady
 }
 
+export function defaultUsageDock(): UsageDock {
+  return DEFAULT_USAGE_DOCK
+}
+
 export function readUsageDock(): UsageDock {
   try {
     const raw = localStorage.getItem(USAGE_DOCK_KEY)
     if (raw !== null && isUsageDock(raw)) return raw
   } catch { /* private mode */ }
-  return 'side'
+  return DEFAULT_USAGE_DOCK
 }
 
 export function writeUsageDock(next: UsageDock): UsageDock {
-  const value = isUsageDock(next) ? next : 'side'
+  const value = isUsageDock(next) ? next : DEFAULT_USAGE_DOCK
   try {
     localStorage.setItem(USAGE_DOCK_KEY, value)
   } catch { /* ignore */ }

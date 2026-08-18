@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process'
 import { constants } from 'node:fs'
-import { access } from 'node:fs/promises'
-import { delimiter, join } from 'node:path'
+import { access, stat } from 'node:fs/promises'
+import { delimiter, dirname, join } from 'node:path'
 import { GitError } from '../shared/errors.ts'
-import { EXTERNAL_EDITOR_IDS, isExternalEditorId, type ExternalEditorId, type ExternalEditorsSnapshot, type ExternalOpenResult } from '../shared/types.ts'
+import { EXTERNAL_EDITOR_IDS, isExternalEditorId, type ExternalEditorId, type ExternalEditorsSnapshot, type ExternalOpenResult, type FsRevealResult } from '../shared/types.ts'
 import type { WorkspaceFs } from './workspace-fs.ts'
 
 interface EditorSpec {
@@ -133,6 +133,38 @@ export class ExternalOpen {
     const launch = this.deps.launch ?? launchDetached
     await launch(bin, [abs])
     return { app: spec.id, path: filePath.trim() === '.' ? '' : filePath.trim() }
+  }
+
+  /** Open the system file manager at this workspace path (Finder / Explorer / Files). */
+  async reveal(root: string, filePath = ''): Promise<FsRevealResult> {
+    const abs = await this.fs.resolveAbsolute(root, filePath)
+    const lookup = this.deps.which ?? whichOnPath
+    const launch = this.deps.launch ?? launchDetached
+    const platform = this.platform()
+    const rel = filePath.trim() === '.' ? '' : filePath.trim()
+    if (platform === 'darwin') {
+      const bin = await lookup('open')
+      if (bin === undefined) throw new GitError('FS_REVEAL_FAILED')
+      await launch(bin, ['-R', abs])
+      return { path: rel }
+    }
+    if (platform === 'win32') {
+      const bin = await lookup('explorer.exe') ?? await lookup('explorer')
+      if (bin === undefined) throw new GitError('FS_REVEAL_FAILED')
+      await launch(bin, [`/select,${abs}`])
+      return { path: rel }
+    }
+    const bin = await lookup('xdg-open')
+    if (bin === undefined) throw new GitError('FS_REVEAL_FAILED')
+    let target = abs
+    try {
+      const info = await stat(abs)
+      if (!info.isDirectory()) target = dirname(abs)
+    } catch {
+      target = dirname(abs)
+    }
+    await launch(bin, [target])
+    return { path: rel }
   }
 
   private async pickSpec(app?: string): Promise<EditorSpec> {

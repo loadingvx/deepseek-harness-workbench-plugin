@@ -3,14 +3,18 @@ import type { GitClient } from '../api.ts'
 import { fail } from '../../shared/errors.ts'
 import { buildFilterTree, normalizeFileFilter, type FilterNode } from '../../shared/file-filter.ts'
 import { joinWorkspaceFile } from '../../shared/new-file-path.ts'
+import { copyFileName, uniqueFileName } from '../../shared/copy-name.ts'
+import { fileManagerKind, fileManagerLocaleKey } from '../../shared/file-manager.ts'
 import { isExternalEditorId, type ExternalEditorId, type ExternalEditorInfo, type FsDirEntry, type GitFail } from '../../shared/types.ts'
 import { FileKindIcon } from './file-icons.tsx'
 import { IconButton } from './IconButton.tsx'
 import { IconChevron, IconClose, IconExternal, IconEye, IconRefresh, IconRename, IconSearch, IconTrash } from './icons.tsx'
+import { TreeContextMenu, type TreeMenuTarget } from './TreeContextMenu.tsx'
 import type { Translate } from './types.ts'
 import css from './FileTree.module.css'
 
 const EDITOR_PREF_KEY = 'dsh-workbench-external-editor'
+const CLIP_KEY = 'dsh-workbench-tree-clip'
 
 export interface FileTreeProps {
   client: GitClient
@@ -81,6 +85,44 @@ function validEntryName(name: string): boolean {
   if (name === '' || name === '.' || name === '..') return false
   return !/[\\/<>:"|?*\0]/.test(name)
 }
+
+type TreeClip = { path: string; kind: 'file' | 'directory'; mode: 'copy' | 'cut' }
+type Creating = { dir: string; kind: 'file' | 'directory'; draft: string }
+
+function readClip(): TreeClip | null {
+  try {
+    const raw = sessionStorage.getItem(CLIP_KEY)
+    if (raw === null || raw.trim() === '') return null
+    const parsed = JSON.parse(raw) as Partial<TreeClip>
+    if (typeof parsed.path !== 'string' || parsed.path === '') return null
+    if (parsed.kind !== 'file' && parsed.kind !== 'directory') return null
+    if (parsed.mode !== 'copy' && parsed.mode !== 'cut') return null
+    return { path: parsed.path, kind: parsed.kind, mode: parsed.mode }
+  } catch {
+    return null
+  }
+}
+
+function writeClip(next: TreeClip | null): void {
+  try {
+    if (next === null) sessionStorage.removeItem(CLIP_KEY)
+    else sessionStorage.setItem(CLIP_KEY, JSON.stringify(next))
+  } catch { /* private mode */ }
+}
+
+function namesIn(branch: Branch | undefined): string[] {
+  return branch?.entries.map(entry => entry.name) ?? []
+}
+
+function dirOfTarget(target: TreeMenuTarget): string {
+  if (target.scope === 'root') return ''
+  return target.kind === 'directory' ? target.path : parentOf(target.path)
+}
+
+function isPasteIntoSelf(item: TreeClip, dir: string): boolean {
+  return item.kind === 'directory' && (dir === item.path || dir.startsWith(item.path + '/'))
+}
+
 /** Lazy workspace explorer. Hidden files stay off until the user asks. */
 export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOpenFile, onRenamed, onDeleted, t }: FileTreeProps) {
   const [showHidden, setShowHidden] = useState(false)
@@ -103,12 +145,16 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
   const [renamePath, setRenamePath] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [deleteAsk, setDeleteAsk] = useState<{ path: string; name: string; kind: 'file' | 'directory' } | null>(null)
+  const [clip, setClip] = useState<TreeClip | null>(() => readClip())
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; target: TreeMenuTarget } | null>(null)
+  const [creating, setCreating] = useState<Creating | null>(null)
   const [dragSource, setDragSource] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
   const filterInput = useRef<HTMLInputElement | null>(null)
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchGen = useRef(0)
   const renameHandled = useRef(false)
+  const createHandled = useRef(false)
 
   const chosen = pickPreferred(editors, pref)
 
@@ -154,6 +200,13 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
     setBranches({})
     setOpenDirs({ '': true })
     setNotice(null)
+    createHandled.current = true
+    renameHandled.current = true
+    setClip(null)
+    writeClip(null)
+    setCtxMenu(null)
+    setCreating(null)
+    setRenamePath(null)
     closeFilter()
     if (workspaceId !== undefined) void load('')
   }, [workspaceId, load, closeFilter])
@@ -283,6 +336,9 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
 
   const startRename = (entry: { name: string; path: string; kind: 'file' | 'directory' }): void => {
     if (busyPath !== null || workspaceId === undefined) return
+    setCtxMenu(null)
+    createHandled.current = true
+    setCreating(null)
     renameHandled.current = false
     setRenamePath(entry.path)
     setRenameDraft(entry.name)
@@ -361,6 +417,223 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
     onRenamed?.(source, to)
   }
 
+  const setTreeClip = (next: TreeClip | null): void => {
+    setClip(next)
+    writeClip(next)
+  }
+
+  const closeCtx = (): void => {
+    setCtxMenu(null)
+  }
+
+  const openCtxMenu = (event: React.MouseEvent, target: TreeMenuTarget): void => {
+    if (workspaceId === undefined) return
+    event.preventDefault()
+    event.stopPropagation()
+    setMenuOpen(false)
+    setCtxMenu({ x: event.clientX, y: event.clientY, target })
+    if (!editorsReady || editors.length === 0) void loadEditors()
+  }
+
+  const handleTreeContextMenu = (event: React.MouseEvent<HTMLElement>): void => {
+    if (workspaceId === undefined) return
+    const origin = event.target
+    if (!(origin instanceof Element)) return
+    if (origin.closest('input, textarea, [role="alertdialog"]') !== null) return
+    const hit = origin.closest('[data-tree-path]')
+    if (hit instanceof HTMLElement && hit.dataset.treePath !== undefined) {
+      const kind = hit.dataset.treeKind === 'directory' ? 'directory' : 'file'
+      openCtxMenu(event, {
+        scope: 'entry',
+        path: hit.dataset.treePath,
+        name: hit.dataset.treeName ?? fileName(hit.dataset.treePath),
+        kind,
+      })
+      return
+    }
+    if (origin.closest(`.${css.body}`) === null) return
+    openCtxMenu(event, { scope: 'root' })
+  }
+
+  const cutOrCopy = (entry: { path: string; kind: 'file' | 'directory' }, mode: 'copy' | 'cut'): void => {
+    closeCtx()
+    setTreeClip({ path: entry.path, kind: entry.kind, mode })
+    showInfo(mode === 'cut' ? t('tree.cutReady') : t('tree.copied'))
+  }
+
+  const pasteInto = async (dir: string): Promise<void> => {
+    closeCtx()
+    if (workspaceId === undefined || busyPath !== null) return
+    const current = clip ?? readClip()
+    if (current === null) {
+      showInfo(t('tree.pasteEmpty'))
+      return
+    }
+    if (isPasteIntoSelf(current, dir)) {
+      showInfo(t('tree.pasteIntoSelf'))
+      return
+    }
+    if (current.mode === 'cut' && parentOf(current.path) === dir) {
+      return
+    }
+    let taken = namesIn(branches[dir])
+    const listed = await client.listDir(workspaceId, dir)
+    if (listed.ok) {
+      taken = listed.value.entries.map(entry => entry.name)
+      setBranches(currentBranches => ({
+        ...currentBranches,
+        [dir]: {
+          entries: listed.value.entries,
+          truncated: listed.value.truncated,
+          loading: false,
+          error: null,
+        },
+      }))
+    }
+    const sourceName = fileName(current.path)
+    let destName = sourceName
+    if (taken.includes(sourceName)) {
+      destName = current.mode === 'copy'
+        ? copyFileName(sourceName, current.kind === 'directory', t('tree.copySuffix'), taken)
+        : uniqueFileName(sourceName, current.kind === 'directory', taken)
+    }
+    const to = joinWorkspaceFile(dir, destName)
+    if (to === null) {
+      setNotice({ kind: 'error', fail: fail('INVALID_PATH') })
+      return
+    }
+    setBusyPath(current.path)
+    const result = current.mode === 'cut'
+      ? await client.renameFile(workspaceId, current.path, to)
+      : await client.copyFile(workspaceId, current.path, to)
+    setBusyPath(null)
+    if (!result.ok) {
+      setNotice({ kind: 'error', fail: result })
+      return
+    }
+    if (current.mode === 'cut') {
+      remapPaths(current.path, to)
+      setTreeClip(null)
+      onRenamed?.(current.path, to)
+    }
+    showInfo(t('tree.pasted'))
+    if (filterOpen) closeFilter()
+    ensureDirOpen(dir)
+    void reloadDirs(current.mode === 'cut' ? [parentOf(current.path), dir] : [dir])
+  }
+
+  const ensureDirOpen = (dir: string): void => {
+    if (dir === '') return
+    const parts: string[] = []
+    let prefix = ''
+    for (const seg of dir.split('/').filter(part => part !== '')) {
+      prefix = prefix === '' ? seg : `${prefix}/${seg}`
+      parts.push(prefix)
+    }
+    setOpenDirs(current => {
+      const next = { ...current }
+      for (const path of parts) next[path] = true
+      return next
+    })
+    for (const path of parts) {
+      if (branches[path] === undefined) void load(path)
+    }
+  }
+
+  const startCreate = (dir: string, kind: 'file' | 'directory'): void => {
+    if (workspaceId === undefined || busyPath !== null) return
+    closeCtx()
+    cancelRename()
+    if (filterOpen) closeFilter()
+    if (creating !== null && creating.dir !== dir) createHandled.current = true
+    else createHandled.current = false
+    ensureDirOpen(dir)
+    const draft = uniqueFileName(
+      t(kind === 'file' ? 'tree.newFileName' : 'tree.newFolderName'),
+      kind === 'directory',
+      namesIn(branches[dir]),
+    )
+    setCreating({ dir, kind, draft })
+  }
+
+  const cancelCreate = (): void => {
+    createHandled.current = true
+    setCreating(null)
+  }
+
+  const commitCreate = async (): Promise<void> => {
+    if (workspaceId === undefined || creating === null) return
+    const { dir, kind, draft } = creating
+    const name = draft.trim()
+    if (name === '') {
+      cancelCreate()
+      return
+    }
+    if (!validEntryName(name)) {
+      setNotice({ kind: 'error', fail: fail('INVALID_PATH') })
+      return
+    }
+    const path = joinWorkspaceFile(dir, name)
+    if (path === null) {
+      setNotice({ kind: 'error', fail: fail('INVALID_PATH') })
+      return
+    }
+    createHandled.current = true
+    setCreating(null)
+    setBusyPath(path)
+    const result = kind === 'directory'
+      ? await client.mkdir(workspaceId, path)
+      : await client.writeFile(workspaceId, path, '')
+    setBusyPath(null)
+    if (!result.ok) {
+      setNotice({ kind: 'error', fail: result })
+      if (result.code === 'FS_EXISTS') {
+        createHandled.current = false
+        setCreating({
+          dir,
+          kind,
+          draft: uniqueFileName(name, kind === 'directory', [...namesIn(branches[dir]), name]),
+        })
+      }
+      return
+    }
+    showInfo(t('tree.created'))
+    void reloadDirs([dir])
+    if (kind === 'file') onOpenFile(path)
+    else {
+      setOpenDirs(current => ({ ...current, [path]: true }))
+      void load(path)
+    }
+  }
+
+  const revealPath = async (path: string): Promise<void> => {
+    closeCtx()
+    if (workspaceId === undefined || busyPath !== null) return
+    setBusyPath(path)
+    setNotice({ kind: 'info', text: t('tree.revealing') })
+    const result = await client.revealInFolder(workspaceId, path)
+    setBusyPath(null)
+    if (!result.ok) {
+      setNotice({ kind: 'error', fail: result })
+      return
+    }
+    showInfo(t('tree.revealed'))
+  }
+
+  const openMenuTarget = (target: TreeMenuTarget): void => {
+    closeCtx()
+    if (target.scope === 'root') return
+    if (target.kind === 'file') {
+      onOpenFile(target.path)
+      return
+    }
+    if (filterQuery !== '') {
+      setFilterCollapsed(current => ({ ...current, [target.path]: false }))
+      return
+    }
+    if (!openDirs[target.path]) toggleDir(target.path)
+  }
+
   const canDrag = workspaceId !== undefined && busyPath === null
 
   const handleDragStart = (event: React.DragEvent<HTMLElement>, path: string): void => {
@@ -413,11 +686,16 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
       ? t('tree.pickEditor')
       : t('tree.openExternalFile', { app: editorLabel(t, chosen), name: entry.name })
     const renaming = renamePath === entry.path
+    const cutMark = clip?.mode === 'cut' && clip.path === entry.path
     return (
       <div
         className={css.rowWrap}
+        data-tree-path={entry.path}
+        data-tree-name={entry.name}
+        data-tree-kind={entry.kind}
         data-active={activePath === entry.path || undefined}
         data-ignored={entry.ignored === true || undefined}
+        data-cut={cutMark || undefined}
         data-dragover={dragOver === entry.path || undefined}
         data-drag-source={dragSource === entry.path || undefined}
         draggable={canDrag && !renaming}
@@ -528,28 +806,94 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
     : headerTarget === ''
       ? t('tree.openWorkspace', { app: editorLabel(t, chosen) })
       : t('tree.openExternalFile', { app: editorLabel(t, chosen), name: fileName(headerTarget) })
+  const revealLabel = t(fileManagerLocaleKey(fileManagerKind(
+    typeof navigator === 'undefined' ? '' : navigator.userAgent,
+    typeof navigator === 'undefined' ? '' : navigator.platform,
+  )))
+  const ctxPasteDir = ctxMenu === null ? '' : dirOfTarget(ctxMenu.target)
+  const ctxPasteSelf = clip !== null && isPasteIntoSelf(clip, ctxPasteDir)
+  const canPaste = clip !== null && !ctxPasteSelf
+  const pasteHint = clip === null ? t('tree.pasteEmpty') : ctxPasteSelf ? t('tree.pasteIntoSelf') : ''
+
+  const renderCreateRow = (dir: string, depth: number): ReactNode => {
+    if (creating === null || creating.dir !== dir) return null
+    const label = creating.kind === 'directory' ? t('tree.newFolder') : t('tree.newFile')
+    return (
+      <div className={css.rowWrap} data-creating="">
+        <span className={css.row} style={{ paddingLeft: 8 + depth * 12 }}>
+          <span className={css.chevron} />
+          <FileKindIcon kind={creating.kind} name={creating.draft} />
+        </span>
+        <input
+          className={css.renameInput}
+          value={creating.draft}
+          autoFocus
+          aria-label={label}
+          placeholder={label}
+          disabled={busyPath !== null}
+          onClick={(event) => { event.stopPropagation() }}
+          onFocus={(event) => {
+            createHandled.current = false
+            event.currentTarget.select()
+          }}
+          onChange={(event) => {
+            setCreating(current => current === null ? current : { ...current, draft: event.target.value })
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              void commitCreate()
+            } else if (event.key === 'Escape') {
+              event.preventDefault()
+              cancelCreate()
+            }
+          }}
+          onBlur={() => {
+            if (!createHandled.current) void commitCreate()
+          }}
+        />
+      </div>
+    )
+  }
 
   const renderBranch = (dir: string, depth: number): ReactNode => {
     const branch = branches[dir]
-    if (branch === undefined) return null
+    const createRow = renderCreateRow(dir, depth)
+    if (branch === undefined) return createRow
     if (branch.loading && branch.entries.length === 0) {
-      return <p className={css.hint} style={{ paddingLeft: 10 + depth * 12 }}>{t('tree.loading')}</p>
+      return (
+        <>
+          {createRow}
+          <p className={css.hint} style={{ paddingLeft: 10 + depth * 12 }}>{t('tree.loading')}</p>
+        </>
+      )
     }
     if (branch.error !== null) {
       return (
-        <div className={css.banner} style={{ marginLeft: 8 + depth * 8 }}>
-          <div>{branch.error.messageZh}</div>
-          <div>{branch.error.hintZh}</div>
-          <IconButton label={t('panel.retry')} onClick={() => { void load(dir) }}><IconRefresh /></IconButton>
-        </div>
+        <>
+          {createRow}
+          <div className={css.banner} style={{ marginLeft: 8 + depth * 8 }}>
+            <div>{branch.error.messageZh}</div>
+            <div>{branch.error.hintZh}</div>
+            <IconButton label={t('panel.retry')} onClick={() => { void load(dir) }}><IconRefresh /></IconButton>
+          </div>
+        </>
       )
     }
     const entries = branch.entries.filter(entry => showHidden || !isHiddenName(entry.name))
     if (entries.length === 0) {
-      return <p className={css.hint} style={{ paddingLeft: 10 + depth * 12 }}>{t('tree.empty')}</p>
+      return (
+        <>
+          {createRow}
+          {createRow === null ? (
+            <p className={css.hint} style={{ paddingLeft: 10 + depth * 12 }}>{t('tree.empty')}</p>
+          ) : null}
+        </>
+      )
     }
     return (
       <>
+        {createRow}
         {entries.map(entry => {
           const open = Boolean(openDirs[entry.path])
           return (
@@ -622,7 +966,7 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
   }
 
   return (
-    <nav className={css.root} aria-label={t('tree.title')}>
+    <nav className={css.root} aria-label={t('tree.title')} onContextMenu={handleTreeContextMenu}>
       <header className={css.head}>
         <div className={css.headRow}>
           <span className={css.title}>{workspaceTitle ?? t('tree.workspaceFallback')}</span>
@@ -771,6 +1115,7 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
       </header>
       <div
         className={css.body}
+        aria-label={t('tree.menuHint')}
         data-dragover={dragOver === '' || undefined}
         onDragOver={handleBodyDragOver}
         onDragLeave={(event) => {
@@ -784,6 +1129,50 @@ export function FileTree({ client, workspaceId, workspaceTitle, activePath, onOp
             ? renderFilterBody()
             : renderBranch('', 0)}
       </div>
+      {ctxMenu !== null ? (
+        <TreeContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          target={ctxMenu.target}
+          canPaste={canPaste}
+          pasteHint={pasteHint}
+          editors={editors}
+          editorsReady={editorsReady}
+          revealLabel={revealLabel}
+          busy={busyPath !== null || workspaceId === undefined}
+          t={t}
+          onOpen={() => { openMenuTarget(ctxMenu.target) }}
+          onReveal={() => {
+            void revealPath(ctxMenu.target.scope === 'root' ? '' : ctxMenu.target.path)
+          }}
+          onCut={() => {
+            if (ctxMenu.target.scope === 'entry') cutOrCopy(ctxMenu.target, 'cut')
+          }}
+          onCopy={() => {
+            if (ctxMenu.target.scope === 'entry') cutOrCopy(ctxMenu.target, 'copy')
+          }}
+          onPaste={() => { void pasteInto(dirOfTarget(ctxMenu.target)) }}
+          onNewFile={() => { startCreate(dirOfTarget(ctxMenu.target), 'file') }}
+          onNewFolder={() => { startCreate(dirOfTarget(ctxMenu.target), 'directory') }}
+          onRename={() => {
+            if (ctxMenu.target.scope === 'entry') startRename(ctxMenu.target)
+          }}
+          onDelete={() => {
+            if (ctxMenu.target.scope !== 'entry') return
+            closeCtx()
+            setDeleteAsk({
+              path: ctxMenu.target.path,
+              name: ctxMenu.target.name,
+              kind: ctxMenu.target.kind,
+            })
+          }}
+          onOpenExternal={(app) => {
+            closeCtx()
+            void openExternal(ctxMenu.target.scope === 'root' ? '' : ctxMenu.target.path, app)
+          }}
+          onClose={closeCtx}
+        />
+      ) : null}
       {deleteAsk !== null ? (
         <div
           className={css.dialogMask}

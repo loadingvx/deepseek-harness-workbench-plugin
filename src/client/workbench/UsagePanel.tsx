@@ -36,6 +36,7 @@ import {
   findNavSidebarRoot,
   measureNavSettingsHeight,
   navHostIsSeated,
+  defaultUsageDock,
   readUsageDock,
   releaseNavDockHost,
   subscribeUsageDock,
@@ -57,7 +58,7 @@ type UsagePanelProps = {
 }
 
 export function UsageNavPortal(props: UsagePanelProps) {
-  const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, () => 'side' as const)
+  const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
   const [host, setHost] = useState<HTMLElement | null>(null)
 
   useLayoutEffect(() => {
@@ -195,7 +196,7 @@ function useNavUsageFrame(enabled: boolean): {
 export function UsagePanel({
   client, sessionId, running, useProjection, t,
 }: UsagePanelProps) {
-  const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, () => 'side' as const)
+  const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
   const snapshot = useSyncExternalStore(subscribeUsageLive, readUsageLive, () => null)
   const nav = useNavUsageFrame(dock === 'nav')
   const [loading, setLoading] = useState(true)

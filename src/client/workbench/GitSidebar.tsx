@@ -24,6 +24,11 @@ import { parentNeedsAsk } from '../../shared/git-nearby.ts'
 import { readDocumentColorScheme } from './surface-scheme.ts'
 import type { Translate } from './types.ts'
 import { clampGraphHeight, GRAPH_DEFAULT_H, GRAPH_MIN_H, measureReservedAboveGraph } from './graph-layout.ts'
+import {
+  CHANGES_OPEN_KEY, DEFAULT_CHANGES_OPEN, DEFAULT_GIT_SETTINGS_OPEN, DEFAULT_GRAPH_COMPACT,
+  DEFAULT_GRAPH_OPEN, GIT_SETTINGS_OPEN_KEY, GRAPH_COMPACT_KEY, GRAPH_OPEN_KEY,
+  readBoolFlag, writeBoolFlag,
+} from './ui-flags.ts'
 import css from './GitSidebar.module.css'
 
 export interface GitSidebarProps {
@@ -45,9 +50,6 @@ const KIND_MARK: Record<string, string> = {
 }
 
 const GRAPH_H_KEY = 'dsh-workbench-graph-h'
-const CHANGES_OPEN_KEY = 'dsh-workbench-changes-open'
-const GRAPH_OPEN_KEY = 'dsh-workbench-graph-open'
-const GRAPH_COMPACT_KEY = 'dsh-workbench-graph-compact'
 const TEMPLATE_KEY = 'dsh-workbench-commit-template'
 const MESSAGE_MIN_H = 32
 const MESSAGE_MAX_H = 140
@@ -84,19 +86,6 @@ function restoreFilesLabel(paths: string[], t: Translate): string {
   const head = paths.slice(0, 5).join('、')
   if (paths.length <= 5) return head
   return t('restore.more', { list: head, count: paths.length })
-}
-
-function readFlag(key: string, fallback: boolean): boolean {
-  try {
-    const raw = localStorage.getItem(key)
-    if (raw === '0') return false
-    if (raw === '1') return true
-  } catch { /* ignore */ }
-  return fallback
-}
-
-function writeFlag(key: string, value: boolean): void {
-  try { localStorage.setItem(key, value ? '1' : '0') } catch { /* ignore */ }
 }
 
 function FileRow({
@@ -210,16 +199,16 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const [log, setLog] = useState<GitLogEntry[]>([])
   const [message, setMessage] = useState('')
   const [customTemplate, setCustomTemplate] = useState<string | null>(readCustomTemplate)
-  const [templateOpen, setTemplateOpen] = useState(false)
+  const [templateOpen, setTemplateOpen] = useState(() => readBoolFlag(GIT_SETTINGS_OPEN_KEY, DEFAULT_GIT_SETTINGS_OPEN))
   const [templateDraft, setTemplateDraft] = useState('')
   const [syncPrefs, setSyncPrefs] = useState<GitSyncPrefs>(readGitSyncPrefs)
-  const [prefsDraft, setPrefsDraft] = useState<GitSyncPrefs>(DEFAULT_GIT_SYNC_PREFS)
+  const [prefsDraft, setPrefsDraft] = useState<GitSyncPrefs>(readGitSyncPrefs)
   const localeDefault = t('commit.templateDefault')
   const template = customTemplate ?? localeDefault
   const messageRef = useRef<HTMLTextAreaElement>(null)
-  const [changesOpen, setChangesOpen] = useState(() => readFlag(CHANGES_OPEN_KEY, true))
-  const [graphOpen, setGraphOpen] = useState(() => readFlag(GRAPH_OPEN_KEY, true))
-  const [graphCompact, setGraphCompact] = useState(() => readFlag(GRAPH_COMPACT_KEY, false))
+  const [changesOpen, setChangesOpen] = useState(() => readBoolFlag(CHANGES_OPEN_KEY, DEFAULT_CHANGES_OPEN))
+  const [graphOpen, setGraphOpen] = useState(() => readBoolFlag(GRAPH_OPEN_KEY, DEFAULT_GRAPH_OPEN))
+  const [graphCompact, setGraphCompact] = useState(() => readBoolFlag(GRAPH_COMPACT_KEY, DEFAULT_GRAPH_COMPACT))
   const [prompt, setPrompt] = useState<GraphPrompt>(null)
   const [restoreAsk, setRestoreAsk] = useState<RestoreAsk>(null)
   const [promptValue, setPromptValue] = useState('')
@@ -236,6 +225,14 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const [reserved, setReserved] = useState(160)
   const [dragging, setDragging] = useState(false)
   const graphHFit = clampGraphHeight(graphH, hostH, reserved)
+  const settingsHydrated = useRef(false)
+
+  useLayoutEffect(() => {
+    if (settingsHydrated.current || !templateOpen) return
+    settingsHydrated.current = true
+    setTemplateDraft(template)
+    setPrefsDraft(readGitSyncPrefs())
+  }, [templateOpen, template])
 
   const refresh = async (): Promise<GitStatusSnapshot | null> => {
     if (workspaceId === undefined) {
@@ -522,19 +519,19 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
 
   const toggleChanges = (): void => {
     setChangesOpen((open) => {
-      writeFlag(CHANGES_OPEN_KEY, !open)
+      writeBoolFlag(CHANGES_OPEN_KEY, !open)
       return !open
     })
   }
   const toggleGraph = (): void => {
     setGraphOpen((open) => {
-      writeFlag(GRAPH_OPEN_KEY, !open)
+      writeBoolFlag(GRAPH_OPEN_KEY, !open)
       return !open
     })
   }
   const toggleCompact = (): void => {
     setGraphCompact((on) => {
-      writeFlag(GRAPH_COMPACT_KEY, !on)
+      writeBoolFlag(GRAPH_COMPACT_KEY, !on)
       return !on
     })
   }
@@ -545,6 +542,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   }
   const openPrompt = (kind: Exclude<GraphPrompt, null>): void => {
     if (writesDisabled) return
+    writeBoolFlag(GIT_SETTINGS_OPEN_KEY, false)
     setTemplateOpen(false)
     setPrompt(kind)
     setPromptValue('')
@@ -669,10 +667,12 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     setPrompt(null)
     setTemplateDraft(template)
     setPrefsDraft(readGitSyncPrefs())
+    writeBoolFlag(GIT_SETTINGS_OPEN_KEY, true)
     setTemplateOpen(true)
   }
 
   const closeTemplate = (): void => {
+    writeBoolFlag(GIT_SETTINGS_OPEN_KEY, false)
     setTemplateOpen(false)
   }
 
@@ -690,6 +690,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const saveTemplate = (): void => {
     setCustomTemplate(writeCustomTemplate(templateDraft, localeDefault))
     setSyncPrefs(writeGitSyncPrefs(prefsDraft))
+    writeBoolFlag(GIT_SETTINGS_OPEN_KEY, false)
     setTemplateOpen(false)
   }
 
@@ -1168,7 +1169,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                 <span>{t('commit.templateTitle')}</span>
                 <textarea
                   className={css.templateInput}
-                  value={templateDraft}
+                  value={templateDraft === '' ? template : templateDraft}
                   onChange={(event) => { setTemplateDraft(event.target.value) }}
                   onKeyDown={(event) => {
                     if (event.key === 'Escape') closeTemplate()

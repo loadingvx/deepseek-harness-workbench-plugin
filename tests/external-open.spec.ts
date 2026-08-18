@@ -125,4 +125,33 @@ describe('ExternalOpen', () => {
     await opened.open(root, 'src', 'cursor')
     expect(launched[0]).toBe(join(root, 'src'))
   })
+
+  it('reveals a file in Finder / Explorer / the Linux file manager', async () => {
+    const root = await tempRoot()
+    await writeFile(join(root, 'note.txt'), 'hi')
+    const launched: Array<{ bin: string; args: string[] }> = []
+    const darwin = new ExternalOpen(fs, {
+      platform: 'darwin',
+      which: async (bin) => bin === 'open' ? '/usr/bin/open' : undefined,
+      launch: async (bin, args) => { launched.push({ bin, args: [...args] }) },
+    })
+    await darwin.reveal(root, 'note.txt')
+    expect(launched[0]).toEqual({ bin: '/usr/bin/open', args: ['-R', join(root, 'note.txt')] })
+    launched.length = 0
+    const win = new ExternalOpen(fs, {
+      platform: 'win32',
+      which: async (bin) => bin === 'explorer.exe' ? 'C:\\Windows\\explorer.exe' : undefined,
+      launch: async (bin, args) => { launched.push({ bin, args: [...args] }) },
+    })
+    await win.reveal(root, 'note.txt')
+    expect(launched[0]?.args[0]).toBe(`/select,${join(root, 'note.txt')}`)
+    launched.length = 0
+    const linux = new ExternalOpen(fs, {
+      platform: 'linux',
+      which: async (bin) => bin === 'xdg-open' ? '/usr/bin/xdg-open' : undefined,
+      launch: async (bin, args) => { launched.push({ bin, args: [...args] }) },
+    })
+    await linux.reveal(root, 'note.txt')
+    expect(launched[0]?.args[0]).toBe(root)
+  })
 })

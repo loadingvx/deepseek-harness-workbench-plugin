@@ -33,6 +33,9 @@ import {
 import { IconButton } from './IconButton.tsx'
 import { IconClose, IconSend, IconSparkle, IconStop, IconTune } from './icons.tsx'
 import type { Translate } from './types.ts'
+import {
+  DEFAULT_TERM_AI_SETTINGS_OPEN, TERM_AI_SETTINGS_OPEN_KEY, readBoolFlag, writeBoolFlag,
+} from './ui-flags.ts'
 import css from './TermAssistBar.module.css'
 
 const TEMPLATE_KEY = 'dsh-workbench-term-assist-template'
@@ -116,7 +119,7 @@ export function TermAssistBar({
   const [error, setError] = useState<GitFail | null>(null)
   const [customTemplate, setCustomTemplate] = useState<string | null>(readCustomTemplate)
   const [prefs, setPrefs] = useState<TermAssistPrefs>(readPrefs)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(() => readBoolFlag(TERM_AI_SETTINGS_OPEN_KEY, DEFAULT_TERM_AI_SETTINGS_OPEN))
   const [templateDraft, setTemplateDraft] = useState('')
   const [prefsDraft, setPrefsDraft] = useState<TermAssistPrefs>(readPrefs)
   const [settingsError, setSettingsError] = useState('')
@@ -124,8 +127,16 @@ export function TermAssistBar({
   const template = customTemplate ?? localeDefault
   const abortRef = useRef<AbortController | null>(null)
   const busyRef = useRef(false)
+  const settingsHydrated = useRef(false)
   const generating = phase === 'ask' || phase === 'run'
   const settingsCustom = customTemplate !== null || !isDefaultTermAssistPrefs(prefs)
+
+  useEffect(() => {
+    if (settingsHydrated.current || !settingsOpen) return
+    settingsHydrated.current = true
+    setTemplateDraft(template)
+    setPrefsDraft(cloneTermAssistPrefs(prefs))
+  }, [settingsOpen, template, prefs])
 
   useEffect(() => {
     return () => { abortRef.current?.abort() }
@@ -266,10 +277,12 @@ export function TermAssistBar({
     setTemplateDraft(template)
     setPrefsDraft(cloneTermAssistPrefs(prefs))
     setSettingsError('')
+    writeBoolFlag(TERM_AI_SETTINGS_OPEN_KEY, true)
     setSettingsOpen(true)
   }
 
   const closeSettings = (): void => {
+    writeBoolFlag(TERM_AI_SETTINGS_OPEN_KEY, false)
     setSettingsOpen(false)
     setSettingsError('')
   }
@@ -283,6 +296,7 @@ export function TermAssistBar({
     setCustomTemplate(writeCustomTemplate(templateDraft, localeDefault))
     setPrefs(writePrefs(prefsDraft))
     setSettingsError('')
+    writeBoolFlag(TERM_AI_SETTINGS_OPEN_KEY, false)
     setSettingsOpen(false)
   }
 
@@ -596,7 +610,7 @@ export function TermAssistBar({
                 <span>{t('term.ai.templateTitle')}</span>
                 <textarea
                   className={css.templateInput}
-                  value={templateDraft}
+                  value={templateDraft === '' ? template : templateDraft}
                   onChange={(event) => { setTemplateDraft(event.target.value) }}
                   onKeyDown={(event) => {
                     if (event.key === 'Escape') closeSettings()

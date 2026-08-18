@@ -2,11 +2,25 @@
 
 export type WorkbenchMount = 'host' | 'toggle'
 
+export const WORKBENCH_SIDE_TABS = ['files', 'git', 'usage'] as const
+export type SideTab = (typeof WORKBENCH_SIDE_TABS)[number]
+
 export interface WorkbenchChrome {
   enabled: boolean
   chatOpen: boolean
   editorOpen: boolean
   sideOpen: boolean
+  sideTab: SideTab
+}
+
+export const WORKBENCH_CHROME_KEY = 'dsh-workbench-chrome'
+
+export const DEFAULT_WORKBENCH_CHROME: WorkbenchChrome = {
+  enabled: true,
+  chatOpen: true,
+  editorOpen: false,
+  sideOpen: true,
+  sideTab: 'files',
 }
 
 const listeners = new Set<() => void>()
@@ -16,10 +30,48 @@ function emit(): void {
 }
 
 function freshChrome(): WorkbenchChrome {
-  return { enabled: true, chatOpen: true, editorOpen: true, sideOpen: true }
+  return { ...DEFAULT_WORKBENCH_CHROME }
 }
 
-let chrome: WorkbenchChrome = freshChrome()
+function asBool(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+export function isSideTab(value: unknown): value is SideTab {
+  return typeof value === 'string' && (WORKBENCH_SIDE_TABS as readonly string[]).includes(value)
+}
+
+/** Fill missing / invalid fields with factory defaults. */
+export function parseWorkbenchChrome(raw: unknown): WorkbenchChrome {
+  const base = freshChrome()
+  if (typeof raw !== 'object' || raw === null) return base
+  const rec = raw as Record<string, unknown>
+  return {
+    enabled: asBool(rec.enabled, base.enabled),
+    chatOpen: asBool(rec.chatOpen, base.chatOpen),
+    editorOpen: asBool(rec.editorOpen, base.editorOpen),
+    sideOpen: asBool(rec.sideOpen, base.sideOpen),
+    sideTab: isSideTab(rec.sideTab) ? rec.sideTab : base.sideTab,
+  }
+}
+
+export function readWorkbenchChrome(): WorkbenchChrome {
+  try {
+    const text = localStorage.getItem(WORKBENCH_CHROME_KEY)
+    if (text === null || text.trim() === '') return freshChrome()
+    return parseWorkbenchChrome(JSON.parse(text) as unknown)
+  } catch {
+    return freshChrome()
+  }
+}
+
+export function writeWorkbenchChrome(next: WorkbenchChrome): void {
+  try {
+    localStorage.setItem(WORKBENCH_CHROME_KEY, JSON.stringify(parseWorkbenchChrome(next)))
+  } catch { /* private mode / quota */ }
+}
+
+let chrome: WorkbenchChrome = readWorkbenchChrome()
 
 export function defaultWorkbenchChrome(): WorkbenchChrome {
   return freshChrome()
@@ -35,20 +87,29 @@ export function subscribeWorkbenchChrome(listener: () => void): () => void {
 }
 
 export function patchWorkbenchChrome(patch: Partial<WorkbenchChrome>): void {
-  chrome = { ...chrome, ...patch }
+  chrome = parseWorkbenchChrome({ ...chrome, ...patch })
+  writeWorkbenchChrome(chrome)
   emit()
 }
 
-/** New session (or session switch): open the full three-column workbench. */
+/** Re-read from storage (page reload / other tab). */
+export function hydrateWorkbenchChrome(): WorkbenchChrome {
+  chrome = readWorkbenchChrome()
+  emit()
+  return chrome
+}
+
+/** Test helper: restore factory defaults. Production layout is persisted and must not reset on a new session. */
 export function resetWorkbenchChrome(): void {
   chrome = freshChrome()
+  writeWorkbenchChrome(chrome)
   emit()
 }
 
 /**
  * Split as soon as the user left workbench on. The blank new-session hero
- * must not hide the editor / Git sidebar — that page is exactly when people
- * expect the plugin to appear.
+ * still shows the files/Git sidebar; the editor starts collapsed until
+ * the user opens it. Column collapse itself is remembered globally.
  */
 export function shouldSplitWorkbench(enabled: boolean, _blank = false): boolean {
   return enabled

@@ -1,9 +1,9 @@
-import { mkdir, readdir, readFile, realpath, rename as fsRename, rm, stat, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readdir, readFile, realpath, rename as fsRename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, extname, join, normalize, relative, resolve as resolvePath, sep } from 'node:path'
 import { GitError } from '../shared/errors.ts'
 import { entryMatchesFilter, MAX_SEARCH_HITS, normalizeFileFilter, shouldSkipSearchDir } from '../shared/file-filter.ts'
 import { attachIgnored, ignoredPathSet } from './git-ignore.ts'
-import type { FsDeleteResult, FsDirEntry, FsFileSnapshot, FsListSnapshot, FsRenameResult, FsSearchSnapshot, FsWriteResult } from '../shared/types.ts'
+import type { FsCopyResult, FsDeleteResult, FsDirEntry, FsFileSnapshot, FsListSnapshot, FsMkdirResult, FsRenameResult, FsSearchSnapshot, FsWriteResult } from '../shared/types.ts'
 
 export const MAX_FILE_BYTES = 1_500_000
 /** Images may be larger than text buffers; cap at 8 MB to protect the server and browser. */
@@ -402,6 +402,59 @@ export class WorkspaceFs {
       throw new GitError('FS_DELETE_FAILED', error instanceof Error ? error.message : undefined)
     }
     return { path: toPosix(rel) }
+  }
+
+  /** Create an empty folder. Parent must already exist. Rejects names that already exist. */
+  async mkdir(root: string, dirPath: string): Promise<FsMkdirResult> {
+    const rel = assertSafeWorkspacePath(root, dirPath)
+    if (rel === '') throw new GitError('INVALID_PATH')
+    const abs = await resolveInside(root, rel)
+    try {
+      await stat(abs)
+      throw new GitError('FS_EXISTS')
+    } catch (error) {
+      if (error instanceof GitError) throw error
+      if (!isNotFound(error)) throw new GitError('FS_MKDIR_FAILED')
+    }
+    try {
+      await mkdir(abs, { recursive: false })
+    } catch (error) {
+      if (isNotFound(error)) throw new GitError('FS_NOT_FOUND')
+      if (error instanceof GitError) throw error
+      throw new GitError('FS_MKDIR_FAILED', error instanceof Error ? error.message : undefined)
+    }
+    return { path: toPosix(rel) }
+  }
+
+  /** Copy a file or folder to a new workspace path. Destination must not exist. */
+  async copy(root: string, fromPath: string, toPath: string): Promise<FsCopyResult> {
+    const fromRel = assertSafeWorkspacePath(root, fromPath)
+    const toRel = assertSafeWorkspacePath(root, toPath)
+    if (fromRel === '' || toRel === '') throw new GitError('INVALID_PATH')
+    if (fromRel === toRel) throw new GitError('FS_EXISTS')
+    if (toRel === fromRel || toRel.startsWith(fromRel + '/')) throw new GitError('INVALID_PATH')
+    const fromAbs = await resolveInside(root, fromRel)
+    const toAbs = await resolveInside(root, toRel)
+    try {
+      await stat(fromAbs)
+    } catch (error) {
+      if (isNotFound(error)) throw new GitError('FS_NOT_FOUND')
+      throw new GitError('FS_COPY_FAILED')
+    }
+    try {
+      const target = await stat(toAbs)
+      if (target !== undefined) throw new GitError('FS_EXISTS')
+    } catch (error) {
+      if (error instanceof GitError) throw error
+      if (!isNotFound(error)) throw new GitError('FS_COPY_FAILED')
+    }
+    try {
+      await cp(fromAbs, toAbs, { recursive: true, errorOnExist: true, force: false })
+    } catch (error) {
+      if (error instanceof GitError) throw error
+      throw new GitError('FS_COPY_FAILED', error instanceof Error ? error.message : undefined)
+    }
+    return { path: toPosix(toRel) }
   }
 
   async write(root: string, filePath: string, content: string): Promise<FsWriteResult> {

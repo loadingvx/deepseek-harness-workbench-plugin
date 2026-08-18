@@ -114,6 +114,18 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     messageZh: '无法删除这个文件。',
     hintZh: '请确认文件没有被占用，或没有权限限制，然后重试。',
   },
+  FS_MKDIR_FAILED: {
+    messageZh: '无法创建这个文件夹。',
+    hintZh: '请确认上层目录可以写入、磁盘还有空间，然后重试。',
+  },
+  FS_COPY_FAILED: {
+    messageZh: '无法复制这个文件。',
+    hintZh: '请确认目标位置可以写入、源文件还在，然后重试。',
+  },
+  FS_REVEAL_FAILED: {
+    messageZh: '没法打开系统文件管理器。',
+    hintZh: '请确认本机访达 / 资源管理器 / 文件管理器能正常打开，然后重试。',
+  },
   LLM_UNAVAILABLE: {
     messageZh: '现在没法调用模型。',
     hintZh: '请确认会话里已经配好可用模型。这次调用不会写入当前对话。也可以先自己动手完成。',

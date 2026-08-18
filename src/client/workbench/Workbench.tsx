@@ -7,7 +7,6 @@ import {
   defaultWorkbenchChrome,
   getWorkbenchChrome,
   patchWorkbenchChrome,
-  resetWorkbenchChrome,
   shouldSplitWorkbench,
   subscribeWorkbenchChrome,
   workbenchOwnsPortal,
@@ -25,15 +24,16 @@ import { IconButton } from './IconButton.tsx'
 import { IconChat, IconEditor, IconFiles, IconGit, IconLayout, IconUsage } from './icons.tsx'
 import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
-import { SideDock, type SideTab } from './SideDock.tsx'
+import { SideDock } from './SideDock.tsx'
 import { termIdFromTabId } from '../../shared/new-file-path.ts'
 import { createTerminalTab, nextTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type WorkbenchInjected } from './types.ts'
 import { previewKindOfPath } from '../../shared/preview-kind.ts'
 import { isTermNewTabHotkey } from '../../shared/term-assist.ts'
 import { StatusBar } from './StatusBar.tsx'
 import { UsageNavPortal } from './UsagePanel.tsx'
-import { isNavHostReady, readUsageDock, subscribeNavHost, subscribeUsageDock, usageTabVisible } from './usage-dock.ts'
+import { defaultUsageDock, isNavHostReady, readUsageDock, subscribeNavHost, subscribeUsageDock, usageTabVisible } from './usage-dock.ts'
 import { STATUS_BAR_H } from './status-bar.ts'
+import { DEFAULT_TERM_AI_OPEN, TERM_AI_OPEN_KEY, readBoolFlag, writeBoolFlag } from './ui-flags.ts'
 import { usePluginUpdate, visibleUpdate } from './UpdateBanner.tsx'
 import { updateTermSeed } from '../../shared/version.ts'
 import { useWorkspace } from './useWorkspace.ts'
@@ -156,11 +156,10 @@ function WorkbenchToggle({ t }: Pick<WorkbenchProps, 't'>) {
 function WorkbenchInner(props: WorkbenchProps) {
   const { client, t, useSessions, useWorkspaces, sessionId } = props
   const chrome = useSyncExternalStore(subscribeWorkbenchChrome, getWorkbenchChrome, defaultWorkbenchChrome)
-  const { enabled, chatOpen, editorOpen, sideOpen } = chrome
-  const usageDock = useSyncExternalStore(subscribeUsageDock, readUsageDock, () => 'side' as const)
+  const { enabled, chatOpen, editorOpen, sideOpen, sideTab } = chrome
+  const usageDock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
   const navReady = useSyncExternalStore(subscribeNavHost, isNavHostReady, () => false)
   const showUsageTab = usageTabVisible(usageDock, navReady)
-  const [sideTab, setSideTab] = useState<SideTab>('files')
   const [host, setHost] = useState<HTMLElement | null>(null)
   const [tabs, setTabs] = useState<FileTab[]>(() => [createTerminalTab()])
   const [activeId, setActiveId] = useState<string | null>(TERMINAL_TAB_ID)
@@ -176,7 +175,9 @@ function WorkbenchInner(props: WorkbenchProps) {
   tabsRef.current = tabs
 
   const [updateHidden, setUpdateHidden] = useState(false)
-  const [aiTermIds, setAiTermIds] = useState<string[]>([])
+  const [aiTermIds, setAiTermIds] = useState<string[]>(() => (
+    readBoolFlag(TERM_AI_OPEN_KEY, DEFAULT_TERM_AI_OPEN) ? [TERMINAL_TAB_ID] : []
+  ))
   const [editorMode, setEditorMode] = useState<EditorModeId>(() => loadEditorMode())
   const changeEditorMode = useCallback((mode: EditorModeId): void => {
     saveEditorMode(mode)
@@ -197,19 +198,9 @@ function WorkbenchInner(props: WorkbenchProps) {
   const pending = (props.useSession?.(state => state.pending)?.length ?? 0) as number
   const split = shouldSplitWorkbench(enabled)
 
-  useLayoutEffect(() => {
-    resetWorkbenchChrome()
-  }, [sessionId])
-
   useEffect(() => {
     if (running || pending > 0) patchWorkbenchChrome({ chatOpen: true })
   }, [running, pending])
-
-  useEffect(() => {
-    if (updateInfo === null) return
-    patchWorkbenchChrome({ editorOpen: true, sideOpen: true })
-    setActiveId(TERMINAL_TAB_ID)
-  }, [updateInfo])
 
   useLayoutEffect(() => {
     ensureIdeStyles()
@@ -466,6 +457,9 @@ function WorkbenchInner(props: WorkbenchProps) {
     const tab = nextTerminalTab(tabsRef.current)
     setTabs(current => [...current, tab])
     setActiveId(tab.id)
+    if (readBoolFlag(TERM_AI_OPEN_KEY, DEFAULT_TERM_AI_OPEN)) {
+      setAiTermIds(current => current.includes(tab.id) ? current : [...current, tab.id])
+    }
   }, [])
 
   useEffect(() => {
@@ -496,7 +490,9 @@ function WorkbenchInner(props: WorkbenchProps) {
     const closing = new Set(closable)
     // Drop the AI-open marks for closed tabs outside the updater: React may
     // run updater functions more than once, and side effects belong here.
-    setAiTermIds(ids => ids.filter(id => !closing.has(id)))
+    const remainingAi = aiTermIds.filter(id => !closing.has(id))
+    writeBoolFlag(TERM_AI_OPEN_KEY, remainingAi.length > 0)
+    setAiTermIds(remainingAi)
     setTabs((current) => {
       for (const tab of current) {
         if (tab.kind === 'file' && closing.has(tab.id)) {
@@ -556,12 +552,14 @@ function WorkbenchInner(props: WorkbenchProps) {
           onNewTerminal={openNewTerminal}
           aiTermIds={aiTermIds}
           onAiModeChange={(tabId, open) => {
-            setAiTermIds((current) => {
-              const has = current.includes(tabId)
-              if (open && !has) return [...current, tabId]
-              if (!open && has) return current.filter(id => id !== tabId)
-              return current
-            })
+            const has = aiTermIds.includes(tabId)
+            const next = open && !has
+              ? [...aiTermIds, tabId]
+              : !open && has
+                ? aiTermIds.filter(id => id !== tabId)
+                : aiTermIds
+            writeBoolFlag(TERM_AI_OPEN_KEY, next.length > 0)
+            setAiTermIds(next)
           }}
           onCreateFile={async (path) => {
             if (workspaceId === undefined) return { ok: false, code: 'NO_WORKSPACE', messageZh: t('editor.addFileNoWorkspace'), hintZh: '' }
@@ -604,7 +602,7 @@ function WorkbenchInner(props: WorkbenchProps) {
           activePath={tabs.find(tab => tab.id === activeId)?.path}
           selected={selectedDiff}
           tab={sideTab}
-          onTab={setSideTab}
+          onTab={(tab) => { patchWorkbenchChrome({ sideTab: tab }) }}
           onOpenFile={(path) => { void openFile(path) }}
           onOpenDiff={openDiff}
           onOpenCommitDiff={openCommitDiff}
@@ -625,14 +623,14 @@ function WorkbenchInner(props: WorkbenchProps) {
         />
       ) : (
         <div className={railCss.rail} data-git-ide-panel="rail-side">
-          <IconButton label={t('ide.files')} onClick={() => { patchWorkbenchChrome({ sideOpen: true }); setSideTab('files') }}>
+          <IconButton label={t('ide.files')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'files' }) }}>
             <IconFiles />
           </IconButton>
-          <IconButton label={t('ide.git')} onClick={() => { patchWorkbenchChrome({ sideOpen: true }); setSideTab('git') }}>
+          <IconButton label={t('ide.git')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'git' }) }}>
             <IconGit />
           </IconButton>
           {showUsageTab ? (
-            <IconButton label={t('ide.usage')} onClick={() => { patchWorkbenchChrome({ sideOpen: true }); setSideTab('usage') }}>
+            <IconButton label={t('ide.usage')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'usage' }) }}>
               <IconUsage />
             </IconButton>
           ) : null}
