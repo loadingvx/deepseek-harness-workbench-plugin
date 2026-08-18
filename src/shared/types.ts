@@ -5,6 +5,7 @@ export type GitErrorCode =
   | 'NOT_A_REPO'
   | 'NO_WORKSPACE'
   | 'UNKNOWN_WORKSPACE'
+  | 'UNKNOWN_REPO'
   | 'EMPTY_MESSAGE'
   | 'NOTHING_STAGED'
   | 'INDEX_LOCKED'
@@ -133,6 +134,25 @@ export interface GitBranchInfo {
   name: string
   current: boolean
 }
+
+export type NearbyRepoKind = 'current' | 'parent' | 'child' | 'link' | 'submodule'
+
+/** One nearby Git repo the workbench may manage. `id` is `.` / `..` / a child or submodule path. */
+export interface NearbyGitRepo {
+  id: string
+  kind: NearbyRepoKind
+  name: string
+  isRepo: boolean
+}
+
+export interface NearbyGitSnapshot {
+  workspaceName: string
+  current: NearbyGitRepo
+  parent: NearbyGitRepo | null
+  children: NearbyGitRepo[]
+}
+
+export type ParentGitDecision = 'include' | 'skip'
 
 export interface GitCommitResult {
   hash: string

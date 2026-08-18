@@ -42,13 +42,14 @@ async function writeClipboard(text: string): Promise<boolean> {
 }
 
 export function GitGraph({
-  entries, emptyLabel, compact, client, workspaceId, onOpenCommitDiff, t,
+  entries, emptyLabel, compact, client, workspaceId, repo, onOpenCommitDiff, t,
 }: {
   entries: GitLogEntry[]
   emptyLabel: string
   compact?: boolean
   client: GitClient
   workspaceId?: string
+  repo?: string
   onOpenCommitDiff: (hash: string, path: string) => void
   t: Translate
 }) {
@@ -63,6 +64,14 @@ export function GitGraph({
   useEffect(() => () => {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current)
   }, [])
+
+  useEffect(() => {
+    setFiles({})
+    setFilesLoading({})
+    setFilesError({})
+    setExpanded({})
+    loadingRef.current = {}
+  }, [repo, workspaceId])
 
   const copyHash = (hash: string): void => {
     void writeClipboard(hash).then((ok) => {
@@ -79,7 +88,7 @@ export function GitGraph({
     loadingRef.current[hash] = true
     setFilesLoading(current => ({ ...current, [hash]: true }))
     setFilesError(current => ({ ...current, [hash]: null }))
-    void client.commitFiles(workspaceId, hash).then((result) => {
+    void client.commitFiles(workspaceId, hash, repo).then((result) => {
       loadingRef.current[hash] = false
       setFilesLoading(current => ({ ...current, [hash]: false }))
       if (result.ok) {

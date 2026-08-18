@@ -1,11 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { fail, toFail } from '../shared/errors.ts'
+import { isCurrentRepoId } from '../shared/git-nearby.ts'
 import { parsePullMode, parsePushMode } from '../shared/git-sync-prefs.ts'
 import { redactSecrets } from '../shared/redact.ts'
 import type { GitFail, GitResult } from '../shared/types.ts'
 import { generateCommitMessage, streamCommitMessage } from './commit-message.ts'
 import { streamTermAssist } from './term-assist.ts'
+import { resolveNearbyGitPath, scanNearbyGit } from './git-nearby.ts'
 import type { GitService } from './git-service.ts'
 import { resolveWorkspacePath } from './workspace.ts'
 import { ExternalOpen } from './external-open.ts'
@@ -151,56 +153,70 @@ export function registerGitHttp(
       const id = typeof body?.workspaceId === 'string' ? body.workspaceId : workspaceId
       return resolveWorkspacePath(ctx, id)
     }
+    const repoOf = (body?: Record<string, unknown>): string | undefined => {
+      if (typeof body?.repo === 'string' && body.repo !== '') return body.repo
+      return query(url, 'repo')
+    }
+    const gitRootOf = (body?: Record<string, unknown>): Promise<string> => {
+      return resolveNearbyGitPath(rootOf(body), repoOf(body))
+    }
 
     let result: GitResult<unknown>
     try {
-      if (method === 'GET' && route === '/git/probe') {
-        result = await wrap(() => git.probe(rootOf()))
+      if (method === 'GET' && route === '/git/nearby') {
+        result = await wrap(() => scanNearbyGit(rootOf()))
+      } else if (method === 'GET' && route === '/git/probe') {
+        result = await wrap(async () => git.probe(await gitRootOf()))
       } else if (method === 'GET' && route === '/git/identity') {
-        result = await wrap(() => git.identity(rootOf()))
+        result = await wrap(async () => git.identity(await gitRootOf()))
       } else if (method === 'POST' && route === '/git/init') {
         const body = await readJson(req)
         const name = typeof body.name === 'string' ? body.name : ''
         const email = typeof body.email === 'string' ? body.email : ''
         const branch = typeof body.branch === 'string' ? body.branch : ''
-        result = await wrap(() => git.initRepo(rootOf(body), { name, email, branch }))
+        if (!isCurrentRepoId(repoOf(body))) {
+          result = fail('UNKNOWN_REPO')
+        } else {
+          result = await wrap(() => git.initRepo(rootOf(body), { name, email, branch }))
+        }
       } else if (method === 'GET' && route === '/git/status') {
-        result = await wrap(() => git.status(rootOf()))
+        result = await wrap(async () => git.status(await gitRootOf()))
       } else if (method === 'GET' && route === '/git/diff') {
         const path = query(url, 'path')
         const staged = query(url, 'staged') === '1'
-        result = await wrap(() => git.diff(rootOf(), path, staged))
+        result = await wrap(async () => git.diff(await gitRootOf(), path, staged))
       } else if (method === 'GET' && route === '/git/log') {
         const limit = Number(query(url, 'limit') ?? '80')
-        result = await wrap(() => git.log(rootOf(), Number.isFinite(limit) ? limit : 80))
+        result = await wrap(async () => git.log(await gitRootOf(), Number.isFinite(limit) ? limit : 80))
       } else if (method === 'GET' && route === '/git/branches') {
-        result = await wrap(() => git.branches(rootOf()))
+        result = await wrap(async () => git.branches(await gitRootOf()))
       } else if (method === 'POST' && route === '/git/stage') {
         const body = await readJson(req)
         result = await wrap(async () => {
-          await git.stage(rootOf(body), asStringArray(body.paths))
+          await git.stage(await gitRootOf(body), asStringArray(body.paths))
           return { done: true }
         })
       } else if (method === 'POST' && route === '/git/unstage') {
         const body = await readJson(req)
         result = await wrap(async () => {
-          await git.unstage(rootOf(body), asStringArray(body.paths))
+          await git.unstage(await gitRootOf(body), asStringArray(body.paths))
           return { done: true }
         })
       } else if (method === 'POST' && route === '/git/restore') {
         const body = await readJson(req)
         result = await wrap(async () => {
-          await git.restore(rootOf(body), asStringArray(body.paths))
+          await git.restore(await gitRootOf(body), asStringArray(body.paths))
           return { done: true }
         })
       } else if (method === 'POST' && route === '/git/commit') {
         const body = await readJson(req)
         const message = typeof body.message === 'string' ? body.message : ''
         const all = body.all === true
-        result = await wrap(() => git.commit(rootOf(body), message, all))
+        result = await wrap(async () => git.commit(await gitRootOf(body), message, all))
       } else if (method === 'POST' && route === '/git/commit-message/stream') {
         const body = await readJson(req)
-        await writeCommitMessageStream(res, (signal) => streamCommitMessage(ctx, git, rootOf(body), {
+        const gitRoot = await gitRootOf(body)
+        await writeCommitMessageStream(res, (signal) => streamCommitMessage(ctx, git, gitRoot, {
           signal,
           template: typeof body.template === 'string' ? body.template : undefined,
         }))
@@ -220,32 +236,32 @@ export function registerGitHttp(
       } else if (method === 'POST' && route === '/git/commit-message') {
         const body = await readJson(req)
         result = await wrap(async () => {
-          const message = await generateCommitMessage(ctx, git, rootOf(body), {
+          const message = await generateCommitMessage(ctx, git, await gitRootOf(body), {
             template: typeof body.template === 'string' ? body.template : undefined,
           })
           return { message }
         })
       } else if (method === 'POST' && route === '/git/push') {
         const body = await readJson(req)
-        result = await wrap(() => git.push(rootOf(body), undefined, parsePushMode(body.pushMode)))
+        result = await wrap(async () => git.push(await gitRootOf(body), undefined, parsePushMode(body.pushMode)))
       } else if (method === 'POST' && route === '/git/pull') {
         const body = await readJson(req)
-        result = await wrap(() => git.pull(rootOf(body), undefined, parsePullMode(body.pullMode)))
+        result = await wrap(async () => git.pull(await gitRootOf(body), undefined, parsePullMode(body.pullMode)))
       } else if (method === 'POST' && route === '/git/fetch') {
         const body = await readJson(req)
-        result = await wrap(() => git.fetch(rootOf(body)))
+        result = await wrap(async () => git.fetch(await gitRootOf(body)))
       } else if (method === 'POST' && route === '/git/create-branch') {
         const body = await readJson(req)
         const name = typeof body.name === 'string' ? body.name : ''
-        result = await wrap(() => git.createBranch(rootOf(body), name))
+        result = await wrap(async () => git.createBranch(await gitRootOf(body), name))
       } else if (method === 'POST' && route === '/git/merge') {
         const body = await readJson(req)
         const name = typeof body.name === 'string' ? body.name : ''
-        result = await wrap(() => git.mergeBranch(rootOf(body), name))
+        result = await wrap(async () => git.mergeBranch(await gitRootOf(body), name))
       } else if (method === 'POST' && route === '/git/switch') {
         const body = await readJson(req)
         const name = typeof body.name === 'string' ? body.name : ''
-        result = await wrap(() => git.switchBranch(rootOf(body), name))
+        result = await wrap(async () => git.switchBranch(await gitRootOf(body), name))
       } else if (method === 'GET' && route === '/git/fs/list') {
         result = await wrap(() => fs.list(rootOf(), query(url, 'path') ?? ''))
       } else if (method === 'GET' && route === '/git/fs/search') {
@@ -311,7 +327,7 @@ export function registerGitHttp(
         if (hash === undefined) {
           result = fail('BAD_REQUEST')
         } else {
-          result = await wrap(() => git.commitFiles(rootOf(), hash))
+          result = await wrap(async () => git.commitFiles(await gitRootOf(), hash))
         }
       } else if (method === 'GET' && route === '/git/commit-diff') {
         const hash = query(url, 'hash')
@@ -319,7 +335,7 @@ export function registerGitHttp(
         if (hash === undefined || path === undefined) {
           result = fail('BAD_REQUEST')
         } else {
-          result = await wrap(() => git.commitDiff(rootOf(), hash, path))
+          result = await wrap(async () => git.commitDiff(await gitRootOf(), hash, path))
         }
       } else if (method === 'POST' && route === '/git/fs/write') {
         const body = await readJson(req)

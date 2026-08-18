@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { GitClient } from '../api.ts'
 import type {
   GitBranchInfo, GitFail, GitFileChange, GitLogEntry, GitResult, GitStatusSnapshot,
 } from '../../shared/types.ts'
 import { GitGraph } from './GitGraph.tsx'
 import { GitInitPanel } from './GitInitPanel.tsx'
+import { GitScopeBar } from './GitScopeBar.tsx'
 import { IconButton } from './IconButton.tsx'
 import { isDefaultCommitTemplate, resolveCommitTemplate } from '../../shared/commit-template.ts'
 import { visibleSyncActions } from '../../shared/sync-actions.ts'
@@ -17,7 +18,10 @@ import {
   type GitSyncPrefs, type PullMode, type PushMode,
 } from '../../shared/git-sync-prefs.ts'
 import { invalidBranchName } from '../../shared/branch-name.ts'
-import { IconBranch, IconCheck, IconChevron, IconCompact, IconFetch, IconGit, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRefresh, IconRestore, IconSparkle, IconTune } from './icons.tsx'
+import { IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRefresh, IconRestore, IconSparkle, IconTune } from './icons.tsx'
+import { readNearbyGit, retainNearbyGit, setNearbyRepo, setParentGitDecision, subscribeNearbyGit } from './nearby-git.ts'
+import { parentNeedsAsk } from '../../shared/git-nearby.ts'
+import { readDocumentColorScheme } from './surface-scheme.ts'
 import type { Translate } from './types.ts'
 import { clampGraphHeight, GRAPH_DEFAULT_H, GRAPH_MIN_H, measureReservedAboveGraph } from './graph-layout.ts'
 import css from './GitSidebar.module.css'
@@ -26,8 +30,8 @@ export interface GitSidebarProps {
   client: GitClient
   workspaceId?: string
   selected?: { path: string; staged: boolean } | null
-  onOpenDiff: (path: string, staged: boolean) => void
-  onOpenCommitDiff: (hash: string, path: string) => void
+  onOpenDiff: (path: string, staged: boolean, repo?: string) => void
+  onOpenCommitDiff: (hash: string, path: string, repo?: string) => void
   t: Translate
 }
 
@@ -188,6 +192,8 @@ function FileGroup({
 /** Cursor-like source-control column: CHANGES + resizable GRAPH. */
 export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCommitDiff, t }: GitSidebarProps) {
   const rootRef = useRef<HTMLElement>(null)
+  const nearby = useSyncExternalStore(subscribeNearbyGit, readNearbyGit, readNearbyGit)
+  const repoId = nearby.selectedId
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<'commit' | 'push' | 'pull' | 'fetch' | null>(null)
   const [remoteSyncing, setRemoteSyncing] = useState(false)
@@ -239,10 +245,14 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       return null
     }
     setLoading(true)
-    const statusResult = await client.status(workspaceId)
+    const statusResult = await client.status(workspaceId, repoId)
     if (!statusResult.ok) {
       setLoading(false)
       if (statusResult.code === 'BUSY') return status
+      if (statusResult.code === 'UNKNOWN_REPO') {
+        setNearbyRepo('.')
+        return null
+      }
       if (statusResult.code === 'NOT_A_REPO') {
         setError(null)
         const empty = {
@@ -272,8 +282,8 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       return statusResult.value
     }
     const [branchResult, logResult] = await Promise.all([
-      client.branches(workspaceId),
-      client.log(workspaceId),
+      client.branches(workspaceId, repoId),
+      client.log(workspaceId, repoId),
     ])
     setLoading(false)
     setError(null)
@@ -291,7 +301,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     setRemoteSyncing(true)
     if (!silent) setPending('fetch')
     try {
-      const result = await client.fetch(workspaceId)
+      const result = await client.fetch(workspaceId, repoId)
       if (!result.ok) {
         if (result.code === 'BUSY') return
         if (silent) setRemoteHint(result)
@@ -307,16 +317,29 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     }
   }
 
+  useEffect(() => retainNearbyGit(client, workspaceId), [client, workspaceId])
+
+  useLayoutEffect(() => {
+    const host = rootRef.current
+    if (host === null) return
+    host.style.colorScheme = readDocumentColorScheme(host)
+  }, [nearby.snapshot, repoId, status])
+
   useEffect(() => {
     let live = true
+    const hidden = (): boolean => document.visibilityState === 'hidden'
     const tickStatus = (): void => {
-      if (!live || busyLock.current) return
+      if (!live || busyLock.current || hidden()) return
       void refresh()
     }
     const tickRemote = (): void => {
-      if (!live || busyLock.current) return
+      if (!live || busyLock.current || hidden()) return
       void checkRemote(true)
     }
+    setStatus(null)
+    setBranches([])
+    setLog([])
+    setError(null)
     void (async () => {
       const snap = await refresh()
       if (!live) return
@@ -336,7 +359,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       generateAbort.current?.abort()
       generateAbort.current = null
     }
-  }, [workspaceId])
+  }, [workspaceId, repoId])
 
   useLayoutEffect(() => {
     const area = messageRef.current
@@ -531,7 +554,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const commit = (): void => {
     if (workspaceId === undefined || commitDisabledReason !== null) return
     void runWrite(async () => {
-      const result = await client.commit(workspaceId, message, commitAll)
+      const result = await client.commit(workspaceId, message, commitAll, repoId)
       if (result.ok) setMessage('')
       return result
     }, 'commit')
@@ -539,12 +562,12 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
 
   const push = (): void => {
     if (workspaceId === undefined || pushDisabledReason !== null) return
-    void runWrite(() => client.push(workspaceId, syncPrefs.pushMode), 'push')
+    void runWrite(() => client.push(workspaceId, syncPrefs.pushMode, repoId), 'push')
   }
 
   const pull = (): void => {
     if (workspaceId === undefined || pullDisabledReason !== null) return
-    void runWrite(() => client.pull(workspaceId, syncPrefs.pullMode), 'pull')
+    void runWrite(() => client.pull(workspaceId, syncPrefs.pullMode, repoId), 'pull')
   }
 
   const fetchRemote = (): void => {
@@ -595,7 +618,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
         return
       }
       void runPromptWrite(
-        () => client.createBranch(workspaceId, promptValue),
+        () => client.createBranch(workspaceId, promptValue, repoId),
         ['BRANCH_EXISTS', 'BRANCH_INVALID'],
       )
       return
@@ -606,7 +629,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
         return
       }
       void runPromptWrite(
-        () => client.mergeBranch(workspaceId, promptValue),
+        () => client.mergeBranch(workspaceId, promptValue, repoId),
         ['BRANCH_MISSING', 'BRANCH_INVALID'],
       )
     }
@@ -621,6 +644,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     setError(null)
     void client.generateCommitMessage(workspaceId, template, {
       signal: controller.signal,
+      repo: repoId,
       onDelta: (text) => {
         if (controller.signal.aborted) return
         setMessage(text)
@@ -660,7 +684,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     if (restoreAsk === null || workspaceId === undefined) return
     const paths = restoreAsk.paths
     setRestoreAsk(null)
-    void runWrite(() => client.restore(workspaceId, paths))
+    void runWrite(() => client.restore(workspaceId, paths, repoId))
   }
 
   const saveTemplate = (): void => {
@@ -668,6 +692,17 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     setSyncPrefs(writeGitSyncPrefs(prefsDraft))
     setTemplateOpen(false)
   }
+
+  const openFileDiff = (path: string, staged: boolean): void => {
+    onOpenDiff(path, staged, repoId)
+  }
+  const askParent = parentNeedsAsk(nearby.snapshot, nearby.parentDecision)
+  const skippedParent = nearby.snapshot?.parent !== null && nearby.snapshot?.parent !== undefined && nearby.parentDecision === 'skip'
+    ? nearby.snapshot.parent
+    : null
+  const branchLabel = status !== null && !status.probe.isRepo
+    ? t('init.header')
+    : branchName
 
   return (
     <aside
@@ -677,32 +712,20 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       style={{ '--git-graph-h': `${graphHFit}px`, '--git-graph-reserved': `${reserved}px` } as never}
     >
       <header className={css.head} data-git-chrome="head">
-        {status !== null && !status.probe.isRepo ? (
-          <div className={css.branchWrap}>
-            <IconGit />
-            <span className={css.branchLabel}>{t('init.header')}</span>
-          </div>
-        ) : (
-          <label className={css.branchWrap}>
-            <IconBranch />
-            <select
-              className={css.branchSelect}
-              value={status?.probe.branch ?? ''}
-              disabled={writesDisabled}
-              aria-label={t('branch.switch')}
-              onChange={(event) => {
-                const name = event.target.value
-                if (workspaceId === undefined || name === status?.probe.branch) return
-                void runWrite(() => client.switchBranch(workspaceId, name))
-              }}
-            >
-              {status?.probe.detached ? <option value="">{t('panel.detached')}</option> : null}
-              {branches.map(branch => (
-                <option key={branch.name} value={branch.name}>{branch.name}</option>
-              ))}
-            </select>
-          </label>
-        )}
+        <GitScopeBar
+          nearby={nearby}
+          branches={branches}
+          branchLabel={branchLabel}
+          currentBranch={status?.probe.branch}
+          detached={status?.probe.detached === true}
+          disabled={writesDisabled}
+          onSelectRepo={setNearbyRepo}
+          onSwitchBranch={(name) => {
+            if (workspaceId === undefined || name === status?.probe.branch) return
+            void runWrite(() => client.switchBranch(workspaceId, name, repoId))
+          }}
+          t={t}
+        />
         {status !== null && status.probe.ahead > 0 ? <span className={css.chip} data-kind="ahead">{t('panel.ahead', { count: status.probe.ahead })}</span> : null}
         {status !== null && status.probe.behind > 0 ? <span className={css.chip} data-kind="behind">{t('panel.behind', { count: status.probe.behind })}</span> : null}
         {remoteSyncing ? <span className={css.chip} data-kind="checking">{t('panel.checkingRemote')}</span> : null}
@@ -714,6 +737,14 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
           {remoteSyncing ? <span className={css.spinner} aria-hidden /> : <IconRefresh />}
         </IconButton>
       </header>
+      {skippedParent !== null ? (
+        <div className={css.parentHint} data-git-chrome="parent-hint">
+          <span>{t('repo.parentHint', { name: skippedParent.name })}</span>
+          <button type="button" className={css.parentHintBtn} onClick={() => { setParentGitDecision('include') }}>
+            {t('repo.parentHintYes')}
+          </button>
+        </div>
+      ) : null}
 
       {workspaceId === undefined ? <p className={css.hint} data-git-chrome="hint" style={{ padding: '8px 10px' }}>{t('panel.noWorkspace')}</p> : null}
       {error !== null && error.code !== 'NOT_A_REPO' ? (
@@ -855,7 +886,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                     label={writesDisabled ? t('action.disabledBusy') : t('action.stageAll')}
                     disabled={writesDisabled}
                     onClick={() => {
-                      if (workspaceId) void runWrite(() => client.stage(workspaceId, stageAllPaths))
+                      if (workspaceId) void runWrite(() => client.stage(workspaceId, stageAllPaths, repoId))
                     }}
                   >
                     <IconPlus />
@@ -876,10 +907,10 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                   bulkLabel={t('action.unstageAllStaged')}
                   rowKey="s"
                   disabled={writesDisabled}
-                  onOpenDiff={onOpenDiff}
-                  onFileAction={(path) => { if (workspaceId) void runWrite(() => client.unstage(workspaceId, [path])) }}
+                  onOpenDiff={openFileDiff}
+                  onFileAction={(path) => { if (workspaceId) void runWrite(() => client.unstage(workspaceId, [path], repoId)) }}
                   onBulkAction={() => {
-                    if (workspaceId) void runWrite(() => client.unstage(workspaceId, status.staged.map(file => file.path)))
+                    if (workspaceId) void runWrite(() => client.unstage(workspaceId, status.staged.map(file => file.path), repoId))
                   }}
                 />
                 <FileGroup
@@ -894,10 +925,10 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                   bulkRestoreLabel={t('action.restoreAll')}
                   rowKey="u"
                   disabled={writesDisabled}
-                  onOpenDiff={onOpenDiff}
-                  onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path])) }}
+                  onOpenDiff={openFileDiff}
+                  onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path], repoId)) }}
                   onBulkAction={() => {
-                    if (workspaceId) void runWrite(() => client.stage(workspaceId, status.unstaged.map(file => file.path)))
+                    if (workspaceId) void runWrite(() => client.stage(workspaceId, status.unstaged.map(file => file.path), repoId))
                   }}
                   onRestore={(path) => { setRestoreAsk({ untracked: false, paths: [path] }) }}
                   onBulkRestore={() => {
@@ -916,10 +947,10 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                   bulkRestoreLabel={t('action.restoreAllUntracked')}
                   rowKey="n"
                   disabled={writesDisabled}
-                  onOpenDiff={onOpenDiff}
-                  onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path])) }}
+                  onOpenDiff={openFileDiff}
+                  onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path], repoId)) }}
                   onBulkAction={() => {
-                    if (workspaceId) void runWrite(() => client.stage(workspaceId, status.untracked.map(file => file.path)))
+                    if (workspaceId) void runWrite(() => client.stage(workspaceId, status.untracked.map(file => file.path), repoId))
                   }}
                   onRestore={(path) => { setRestoreAsk({ untracked: true, paths: [path] }) }}
                   onBulkRestore={() => {
@@ -1001,11 +1032,40 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
             </div>
             {graphOpen ? (
               <div className={css.paneBody}>
-                <GitGraph entries={log} emptyLabel={t('graph.empty')} compact={graphCompact} client={client} workspaceId={workspaceId} onOpenCommitDiff={onOpenCommitDiff} t={t} />
+                <GitGraph entries={log} emptyLabel={t('graph.empty')} compact={graphCompact} client={client} workspaceId={workspaceId} repo={repoId} onOpenCommitDiff={(hash, path) => { onOpenCommitDiff(hash, path, repoId) }} t={t} />
               </div>
             ) : null}
           </section>
         </>
+      ) : null}
+
+      {askParent && nearby.snapshot?.parent !== null && nearby.snapshot?.parent !== undefined ? (
+        <div
+          className={css.dialogMask}
+          onClick={() => { setParentGitDecision('skip') }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setParentGitDecision('skip')
+          }}
+        >
+          <div
+            className={css.dialog}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="git-parent-ask-title"
+            onClick={(event) => { event.stopPropagation() }}
+          >
+            <h2 id="git-parent-ask-title">{t('repo.parentAskTitle')}</h2>
+            <p>{t('repo.parentAskBody', { name: nearby.snapshot.parent.name })}</p>
+            <div className={css.dialogRow}>
+              <button type="button" className={css.dialogCancel} onClick={() => { setParentGitDecision('skip') }}>
+                {t('repo.parentAskNo')}
+              </button>
+              <button type="button" className={css.dialogOk} onClick={() => { setParentGitDecision('include') }}>
+                {t('repo.parentAskYes')}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {restoreAsk !== null ? (

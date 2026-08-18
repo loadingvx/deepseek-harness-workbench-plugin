@@ -6,6 +6,7 @@ import { formatStatusBalance } from '../../shared/usage-format.ts'
 import { PLUGIN_ISSUES_URL, PLUGIN_PAGE_URL, PLUGIN_REPO_URL } from '../../shared/version.ts'
 import { IconChevron, IconFeedback, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
 import { EDITOR_MODES, type EditorModeId } from './editor-mode.ts'
+import { readNearbyGit, retainNearbyGit, subscribeNearbyGit } from './nearby-git.ts'
 import { fileName, shortPath, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
 import { terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import { readUsageLive, retainUsageLive, subscribeUsageLive } from './usage-live.ts'
@@ -49,8 +50,11 @@ export function StatusBar({
   const [modeMenuOpen, setModeMenuOpen] = useState(false)
   const [updateNote, setUpdateNote] = useState<string | null>(null)
   const usage = useSyncExternalStore(subscribeUsageLive, readUsageLive, () => null)
+  const nearby = useSyncExternalStore(subscribeNearbyGit, readNearbyGit, readNearbyGit)
+  const repoId = nearby.selectedId
 
   useEffect(() => retainUsageLive(client, sessionId), [client, sessionId])
+  useEffect(() => retainNearbyGit(client, workspaceId), [client, workspaceId])
 
   useEffect(() => {
     if (!modeMenuOpen) return
@@ -69,8 +73,10 @@ export function StatusBar({
     }
     let live = true
     let hasRemote = false
+    const hidden = (): boolean => document.visibilityState === 'hidden'
     const load = (): void => {
-      void client.status(workspaceId).then((result) => {
+      if (hidden()) return
+      void client.status(workspaceId, repoId).then((result) => {
         if (!live) return
         if (!result.ok && result.code === 'BUSY') return
         if (result.ok) {
@@ -82,13 +88,13 @@ export function StatusBar({
       })
     }
     const fetchRemote = (): void => {
-      if (!hasRemote) return
-      void client.fetch(workspaceId).then((result) => {
+      if (!hasRemote || hidden()) return
+      void client.fetch(workspaceId, repoId).then((result) => {
         if (!live || !result.ok) return
         load()
       })
     }
-    void client.status(workspaceId).then((result) => {
+    void client.status(workspaceId, repoId).then((result) => {
       if (!live) return
       if (!result.ok) {
         if (result.code !== 'BUSY') setStatus(null)
@@ -110,7 +116,7 @@ export function StatusBar({
       window.clearInterval(fetchTimer)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [client, workspaceId])
+  }, [client, workspaceId, repoId])
 
   const probe = status?.probe
   const dirty = (status?.staged.length ?? 0) + (status?.unstaged.length ?? 0) + (status?.untracked.length ?? 0)

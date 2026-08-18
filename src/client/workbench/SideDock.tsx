@@ -33,8 +33,8 @@ export function SideDock({
   tab: SideTab
   onTab: (tab: SideTab) => void
   onOpenFile: (path: string) => void
-  onOpenDiff: (path: string, staged: boolean) => void
-  onOpenCommitDiff: (hash: string, path: string) => void
+  onOpenDiff: (path: string, staged: boolean, repo?: string) => void
+  onOpenCommitDiff: (hash: string, path: string, repo?: string) => void
   onRenamed: (from: string, to: string) => void
   onDeleted: (path: string) => void
   onCollapse: () => void

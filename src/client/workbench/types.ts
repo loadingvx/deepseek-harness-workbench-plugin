@@ -29,6 +29,8 @@ export interface FileTab {
   staged?: boolean
   /** Commit hash for commitDiff tabs. */
   hash?: string
+  /** Nearby git repo id for diff / commitDiff tabs. */
+  repo?: string
   /** 1 = 主终端；2+ = 额外终端。展示文案用 terminalTabLabel，不要写死中文。 */
   termIndex?: number
   /** Open file matches .gitignore and is not tracked. */

@@ -8,6 +8,7 @@
   height: 100%;
   overflow: hidden;
   background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
 }
 
 .head {
@@ -20,6 +21,174 @@
   padding: 4px 8px;
   overflow: hidden;
   border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.scopeWrap {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  min-width: 0;
+  height: 26px;
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-button-ghost-active-fill);
+  color: var(--dsw-alias-label-primary);
+}
+
+.scopeWrap:focus-within {
+  outline: 2px solid var(--dsw-alias-border-l1);
+}
+
+.scopeBtn {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px 0 6px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scopeBtn[data-kind='branch'] {
+  flex: 1.15 1 0;
+  box-shadow: inset 1px 0 0 var(--dsw-alias-border-l2);
+}
+
+.scopeBtn:hover:not(:disabled),
+.scopeBtn[data-open] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.scopeBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.scopeLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.scopeBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.scopeMenu {
+  position: fixed;
+  z-index: 30;
+  max-height: min(280px, 50vh);
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: var(--dsw-shadow-lv2);
+}
+
+.scopeItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.scopeItem:hover,
+.scopeItem[data-active] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.scopeCheckSlot {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.scopeItemMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.scopeItemName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scopeItemKind {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.scopeEmpty {
+  padding: 8px 10px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.parentHint {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.parentHint span {
+  flex: 1;
+  min-width: 0;
+}
+
+.parentHintBtn {
+  flex: none;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.parentHintBtn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .branchWrap {
@@ -247,6 +416,7 @@
   min-height: 0;
   overflow: auto;
   padding: 16px 14px 20px;
+  color-scheme: inherit;
 }
 
 .setup .field {
@@ -708,7 +878,9 @@
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
   background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
   box-shadow: var(--dsw-shadow-lv2);
+  color-scheme: inherit;
 }
 
 .dialogWide {
@@ -858,10 +1030,24 @@
   padding: 0 8px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
-  background: transparent;
+  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-base));
   color: var(--dsw-alias-label-primary);
   font: inherit;
   font-size: 13px;
+  color-scheme: inherit;
+}
+
+select.fieldInput,
+select.branchSelect {
+  appearance: auto;
+  background-color: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-base));
+  color: var(--dsw-alias-label-primary);
+}
+
+select.fieldInput option,
+select.branchSelect option {
+  background-color: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-base));
+  color: var(--dsw-alias-label-primary);
 }
 
 .fieldInput:focus {

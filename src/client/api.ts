@@ -5,9 +5,10 @@ import type {
   FsDeleteResult, FsFileSnapshot, FsListSnapshot, FsRenameResult, FsSearchSnapshot, FsWriteResult,
   GitBranchInfo, GitCommitMessage, GitCommitResult, GitCreateBranchResult, GitDiffSnapshot,
   GitFail, GitFetchResult, GitFileChange, GitIdentity, GitInitInput, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
-  GitStatusSnapshot, GitSwitchResult, PluginUpdateSnapshot, ProviderUsageSnapshot,
+  GitStatusSnapshot, GitSwitchResult, NearbyGitSnapshot, PluginUpdateSnapshot, ProviderUsageSnapshot,
 } from '../shared/types.ts'
 import type { PullMode, PushMode } from '../shared/git-sync-prefs.ts'
+import { isCurrentRepoId } from '../shared/git-nearby.ts'
 
 async function request<T>(path: string, init?: RequestInit): Promise<GitResult<T>> {
   try {
@@ -27,6 +28,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<GitResult<T
   } catch {
     return fail('NETWORK')
   }
+}
+
+function withRepoQuery(workspaceId: string, extra?: Record<string, string>, repo?: string): string {
+  const params = new URLSearchParams({ workspaceId, ...extra })
+  if (!isCurrentRepoId(repo)) params.set('repo', repo ?? '')
+  return params.toString()
+}
+
+function withRepoBody(workspaceId: string, extra: Record<string, unknown>, repo?: string): string {
+  return JSON.stringify({
+    workspaceId,
+    ...extra,
+    ...isCurrentRepoId(repo) ? {} : { repo },
+  })
 }
 
 async function readLlmNdjsonStream(
@@ -102,42 +117,43 @@ async function readLlmNdjsonStream(
 async function readCommitMessageStream(
   workspaceId: string,
   template?: string,
-  options?: { signal?: AbortSignal; onDelta?: (text: string) => void },
+  options?: { signal?: AbortSignal; onDelta?: (text: string) => void; repo?: string },
 ): Promise<GitResult<GitCommitMessage>> {
   return readLlmNdjsonStream(
     '/git/commit-message/stream',
-    { workspaceId, template },
+    { workspaceId, template, ...isCurrentRepoId(options?.repo) ? {} : { repo: options?.repo } },
     options,
     '模型没有返回提交说明。',
   )
 }
 
 export interface GitClient {
-  status(workspaceId: string): Promise<GitResult<GitStatusSnapshot>>
-  identity(workspaceId: string): Promise<GitResult<GitIdentity>>
+  nearby(workspaceId: string, signal?: AbortSignal): Promise<GitResult<NearbyGitSnapshot>>
+  status(workspaceId: string, repo?: string): Promise<GitResult<GitStatusSnapshot>>
+  identity(workspaceId: string, repo?: string): Promise<GitResult<GitIdentity>>
   initRepo(workspaceId: string, input: GitInitInput): Promise<GitResult<GitStatusSnapshot>>
-  diff(workspaceId: string, path?: string, staged?: boolean): Promise<GitResult<GitDiffSnapshot>>
-  log(workspaceId: string): Promise<GitResult<GitLogEntry[]>>
-  branches(workspaceId: string): Promise<GitResult<GitBranchInfo[]>>
-  stage(workspaceId: string, paths: string[]): Promise<GitResult<{ done: boolean }>>
-  unstage(workspaceId: string, paths: string[]): Promise<GitResult<{ done: boolean }>>
-  restore(workspaceId: string, paths: string[]): Promise<GitResult<{ done: boolean }>>
-  commit(workspaceId: string, message: string, all?: boolean): Promise<GitResult<GitCommitResult>>
+  diff(workspaceId: string, path?: string, staged?: boolean, repo?: string): Promise<GitResult<GitDiffSnapshot>>
+  log(workspaceId: string, repo?: string): Promise<GitResult<GitLogEntry[]>>
+  branches(workspaceId: string, repo?: string): Promise<GitResult<GitBranchInfo[]>>
+  stage(workspaceId: string, paths: string[], repo?: string): Promise<GitResult<{ done: boolean }>>
+  unstage(workspaceId: string, paths: string[], repo?: string): Promise<GitResult<{ done: boolean }>>
+  restore(workspaceId: string, paths: string[], repo?: string): Promise<GitResult<{ done: boolean }>>
+  commit(workspaceId: string, message: string, all?: boolean, repo?: string): Promise<GitResult<GitCommitResult>>
   generateCommitMessage(
     workspaceId: string,
     template?: string,
-    options?: { signal?: AbortSignal; onDelta?: (text: string) => void },
+    options?: { signal?: AbortSignal; onDelta?: (text: string) => void; repo?: string },
   ): Promise<GitResult<GitCommitMessage>>
-  push(workspaceId: string, pushMode?: PushMode): Promise<GitResult<GitPushResult>>
-  pull(workspaceId: string, pullMode?: PullMode): Promise<GitResult<GitPullResult>>
-  fetch(workspaceId: string): Promise<GitResult<GitFetchResult>>
-  createBranch(workspaceId: string, name: string): Promise<GitResult<GitCreateBranchResult>>
-  mergeBranch(workspaceId: string, name: string): Promise<GitResult<GitMergeResult>>
-  switchBranch(workspaceId: string, name: string): Promise<GitResult<GitSwitchResult>>
+  push(workspaceId: string, pushMode?: PushMode, repo?: string): Promise<GitResult<GitPushResult>>
+  pull(workspaceId: string, pullMode?: PullMode, repo?: string): Promise<GitResult<GitPullResult>>
+  fetch(workspaceId: string, repo?: string): Promise<GitResult<GitFetchResult>>
+  createBranch(workspaceId: string, name: string, repo?: string): Promise<GitResult<GitCreateBranchResult>>
+  mergeBranch(workspaceId: string, name: string, repo?: string): Promise<GitResult<GitMergeResult>>
+  switchBranch(workspaceId: string, name: string, repo?: string): Promise<GitResult<GitSwitchResult>>
   renameFile(workspaceId: string, from: string, to: string): Promise<GitResult<FsRenameResult>>
   deleteFile(workspaceId: string, path: string): Promise<GitResult<FsDeleteResult>>
-  commitFiles(workspaceId: string, hash: string): Promise<GitResult<GitFileChange[]>>
-  commitDiff(workspaceId: string, hash: string, path: string): Promise<GitResult<GitDiffSnapshot>>
+  commitFiles(workspaceId: string, hash: string, repo?: string): Promise<GitResult<GitFileChange[]>>
+  commitDiff(workspaceId: string, hash: string, path: string, repo?: string): Promise<GitResult<GitDiffSnapshot>>
   listDir(workspaceId: string, path?: string): Promise<GitResult<FsListSnapshot>>
   searchFiles(workspaceId: string, query: string, hidden?: boolean): Promise<GitResult<FsSearchSnapshot>>
   readFile(workspaceId: string, path: string): Promise<GitResult<FsFileSnapshot>>
@@ -169,49 +185,50 @@ export interface GitClient {
 
 export function createGitClient(): GitClient {
   return {
-    status: workspaceId => request(`/git/status?workspaceId=${encodeURIComponent(workspaceId)}`),
-    identity: workspaceId => request(`/git/identity?workspaceId=${encodeURIComponent(workspaceId)}`),
+    nearby: (workspaceId, signal) => request(`/git/nearby?${withRepoQuery(workspaceId)}`, { signal }),
+    status: (workspaceId, repo) => request(`/git/status?${withRepoQuery(workspaceId, undefined, repo)}`),
+    identity: (workspaceId, repo) => request(`/git/identity?${withRepoQuery(workspaceId, undefined, repo)}`),
     initRepo: (workspaceId, input) => request('/git/init', {
       method: 'POST', body: JSON.stringify({ workspaceId, ...input }),
     }),
-    diff: (workspaceId, path, staged) => {
-      const query = new URLSearchParams({ workspaceId })
-      if (path) query.set('path', path)
-      if (staged) query.set('staged', '1')
-      return request(`/git/diff?${query.toString()}`)
+    diff: (workspaceId, path, staged, repo) => {
+      const extra: Record<string, string> = {}
+      if (path) extra.path = path
+      if (staged) extra.staged = '1'
+      return request(`/git/diff?${withRepoQuery(workspaceId, extra, repo)}`)
     },
-    log: workspaceId => request(`/git/log?workspaceId=${encodeURIComponent(workspaceId)}&limit=80`),
-    branches: workspaceId => request(`/git/branches?workspaceId=${encodeURIComponent(workspaceId)}`),
-    stage: (workspaceId, paths) => request('/git/stage', {
-      method: 'POST', body: JSON.stringify({ workspaceId, paths }),
+    log: (workspaceId, repo) => request(`/git/log?${withRepoQuery(workspaceId, { limit: '80' }, repo)}`),
+    branches: (workspaceId, repo) => request(`/git/branches?${withRepoQuery(workspaceId, undefined, repo)}`),
+    stage: (workspaceId, paths, repo) => request('/git/stage', {
+      method: 'POST', body: withRepoBody(workspaceId, { paths }, repo),
     }),
-    unstage: (workspaceId, paths) => request('/git/unstage', {
-      method: 'POST', body: JSON.stringify({ workspaceId, paths }),
+    unstage: (workspaceId, paths, repo) => request('/git/unstage', {
+      method: 'POST', body: withRepoBody(workspaceId, { paths }, repo),
     }),
-    restore: (workspaceId, paths) => request('/git/restore', {
-      method: 'POST', body: JSON.stringify({ workspaceId, paths }),
+    restore: (workspaceId, paths, repo) => request('/git/restore', {
+      method: 'POST', body: withRepoBody(workspaceId, { paths }, repo),
     }),
-    commit: (workspaceId, message, all) => request('/git/commit', {
-      method: 'POST', body: JSON.stringify({ workspaceId, message, all: all === true }),
+    commit: (workspaceId, message, all, repo) => request('/git/commit', {
+      method: 'POST', body: withRepoBody(workspaceId, { message, all: all === true }, repo),
     }),
     generateCommitMessage: (workspaceId, template, options) => readCommitMessageStream(workspaceId, template, options),
-    push: (workspaceId, pushMode) => request('/git/push', {
-      method: 'POST', body: JSON.stringify({ workspaceId, pushMode }),
+    push: (workspaceId, pushMode, repo) => request('/git/push', {
+      method: 'POST', body: withRepoBody(workspaceId, { pushMode }, repo),
     }),
-    pull: (workspaceId, pullMode) => request('/git/pull', {
-      method: 'POST', body: JSON.stringify({ workspaceId, pullMode }),
+    pull: (workspaceId, pullMode, repo) => request('/git/pull', {
+      method: 'POST', body: withRepoBody(workspaceId, { pullMode }, repo),
     }),
-    fetch: workspaceId => request('/git/fetch', {
-      method: 'POST', body: JSON.stringify({ workspaceId }),
+    fetch: (workspaceId, repo) => request('/git/fetch', {
+      method: 'POST', body: withRepoBody(workspaceId, {}, repo),
     }),
-    createBranch: (workspaceId, name) => request('/git/create-branch', {
-      method: 'POST', body: JSON.stringify({ workspaceId, name }),
+    createBranch: (workspaceId, name, repo) => request('/git/create-branch', {
+      method: 'POST', body: withRepoBody(workspaceId, { name }, repo),
     }),
-    mergeBranch: (workspaceId, name) => request('/git/merge', {
-      method: 'POST', body: JSON.stringify({ workspaceId, name }),
+    mergeBranch: (workspaceId, name, repo) => request('/git/merge', {
+      method: 'POST', body: withRepoBody(workspaceId, { name }, repo),
     }),
-    switchBranch: (workspaceId, name) => request('/git/switch', {
-      method: 'POST', body: JSON.stringify({ workspaceId, name }),
+    switchBranch: (workspaceId, name, repo) => request('/git/switch', {
+      method: 'POST', body: withRepoBody(workspaceId, { name }, repo),
     }),
     renameFile: (workspaceId, from, to) => request('/git/fs/rename', {
       method: 'POST', body: JSON.stringify({ workspaceId, from, to }),
@@ -219,13 +236,11 @@ export function createGitClient(): GitClient {
     deleteFile: (workspaceId, path) => request('/git/fs/delete', {
       method: 'POST', body: JSON.stringify({ workspaceId, path }),
     }),
-    commitFiles: (workspaceId, hash) => {
-      const query = new URLSearchParams({ workspaceId, hash })
-      return request(`/git/commit-files?${query.toString()}`)
+    commitFiles: (workspaceId, hash, repo) => {
+      return request(`/git/commit-files?${withRepoQuery(workspaceId, { hash }, repo)}`)
     },
-    commitDiff: (workspaceId, hash, path) => {
-      const query = new URLSearchParams({ workspaceId, hash, path })
-      return request(`/git/commit-diff?${query.toString()}`)
+    commitDiff: (workspaceId, hash, path, repo) => {
+      return request(`/git/commit-diff?${withRepoQuery(workspaceId, { hash, path }, repo)}`)
     },
     listDir: (workspaceId, path) => {
       const query = new URLSearchParams({ workspaceId })

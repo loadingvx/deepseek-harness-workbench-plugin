@@ -109,8 +109,8 @@ export function EditorPane({
     let cancelled = false
     setDiffLoading(true)
     const load = active.kind === 'commitDiff'
-      ? client.commitDiff(workspaceId, active.hash ?? '', active.path)
-      : client.diff(workspaceId, active.path, active.staged === true)
+      ? client.commitDiff(workspaceId, active.hash ?? '', active.path, active.repo)
+      : client.diff(workspaceId, active.path, active.staged === true, active.repo)
     void load.then((result) => {
       if (cancelled) return
       setDiffLoading(false)

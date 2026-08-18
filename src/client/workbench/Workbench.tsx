@@ -377,22 +377,22 @@ function WorkbenchInner(props: WorkbenchProps) {
     }))
   }, [client, workspaceId])
 
-  const openDiff = (path: string, staged: boolean): void => {
+  const openDiff = (path: string, staged: boolean, repo?: string): void => {
     patchWorkbenchChrome({ editorOpen: true })
     const id = diffTabId(path, staged)
     setSelectedDiff({ path, staged })
     setTabs((current) => current.some(tab => tab.id === id)
       ? current
-      : [...current, { id, kind: 'diff', path, title: fileName(path), staged }])
+      : [...current, { id, kind: 'diff', path, title: fileName(path), staged, repo }])
     setActiveId(id)
   }
 
-  const openCommitDiff = (hash: string, path: string): void => {
+  const openCommitDiff = (hash: string, path: string, repo?: string): void => {
     patchWorkbenchChrome({ editorOpen: true })
     const id = commitDiffTabId(hash, path)
     setTabs((current) => current.some(tab => tab.id === id)
       ? current
-      : [...current, { id, kind: 'commitDiff', path, title: fileName(path), hash }])
+      : [...current, { id, kind: 'commitDiff', path, title: fileName(path), hash, repo }])
     setActiveId(id)
   }
 

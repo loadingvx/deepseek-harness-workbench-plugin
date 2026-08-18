@@ -18,6 +18,10 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     messageZh: '找不到这个工作区。',
     hintZh: '工作区可能已被删除。请刷新页面，或重新选择一个本地目录。',
   },
+  UNKNOWN_REPO: {
+    messageZh: '找不到这个 Git 仓库。',
+    hintZh: '只能选当前目录、已纳入的上一级，或当前目录下的仓库、软链和子模块。请从列表里重新选。',
+  },
   EMPTY_MESSAGE: {
     messageZh: '提交说明不能为空。',
     hintZh: '请用一两句话写清楚这次改了什么，然后再提交。',
