@@ -10,7 +10,7 @@ describe('IDE host split', () => {
     expect(IDE_HOST_CSS).toContain('[data-git-ide-panel=status]')
     expect(IDE_HOST_CSS).toContain('[data-git-ide][data-phase=hero]')
     expect(IDE_HOST_CSS).not.toContain('[data-git-ide-panel=update]')
-    expect(IDE_HOST_CSS).toContain('[data-decoration="chip"]>span')
+    expect(IDE_HOST_CSS).toContain('[data-decoration="chip"][data-dsh-long]>span')
     expect(IDE_HOST_CSS).toContain('justify-content:flex-end')
   })
 })

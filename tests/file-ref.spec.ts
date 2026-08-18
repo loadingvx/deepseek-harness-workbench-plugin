@@ -4,6 +4,7 @@ import {
   clipboardFileRef,
   encodeFileRef,
   fileRefBaseName,
+  fileRefChipAlignEnd,
   fileRefChipLabel,
   fileRefLabel,
   FILE_REF_SOURCE,
@@ -60,6 +61,14 @@ describe('file ref codec', () => {
 
   it('does not rename when the earlier chip has no ref', () => {
     expect(buildFileReference('file', 'src/index.ts', [{ label: 'index.ts' }])?.label).toBe('index.ts')
+  })
+})
+
+describe('fileRefChipAlignEnd', () => {
+  it('keeps about 8 characters centered and sends longer names to the end', () => {
+    expect(fileRefChipAlignEnd('a.ts')).toBe(false)
+    expect(fileRefChipAlignEnd('index.ts')).toBe(false)
+    expect(fileRefChipAlignEnd('Workbench.tsx')).toBe(true)
   })
 })
 

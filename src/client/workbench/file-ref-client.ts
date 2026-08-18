@@ -5,6 +5,7 @@
 import type { GitClient } from '../api.ts'
 import {
   buildFileReference,
+  fileRefChipAlignEnd,
   FILE_REF_KIND_TYPE,
   FILE_REF_PATH_TYPE,
   FILE_REF_SOURCE,
@@ -273,6 +274,8 @@ export function installFileRefClient(ctx: FileRefContext, client: GitClient): Fi
         return false
       }
       existingBySession.set(request.sessionId, [...existing, { ref: reference.ref, label: reference.label }])
+      const later = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn: (at: number) => void) => { fn(0) }
+      later(() => { markLongFileRefChips() })
       return true
     },
   }
@@ -308,4 +311,22 @@ export function composerSelection(seat: HTMLElement, draftLength: number): { sta
 
 export function fileRefExisting(occurrences: ReadonlyArray<{ source?: string; ref?: string; label?: string }>): FileRefOccurrence[] {
   return occurrences.filter(row => row.source === FILE_REF_SOURCE)
+}
+
+/** Mark chips whose label is longer than ~8 chars so CSS can right-align them. */
+export function markLongFileRefChips(root?: ParentNode): number {
+  if (typeof document === 'undefined') return 0
+  const scope = root ?? document
+  let changed = 0
+  for (const chip of scope.querySelectorAll('[data-decoration="chip"]')) {
+    if (!(chip instanceof HTMLElement)) continue
+    const label = chip.querySelector(':scope > span')
+    const text = label?.textContent?.trim() ?? ''
+    const long = fileRefChipAlignEnd(text)
+    if (long === chip.hasAttribute('data-dsh-long')) continue
+    if (long) chip.setAttribute('data-dsh-long', '')
+    else chip.removeAttribute('data-dsh-long')
+    changed += 1
+  }
+  return changed
 }

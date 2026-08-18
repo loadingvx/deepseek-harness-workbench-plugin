@@ -25,6 +25,13 @@ export function fileRefBaseName(relPath: string): string {
   return slash === -1 ? relPath : relPath.slice(slash + 1)
 }
 
+/** Official 4em chip still centers short names; longer labels align to the end. */
+export const FILE_REF_CHIP_CENTER_MAX = 8
+
+export function fileRefChipAlignEnd(label: string): boolean {
+  return [...label].length > FILE_REF_CHIP_CENTER_MAX
+}
+
 /** Chip label. Same basename already in the draft becomes `name · 2`. */
 export function fileRefLabel(name: string, takenLabels: Iterable<string>): string {
   const used = new Set([...takenLabels].filter(label => label !== ''))

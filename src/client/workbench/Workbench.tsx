@@ -42,6 +42,7 @@ import {
   composerSelection,
   dragCarriesFileRef,
   fileRefExisting,
+  markLongFileRefChips,
   readDragKind,
   readDragPath,
 } from './file-ref-client.ts'
@@ -228,6 +229,11 @@ function WorkbenchInner(props: WorkbenchProps) {
   useEffect(() => {
     if (running || pending > 0) patchWorkbenchChrome({ chatOpen: true })
   }, [running, pending])
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => { markLongFileRefChips() })
+    return () => cancelAnimationFrame(id)
+  }, [inputOccurrences, inputDraft])
 
   useLayoutEffect(() => {
     ensureIdeStyles()
