@@ -23,6 +23,28 @@
   border-bottom: 1px solid var(--dsw-alias-border-l2);
 }
 
+/* 头部图标按钮固定 28px、不可压缩：repo/分支名过长或出现「领先/落后」chip 时，
+   只允许 scopeWrap 弹性收缩（内部省略号截断），按钮不会被挤扁或挤出屏幕。
+   自动刷新开关置于最左侧，即使右侧内容溢出被 overflow:hidden 裁切也始终可见。 */
+.head > button {
+  flex: none;
+}
+
+/* 自动刷新开启时：科技蓝实底 + 白图标，与关闭态（透明）形成明确视觉区分。
+   用 button 前缀提升优先级，压过 IconButton 基类的 hover/active 样式。 */
+button.autoRefreshOn,
+button.autoRefreshOn[data-active],
+button.autoRefreshOn:hover:not(:disabled),
+button.autoRefreshOn[data-active]:hover:not(:disabled) {
+  background: #4c8dff;
+  color: #fff;
+}
+
+button.autoRefreshOn:hover:not(:disabled),
+button.autoRefreshOn[data-active]:hover:not(:disabled) {
+  background: #3a7ae8;
+}
+
 .scopeWrap {
   display: flex;
   flex: 1;

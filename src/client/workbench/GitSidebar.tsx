@@ -18,8 +18,9 @@ import {
   type GitSyncPrefs, type PullMode, type PushMode,
 } from '../../shared/git-sync-prefs.ts'
 import { invalidBranchName } from '../../shared/branch-name.ts'
-import { IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRefresh, IconRestore, IconSparkle, IconTune } from './icons.tsx'
+import { IconAutoRefresh, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRefresh, IconRestore, IconSparkle, IconTune } from './icons.tsx'
 import { readNearbyGit, retainNearbyGit, setNearbyRepo, setParentGitDecision, subscribeNearbyGit } from './nearby-git.ts'
+import { getGitAutoRefresh, setGitAutoRefresh, subscribeGitAutoRefresh } from './git-auto-refresh.ts'
 import { parentNeedsAsk } from '../../shared/git-nearby.ts'
 import { readDocumentColorScheme } from './surface-scheme.ts'
 import type { Translate } from './types.ts'
@@ -185,6 +186,7 @@ function FileGroup({
 export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCommitDiff, t }: GitSidebarProps) {
   const rootRef = useRef<HTMLElement>(null)
   const nearby = useSyncExternalStore(subscribeNearbyGit, readNearbyGit, readNearbyGit)
+  const autoRefresh = useSyncExternalStore(subscribeGitAutoRefresh, getGitAutoRefresh, getGitAutoRefresh)
   const repoId = nearby.selectedId
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<'commit' | 'push' | 'pull' | 'fetch' | null>(null)
@@ -327,15 +329,6 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
 
   useEffect(() => {
     let live = true
-    const hidden = (): boolean => document.visibilityState === 'hidden'
-    const tickStatus = (): void => {
-      if (!live || busyLock.current || hidden()) return
-      void refresh()
-    }
-    const tickRemote = (): void => {
-      if (!live || busyLock.current || hidden()) return
-      void checkRemote(true)
-    }
     setStatus(null)
     setBranches([])
     setLog([])
@@ -345,6 +338,17 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       if (!live) return
       if (snap?.probe.remote !== undefined) await checkRemote(true)
     })()
+    // 自动刷新开关关闭时：只保留挂载时的一次性加载，不注册任何定时轮询（手动刷新按钮仍可用）。
+    if (!autoRefresh) return () => { live = false }
+    const hidden = (): boolean => document.visibilityState === 'hidden'
+    const tickStatus = (): void => {
+      if (!live || busyLock.current || hidden()) return
+      void refresh()
+    }
+    const tickRemote = (): void => {
+      if (!live || busyLock.current || hidden()) return
+      void checkRemote(true)
+    }
     const statusTimer = window.setInterval(tickStatus, 8000)
     const remoteTimer = window.setInterval(tickRemote, 60_000)
     const onVisible = (): void => {
@@ -359,7 +363,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       generateAbort.current?.abort()
       generateAbort.current = null
     }
-  }, [workspaceId, repoId])
+  }, [workspaceId, repoId, autoRefresh])
 
   useLayoutEffect(() => {
     const area = messageRef.current
@@ -708,6 +712,14 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       style={{ '--git-graph-h': `${graphHFit}px`, '--git-graph-reserved': `${reserved}px` } as never}
     >
       <header className={css.head} data-git-chrome="head">
+        <IconButton
+          label={autoRefresh ? t('panel.autoRefreshOn') : t('panel.autoRefreshOff')}
+          active={autoRefresh}
+          className={autoRefresh ? css.autoRefreshOn : undefined}
+          onClick={() => { setGitAutoRefresh(!autoRefresh) }}
+        >
+          <IconAutoRefresh />
+        </IconButton>
         <GitScopeBar
           nearby={nearby}
           branches={branches}
