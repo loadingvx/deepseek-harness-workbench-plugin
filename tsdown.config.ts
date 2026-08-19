@@ -1,11 +1,14 @@
 import { readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { basename, dirname, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { transform } from 'lightningcss'
 import type { UserConfig } from 'tsdown'
 import { CLIENT_EXTERNALS, findUnsafeClientRequire } from './src/shared/client-bundle-guard.ts'
+
+const pkgVersion = (JSON.parse(readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8')) as { version: string }).version
+const nodeEnv = process.env.NODE_ENV ?? 'production'
 
 function resolveBrowserPkg(spec: string): string {
   const resolved = import.meta.resolve(spec)
@@ -32,64 +35,20 @@ const PACKAGE_ID = 'dsh-workbench-plugin'
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'
 
-const host: UserConfig = {
-  name: PACKAGE_ID,
-  entry: { index: 'src/index.ts' },
-  outDir: 'lib',
-  format: ['esm'],
-  platform: 'node',
-  target: 'es2024',
-  dts: false,
-  clean: true,
-  sourcemap: false,
-  fixedExtension: false,
-  external: [/^@deepseek-ai\//, /^node:/, 'node-pty'],
-  outputOptions: {
-    entryFileNames: 'index.js',
-  },
-}
-
-const client: UserConfig = {
-  name: `${PACKAGE_ID}/client`,
-  entry: { client: 'src/client/index.ts' },
-  outDir: 'lib',
-  format: 'cjs',
-  platform: 'browser',
-  // Do not inherit package.json engines.node (node22…): that makes rolldown
-  // pick fflate's Node export, which does createRequire("module") and crashes
-  // DSH ModuleLoader at plugin load.
-  target: 'es2024',
-  dts: false,
-  sourcemap: true,
-  clean: false,
-  external: [...CLIENT_EXTERNALS],
-  noExternal: (id: string) => (CLIENT_EXTERNALS.includes(id as (typeof CLIENT_EXTERNALS)[number]) ? undefined : true),
-  alias: {
+function browserShims(withCytoscape: boolean): Record<string, string> {
+  return {
     'node:process': resolvePath('src/client/shims/node-process.ts'),
     'node:path': resolvePath('src/client/shims/node-path.ts'),
     'node:url': resolvePath('src/client/shims/node-url.ts'),
     'node:module': resolvePath('src/client/shims/node-module.ts'),
     module: resolvePath('src/client/shims/node-module.ts'),
     fflate: resolveBrowserPkg('fflate/browser'),
-    cytoscape: resolveMermaidCytoscapeEsm(),
-  },
-  define: {
-    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
-    'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),
-    'import.meta.env': JSON.stringify({ MODE: process.env.NODE_ENV ?? 'production' }),
-  },
-  plugins: [{
-    name: 'dsh-forbid-node-require',
-    generateBundle(_opts: unknown, bundle: Record<string, { type: string; code?: string }>) {
-      for (const [fileName, chunk] of Object.entries(bundle)) {
-        if (chunk.type !== 'chunk' || chunk.code === undefined) continue
-        const forbidden = findUnsafeClientRequire(chunk.code)
-        if (forbidden !== undefined) {
-          throw new Error(`${fileName} 含有 ${forbidden}。DSH 网页 ModuleLoader 只能加载平台白名单模块，其余依赖必须打进 client.js`)
-        }
-      }
-    },
-  }, {
+    ...(withCytoscape ? { cytoscape: resolveMermaidCytoscapeEsm() } : {}),
+  }
+}
+
+function cssModulesPlugin(): NonNullable<UserConfig['plugins']>[number] {
+  return {
     name: 'dsh-css-modules-inline',
     resolveId(source: string, importer: string | undefined) {
       if (!source.endsWith('.css')) return null
@@ -131,12 +90,65 @@ const client: UserConfig = {
         `export default ${JSON.stringify(classMap)};`,
       ].join('\n')
     },
-  }],
+  }
+}
+
+const host: UserConfig = {
+  name: PACKAGE_ID,
+  entry: { index: 'src/index.ts' },
+  outDir: 'lib',
+  format: ['esm'],
+  platform: 'node',
+  target: 'es2024',
+  dts: false,
+  clean: true,
+  sourcemap: false,
+  fixedExtension: false,
+  external: [/^@deepseek-ai\//, /^node:/, 'node-pty'],
+  outputOptions: {
+    entryFileNames: 'index.js',
+  },
+}
+
+const client: UserConfig = {
+  name: `${PACKAGE_ID}/client`,
+  entry: { client: 'src/client/index.ts' },
+  outDir: 'lib',
+  format: 'cjs',
+  platform: 'browser',
+  // Do not inherit package.json engines.node (node22…): that makes rolldown
+  // pick fflate's Node export, which does createRequire("module") and crashes
+  // DSH ModuleLoader at plugin load.
+  target: 'es2024',
+  dts: false,
+  sourcemap: true,
+  minify: true,
+  clean: false,
+  external: [...CLIENT_EXTERNALS],
+  noExternal: (id: string) => (CLIENT_EXTERNALS.includes(id as (typeof CLIENT_EXTERNALS)[number]) ? undefined : true),
+  alias: browserShims(false),
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(nodeEnv),
+    'import.meta.env.MODE': JSON.stringify(nodeEnv),
+    'import.meta.env.WB_REV': JSON.stringify(pkgVersion),
+    'import.meta.env': JSON.stringify({ MODE: nodeEnv, WB_REV: pkgVersion }),
+  },
+  plugins: [{
+    name: 'dsh-forbid-node-require',
+    generateBundle(_opts: unknown, bundle: Record<string, { type: string; code?: string }>) {
+      for (const [fileName, chunk] of Object.entries(bundle)) {
+        if (chunk.type !== 'chunk' || chunk.code === undefined) continue
+        const forbidden = findUnsafeClientRequire(chunk.code)
+        if (forbidden !== undefined) {
+          throw new Error(`${fileName} 含有 ${forbidden}。DSH 网页 ModuleLoader 只能加载平台白名单模块，其余依赖必须打进 client.js`)
+        }
+      }
+    },
+  }, cssModulesPlugin()],
   outputOptions: {
     entryFileNames: 'client.js',
-    // The DSH web ModuleLoader wraps this bundle in a CJS factory that cannot
-    // load sibling chunks, so every dependency (mermaid lazy diagram modules
-    // included) must land in this single file.
+    // DSH ModuleLoader wraps this factory and cannot fetch sibling chunks.
+    // Heavy mermaid lives in lib/vendor/mermaid.js and is loaded at preview time.
     inlineDynamicImports: true,
     banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PACKAGE_ID)}, factory: (require) => {`,
     footer: 'return module.exports; } });',
@@ -144,4 +156,33 @@ const client: UserConfig = {
   },
 }
 
-export default [host, client]
+/**
+ * Browser ESM served at `/git/vendor/mermaid.js`. Must not use the ModuleLoader
+ * banner: the page loads it with native `import(url)` after boot.
+ */
+const mermaidVendor: UserConfig = {
+  name: `${PACKAGE_ID}/vendor-mermaid`,
+  entry: { mermaid: 'src/client/vendor/mermaid-entry.ts' },
+  outDir: 'lib/vendor',
+  format: 'esm',
+  platform: 'browser',
+  target: 'es2024',
+  dts: false,
+  sourcemap: false,
+  minify: true,
+  clean: false,
+  noExternal: () => true,
+  alias: browserShims(true),
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(nodeEnv),
+    'import.meta.env.MODE': JSON.stringify(nodeEnv),
+    'import.meta.env': JSON.stringify({ MODE: nodeEnv }),
+  },
+  plugins: [cssModulesPlugin()],
+  outputOptions: {
+    entryFileNames: 'mermaid.js',
+    inlineDynamicImports: true,
+  },
+}
+
+export default [host, client, mermaidVendor]

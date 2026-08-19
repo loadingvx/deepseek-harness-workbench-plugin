@@ -40,7 +40,11 @@ export function MarkdownPreview({
     void renderMermaidBlocks(
       root,
       { host: css.mermaidHost, error: css.mermaidError },
-      t('editor.mdMermaidFail'),
+      {
+        fail: t('editor.mdMermaidFail'),
+        loading: t('editor.mdMermaidLoading'),
+        loadFail: t('editor.mdMermaidLoadFail'),
+      },
       () => cancelled,
     )
     return () => { cancelled = true }
