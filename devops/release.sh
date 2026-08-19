@@ -16,8 +16,8 @@ usage() {
   bash devops/release.sh --dry-run    只演练，不真正发布
 
 不会把账号、密码、token 写进仓库或打到终端。
-发布前请先在本机登录官方源（WSL 可先 export BROWSER=true）：
-  mise exec -- npm login --registry=https://registry.npmjs.org
+发布前请先在本机登录官方源（Linux / macOS / WSL 都用这一条）：
+  bash devops/npm-login.sh
 EOF
 }
 
@@ -61,17 +61,24 @@ if [[ ! -f "$ROOT/package.json" ]]; then
 fi
 
 echo "正在检查官方源登录状态（${REGISTRY}）…"
-if ! USERNAME="$(mise exec -- npm whoami --registry="$REGISTRY" 2>/dev/null | tail -n 1 | tr -d '\r')"; then
-  echo "还没有登录 npm 官方源，发不了包。" >&2
-  echo "请先在本机执行（不要把账号密码写进脚本或发给别人）：" >&2
-  echo "  export BROWSER=true" >&2
-  echo "  mise exec -- npm login --registry=${REGISTRY}" >&2
+WHOAMI_OUT="$(mise exec -- npm whoami --registry="$REGISTRY" 2>&1)" || WHOAMI_ST=$?
+WHOAMI_ST="${WHOAMI_ST:-0}"
+USERNAME="$(printf '%s\n' "$WHOAMI_OUT" | grep -vE '^npm |^npm$' | tail -n 1 | tr -d '\r' || true)"
+if [[ "$WHOAMI_ST" -ne 0 ]]; then
+  if printf '%s' "$WHOAMI_OUT" | grep -qE 'ETIMEDOUT|ENOTFOUND|ECONNREFUSED|EAI_AGAIN|network request'; then
+    echo "连不上 npm 官方源，所以没法确认登录态，也发不了包。" >&2
+    echo "这不是账号没登，是本机到不了 ${REGISTRY}。" >&2
+  else
+    echo "还没有登录 npm 官方源，发不了包。" >&2
+  fi
+  echo "请先执行（不要把账号密码写进脚本或发给别人）：" >&2
+  echo "  bash ${ROOT}/devops/npm-login.sh" >&2
   echo "登录成功后再重新执行本脚本。" >&2
   exit 1
 fi
 if [[ -z "$USERNAME" || "$USERNAME" == *"error"* || "$USERNAME" == *"ENEEDAUTH"* ]]; then
   echo "读取 npm 登录态失败。请重新登录官方源后再试。" >&2
-  echo "  mise exec -- npm login --registry=${REGISTRY}" >&2
+  echo "  bash ${ROOT}/devops/npm-login.sh" >&2
   exit 1
 fi
 echo "将使用本机已登录的 npm 账号发布（账号名：${USERNAME}）。"

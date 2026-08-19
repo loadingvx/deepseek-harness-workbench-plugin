@@ -10,7 +10,8 @@ import { assertSafeWorkspacePath, WorkspaceFs } from '../src/host/workspace-fs.t
 const fs = new WorkspaceFs()
 
 async function tempRoot(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'dsh-fs-'))
+  // Canonicalize: macOS tmpdir is often a symlink (/var → /private/var).
+  return realpath(await mkdtemp(join(tmpdir(), 'dsh-fs-')))
 }
 
 describe('assertSafeWorkspacePath', () => {

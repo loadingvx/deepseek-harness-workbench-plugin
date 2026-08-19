@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, realpath, writeFile } from 'node:fs/promises'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -10,7 +10,8 @@ import { GitError } from '../src/shared/errors.ts'
 const fs = new WorkspaceFs()
 
 async function tempRoot(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'dsh-open-'))
+  // Canonicalize: macOS tmpdir is often a symlink (/var → /private/var).
+  return realpath(await mkdtemp(join(tmpdir(), 'dsh-open-')))
 }
 
 describe('whichOnPath', () => {
