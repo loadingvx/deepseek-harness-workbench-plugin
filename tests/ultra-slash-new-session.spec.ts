@@ -4,6 +4,7 @@ import {
   leadingCommandInput,
   leadingCommandName,
   newSlashMatchEnter,
+  newSlashMatchSpace,
   startNewSession,
 } from '../src/client/ultra-slash/new-session.ts'
 import type { SlashSource, SlashTriggerService } from '../src/client/ultra-slash/slash-menu.ts'
@@ -125,6 +126,37 @@ describe('newSlashMatchEnter', () => {
     const matchEnter = newSlashMatchEnter(() => undefined, zhT)
     expect(await matchEnter({}, '/steer 只看测试', new AbortController().signal)).toBeUndefined()
     expect(await matchEnter({}, '帮我写', new AbortController().signal)).toBeUndefined()
+  })
+})
+
+describe('newSlashMatchSpace', () => {
+  it('claims /new with the ghost hint so the composer shows the first-message prompt', () => {
+    const startSession = vi.fn()
+    const get = (name: string) => name === 'workspaces' ? { startSession } : undefined
+    const matchSpace = newSlashMatchSpace(get, zhT)
+    const outcome = matchSpace({}, '/new')
+    const claim = (outcome as { claim: { token: string; hint: string; submit: (args: string) => Promise<{ kind: string; text?: string }> } }).claim
+    expect(claim.token).toBe('/new ')
+    expect(claim.hint).toBe(zhT('new.hint'))
+  })
+
+  it('submits trailing text into the new session as the first message', async () => {
+    const startSession = vi.fn()
+    const get = (name: string) => name === 'workspaces' ? { startSession } : undefined
+    const matchSpace = newSlashMatchSpace(get, zhT)
+    const claim = (matchSpace({}, '/new') as { claim: { submit: (args: string) => Promise<{ kind: string; text?: string }> } }).claim
+    const result = await claim.submit('帮我写README')
+    expect(result.kind).toBe('success')
+    expect(result.text).toContain('帮我写README')
+    expect(startSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves other tokens to the command source', () => {
+    const matchSpace = newSlashMatchSpace(() => undefined, zhT)
+    expect(matchSpace({}, '/steer')).toBeUndefined()
+    expect(matchSpace({}, '/skill')).toBeUndefined()
+    expect(matchSpace({}, '/docs')).toBeUndefined()
+    expect(matchSpace({}, '/review')).toBeUndefined()
   })
 })
 
