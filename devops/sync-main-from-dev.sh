@@ -6,7 +6,8 @@
 # 特殊处理:
 #   1. lib/ 目录 dev 不跟踪（.gitignore），但 main 需要其"现场"实际内容（构建产物）。
 #      因此 dev 中不存在的文件，若现场工作区存在则直接取现场内容提交；
-#      lib/ 目录整体以现场为准（新增/修改/删除一并同步）。
+#      lib/ 目录整体以现场为准（新增/修改/删除一并同步），
+#      但 lib/client.js.map 排除（构建 map 文件不提交）。
 #   2. docs/ 目录全量镜像 dev：新增、修改、删除都以 dev 的目录为准。
 #
 # 用法:
@@ -135,9 +136,10 @@ else
   mapfile -t docs_removed < <(git ls-tree -r --name-only "$MAIN_BRANCH" -- docs)
 fi
 
-# lib 目录整体以现场为准: 新增文件（如 *.map）、删除、修改一并纳入
+# lib 目录整体以现场为准: 新增、删除、修改一并纳入
+# 排除 lib/client.js.map（构建 map 文件不提交）
 if [ -d lib ]; then
-  git add -A -f -- lib
+  git add -A -f -- lib ':(exclude)lib/client.js.map'
 fi
 
 # ---- 输出汇总 ---------------------------------------------------------------
