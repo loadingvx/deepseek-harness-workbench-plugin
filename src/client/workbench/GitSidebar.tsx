@@ -18,9 +18,13 @@ import {
   type GitSyncPrefs, type PullMode, type PushMode,
 } from '../../shared/git-sync-prefs.ts'
 import { invalidBranchName } from '../../shared/branch-name.ts'
-import { IconAutoRefresh, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRefresh, IconRestore, IconSparkle, IconTune } from './icons.tsx'
+import { IconAutoRefresh, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRestore, IconSparkle, IconTune } from './icons.tsx'
 import { readNearbyGit, retainNearbyGit, setNearbyRepo, setParentGitDecision, subscribeNearbyGit } from './nearby-git.ts'
-import { getGitAutoRefresh, setGitAutoRefresh, subscribeGitAutoRefresh } from './git-auto-refresh.ts'
+import {
+  readGitLiveStatus,
+  retainGitLive,
+  subscribeGitLive,
+} from './git-live.ts'
 import { parentNeedsAsk } from '../../shared/git-nearby.ts'
 import { readDocumentColorScheme } from './surface-scheme.ts'
 import type { Translate } from './types.ts'
@@ -186,7 +190,7 @@ function FileGroup({
 export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCommitDiff, t }: GitSidebarProps) {
   const rootRef = useRef<HTMLElement>(null)
   const nearby = useSyncExternalStore(subscribeNearbyGit, readNearbyGit, readNearbyGit)
-  const autoRefresh = useSyncExternalStore(subscribeGitAutoRefresh, getGitAutoRefresh, getGitAutoRefresh)
+  const polledStatus = useSyncExternalStore(subscribeGitLive, readGitLiveStatus, () => null)
   const repoId = nearby.selectedId
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<'commit' | 'push' | 'pull' | 'fetch' | null>(null)
@@ -297,7 +301,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   }
 
   const checkRemote = async (silent: boolean): Promise<void> => {
-    if (workspaceId === undefined || busyLock.current || remoteLock.current) return
+    if (workspaceId === undefined || busyLock.current) return
     if (!hasRemoteRef.current) return
     remoteLock.current = true
     setRemoteSyncing(true)
@@ -320,6 +324,13 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   }
 
   useEffect(() => retainNearbyGit(client, workspaceId), [client, workspaceId])
+  useEffect(() => retainGitLive(client, workspaceId, repoId), [client, workspaceId, repoId])
+
+  useEffect(() => {
+    if (busyLock.current || polledStatus === null) return
+    setStatus(polledStatus)
+    hasRemoteRef.current = polledStatus.probe.remote !== undefined
+  }, [polledStatus])
 
   useLayoutEffect(() => {
     const host = rootRef.current
@@ -334,36 +345,10 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     setLog([])
     setError(null)
     void (async () => {
-      const snap = await refresh()
-      if (!live) return
-      if (snap?.probe.remote !== undefined) await checkRemote(true)
+      await refresh()
     })()
-    // 自动刷新开关关闭时：只保留挂载时的一次性加载，不注册任何定时轮询（手动刷新按钮仍可用）。
-    if (!autoRefresh) return () => { live = false }
-    const hidden = (): boolean => document.visibilityState === 'hidden'
-    const tickStatus = (): void => {
-      if (!live || busyLock.current || hidden()) return
-      void refresh()
-    }
-    const tickRemote = (): void => {
-      if (!live || busyLock.current || hidden()) return
-      void checkRemote(true)
-    }
-    const statusTimer = window.setInterval(tickStatus, 8000)
-    const remoteTimer = window.setInterval(tickRemote, 60_000)
-    const onVisible = (): void => {
-      if (document.visibilityState === 'visible') tickRemote()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      live = false
-      window.clearInterval(statusTimer)
-      window.clearInterval(remoteTimer)
-      document.removeEventListener('visibilitychange', onVisible)
-      generateAbort.current?.abort()
-      generateAbort.current = null
-    }
-  }, [workspaceId, repoId, autoRefresh])
+    return () => { live = false }
+  }, [workspaceId, repoId])
 
   useLayoutEffect(() => {
     const area = messageRef.current
@@ -378,7 +363,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     action: () => Promise<GitResult<unknown>>,
     kind: 'commit' | 'push' | 'pull' | null = null,
   ): Promise<void> => {
-    if (workspaceId === undefined || busyLock.current || remoteLock.current) return
+    if (workspaceId === undefined || busyLock.current) return
     busyLock.current = true
     setBusy(true)
     setPending(kind)
@@ -429,18 +414,15 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const stageAllPaths = [...(status?.unstaged ?? []), ...(status?.untracked ?? [])].map(file => file.path)
   const branchName = status?.probe.detached ? t('panel.detached') : (status?.probe.branch ?? t('panel.title'))
   const commitAll = stagedCount === 0 && dirtyCount > 0
-  const writeBlockReason = remoteSyncing
-    ? t('panel.checkingRemote')
-    : busy
-      ? t('action.disabledBusy')
-      : null
+  const busyBlockReason = busy ? t('action.disabledBusy') : null
+  const remoteBlockReason = remoteSyncing ? t('panel.checkingRemote') : null
   const commitDisabledReason = generating
     ? t('commit.generating')
     : message.trim() === ''
       ? t('commit.disabledEmpty')
       : dirtyCount === 0
         ? t('commit.disabledNothing')
-        : writeBlockReason
+        : busyBlockReason
   const probe = status?.probe
   const actions = visibleSyncActions({
     dirtyCount,
@@ -454,7 +436,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const remoteLabel = probe?.upstream ?? (probe?.remote !== undefined ? `${probe.remote}/${branchName}` : branchName)
   const behindCount = probe?.behind ?? 0
   const aheadCount = probe?.ahead ?? 0
-  const pushDisabledReason = writeBlockReason
+  const pushDisabledReason = remoteBlockReason ?? busyBlockReason
     ?? (probe?.detached === true
       ? t('push.disabledDetached')
       : probe?.remote === undefined
@@ -466,7 +448,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
             : !probe?.hasHead
               ? t('push.disabledNothing')
               : null)
-  const pullDisabledReason = writeBlockReason
+  const pullDisabledReason = remoteBlockReason ?? busyBlockReason
     ?? (probe?.detached === true
       ? t('pull.disabledDetached')
       : probe?.remote === undefined
@@ -480,16 +462,15 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
               : behindCount === 0
                 ? t('pull.disabledNothing')
                 : null)
-  const fetchDisabledReason = writeBlockReason
+  const fetchDisabledReason = remoteBlockReason ?? busyBlockReason
     ?? (probe?.remote === undefined
       ? t('fetch.disabledNoRemote')
       : null)
-  const refreshDisabledReason = writeBlockReason
-    ?? (loading || busy
-      ? t('action.disabledBusy')
-      : null)
+  const refreshDisabledReason = loading || busy
+    ? t('action.disabledBusy')
+    : null
   const mergeTargets = branches.filter(branch => !branch.current && branch.name !== probe?.branch)
-  const mergeDisabledReason = writeBlockReason
+  const mergeDisabledReason = busyBlockReason
     ?? (probe?.detached === true
       ? t('merge.disabledDetached')
       : dirtyCount > 0
@@ -497,9 +478,10 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
         : mergeTargets.length === 0
           ? t('merge.disabledNone')
           : null)
-  const writesDisabled = writeBlockReason !== null || status === null || !status.probe.gitAvailable || !status.probe.isRepo
+  const writesDisabled = busyBlockReason !== null || status === null || !status.probe.gitAvailable || !status.probe.isRepo
   const generateDisabled = writesDisabled || dirtyCount === 0
   const graphFills = changesOpen === false && graphOpen
+  const showSyncPulse = busy || remoteSyncing || pending !== null || loading
 
   useLayoutEffect(() => {
     const host = rootRef.current
@@ -572,34 +554,36 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     void checkRemote(false)
   }
 
-  const refreshAll = (): void => {
+  const refreshLocal = (): void => {
     if (refreshDisabledReason !== null) return
-    void (async () => {
-      const snap = await refresh()
-      if (snap?.probe.remote !== undefined) await checkRemote(true)
-    })()
+    void refresh()
   }
 
   const runPromptWrite = async (
     action: () => Promise<GitResult<unknown>>,
     keepCodes: readonly string[],
   ): Promise<void> => {
-    if (busy || busyLock.current || remoteLock.current) return
+    if (busy || busyLock.current) return
+    busyLock.current = true
     setBusy(true)
-    const result = await action()
-    setBusy(false)
-    if (!result.ok) {
-      if (keepCodes.includes(result.code)) {
-        setPromptError(result.messageZh)
+    try {
+      const result = await action()
+      if (!result.ok) {
+        if (keepCodes.includes(result.code)) {
+          setPromptError(result.messageZh)
+          return
+        }
+        closePrompt()
+        setError(result)
         return
       }
+      setError(null)
       closePrompt()
-      setError(result)
-      return
+      await refresh()
+    } finally {
+      busyLock.current = false
+      setBusy(false)
     }
-    setError(null)
-    closePrompt()
-    await refresh()
   }
 
   const submitPrompt = (): void => {
@@ -712,14 +696,6 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       style={{ '--git-graph-h': `${graphHFit}px`, '--git-graph-reserved': `${reserved}px` } as never}
     >
       <header className={css.head} data-git-chrome="head">
-        <IconButton
-          label={autoRefresh ? t('panel.autoRefreshOn') : t('panel.autoRefreshOff')}
-          active={autoRefresh}
-          className={autoRefresh ? css.autoRefreshOn : undefined}
-          onClick={() => { setGitAutoRefresh(!autoRefresh) }}
-        >
-          <IconAutoRefresh />
-        </IconButton>
         <GitScopeBar
           nearby={nearby}
           branches={branches}
@@ -739,9 +715,10 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
         <IconButton
           label={refreshDisabledReason ?? t('panel.refresh')}
           disabled={refreshDisabledReason !== null}
-          onClick={refreshAll}
+          active={loading}
+          onClick={refreshLocal}
         >
-          <IconRefresh />
+          <IconAutoRefresh />
         </IconButton>
       </header>
       {skippedParent !== null ? (
@@ -872,19 +849,19 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
           </div>
           <div
             className={css.remotePulse}
-            data-active={remoteSyncing || undefined}
+            data-active={showSyncPulse || undefined}
             data-git-chrome="remote-pulse"
-            role={remoteSyncing ? 'progressbar' : undefined}
-            aria-hidden={remoteSyncing ? undefined : true}
-            aria-label={remoteSyncing ? t('panel.checkingRemote') : undefined}
+            role={showSyncPulse ? 'progressbar' : undefined}
+            aria-hidden={showSyncPulse ? undefined : true}
+            aria-label={showSyncPulse ? t('panel.syncing') : undefined}
           />
 
           <section
             className={css.pane}
             data-kind="changes"
             data-open={changesOpen || undefined}
-            data-syncing={remoteSyncing || undefined}
-            aria-busy={remoteSyncing || undefined}
+            data-syncing={showSyncPulse || undefined}
+            aria-busy={showSyncPulse || undefined}
           >
             <div className={css.sectionHead} data-git-chrome="changes-head">
               <button type="button" className={css.sectionToggle} aria-expanded={changesOpen} onClick={toggleChanges}>
@@ -904,7 +881,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                 {stageAllPaths.length > 0 ? (
                   <IconButton
                     dense
-                    label={writeBlockReason ?? t('action.stageAll')}
+                    label={busyBlockReason ?? t('action.stageAll')}
                     disabled={writesDisabled}
                     onClick={() => {
                       if (workspaceId) void runWrite(() => client.stage(workspaceId, stageAllPaths, repoId))
@@ -928,7 +905,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                   bulkLabel={t('action.unstageAllStaged')}
                   rowKey="s"
                   disabled={writesDisabled}
-                  disabledReason={writeBlockReason ?? undefined}
+                  disabledReason={busyBlockReason ?? undefined}
                   onOpenDiff={openFileDiff}
                   onFileAction={(path) => { if (workspaceId) void runWrite(() => client.unstage(workspaceId, [path], repoId)) }}
                   onBulkAction={() => {
@@ -947,7 +924,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                   bulkRestoreLabel={t('action.restoreAll')}
                   rowKey="u"
                   disabled={writesDisabled}
-                  disabledReason={writeBlockReason ?? undefined}
+                  disabledReason={busyBlockReason ?? undefined}
                   onOpenDiff={openFileDiff}
                   onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path], repoId)) }}
                   onBulkAction={() => {
@@ -970,7 +947,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                   bulkRestoreLabel={t('action.restoreAllUntracked')}
                   rowKey="n"
                   disabled={writesDisabled}
-                  disabledReason={writeBlockReason ?? undefined}
+                  disabledReason={busyBlockReason ?? undefined}
                   onOpenDiff={openFileDiff}
                   onFileAction={(path) => { if (workspaceId) void runWrite(() => client.stage(workspaceId, [path], repoId)) }}
                   onBulkAction={() => {
@@ -1038,7 +1015,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                 </IconButton>
                 <IconButton
                   dense
-                  label={writeBlockReason ?? t('action.newBranch')}
+                  label={busyBlockReason ?? t('action.newBranch')}
                   disabled={writesDisabled}
                   onClick={() => { openPrompt('branch') }}
                 >

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { GitClient } from '../api.ts'
-import type { GitStatusSnapshot, PluginUpdateSnapshot } from '../../shared/types.ts'
+import type { PluginUpdateSnapshot } from '../../shared/types.ts'
 import { redactSecrets } from '../../shared/redact.ts'
 import { formatStatusBalance } from '../../shared/usage-format.ts'
 import { PLUGIN_ISSUES_URL, PLUGIN_PAGE_URL, PLUGIN_REPO_URL } from '../../shared/version.ts'
@@ -17,7 +17,7 @@ import {
 import { EDITOR_MODES, type EditorModeId } from './editor-mode.ts'
 import { IconChevron, IconFeedback, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
 import { readNearbyGit, retainNearbyGit, subscribeNearbyGit } from './nearby-git.ts'
-import { getGitAutoRefresh, subscribeGitAutoRefresh } from './git-auto-refresh.ts'
+import { readGitLiveStatus, retainGitLive, subscribeGitLive } from './git-live.ts'
 import { fileName, showEditorStatusChrome, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
 import { browserTabLabel, terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import { readUsageLive, retainUsageLive, subscribeUsageLive } from './usage-live.ts'
@@ -67,18 +67,18 @@ export function StatusBar({
   onPrepareUpdate?: () => void
   t: Translate
 }) {
-  const [status, setStatus] = useState<GitStatusSnapshot | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [modeMenuOpen, setModeMenuOpen] = useState(false)
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false)
   const [updateNote, setUpdateNote] = useState<string | null>(null)
   const usage = useSyncExternalStore(subscribeUsageLive, readUsageLive, () => null)
   const nearby = useSyncExternalStore(subscribeNearbyGit, readNearbyGit, readNearbyGit)
-  const autoRefresh = useSyncExternalStore(subscribeGitAutoRefresh, getGitAutoRefresh, getGitAutoRefresh)
+  const status = useSyncExternalStore(subscribeGitLive, readGitLiveStatus, () => null)
   const repoId = nearby.selectedId
 
   useEffect(() => retainUsageLive(client, sessionId), [client, sessionId])
   useEffect(() => retainNearbyGit(client, workspaceId), [client, workspaceId])
+  useEffect(() => retainGitLive(client, workspaceId, repoId), [client, workspaceId, repoId])
 
   useEffect(() => {
     if (!editorOpen) setModeMenuOpen(false)
@@ -94,60 +94,6 @@ export function StatusBar({
     window.addEventListener('keydown', onKey)
     return () => { window.removeEventListener('keydown', onKey) }
   }, [layoutMenuOpen, modeMenuOpen])
-
-  useEffect(() => {
-    if (workspaceId === undefined) {
-      setStatus(null)
-      return
-    }
-    let live = true
-    let hasRemote = false
-    const hidden = (): boolean => document.visibilityState === 'hidden'
-    const load = (): void => {
-      if (hidden()) return
-      void client.status(workspaceId, repoId).then((result) => {
-        if (!live) return
-        if (!result.ok && result.code === 'BUSY') return
-        if (result.ok) {
-          hasRemote = result.value.probe.remote !== undefined
-          setStatus(result.value)
-          return
-        }
-        setStatus(null)
-      })
-    }
-    const fetchRemote = (): void => {
-      if (!hasRemote || hidden()) return
-      void client.fetch(workspaceId, repoId).then((result) => {
-        if (!live || !result.ok) return
-        load()
-      })
-    }
-    void client.status(workspaceId, repoId).then((result) => {
-      if (!live) return
-      if (!result.ok) {
-        if (result.code !== 'BUSY') setStatus(null)
-        return
-      }
-      hasRemote = result.value.probe.remote !== undefined
-      setStatus(result.value)
-      if (autoRefresh) fetchRemote()
-    })
-    // 自动刷新开关关闭时：只保留挂载时的一次性状态加载，不注册任何定时轮询（GitSidebar 手动刷新仍可用）。
-    if (!autoRefresh) return () => { live = false }
-    const statusTimer = window.setInterval(load, 8000)
-    const fetchTimer = window.setInterval(fetchRemote, 60_000)
-    const onVisible = (): void => {
-      if (document.visibilityState === 'visible') fetchRemote()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      live = false
-      window.clearInterval(statusTimer)
-      window.clearInterval(fetchTimer)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [client, workspaceId, repoId, autoRefresh])
 
   const probe = status?.probe
   const dirty = (status?.staged.length ?? 0) + (status?.unstaged.length ?? 0) + (status?.untracked.length ?? 0)

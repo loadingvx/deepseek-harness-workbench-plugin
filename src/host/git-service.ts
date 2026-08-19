@@ -519,13 +519,12 @@ export class GitService {
   }
 
   async fetch(root: string, signal?: AbortSignal): Promise<GitFetchResult> {
-    return this.mutex.run(async () => {
-      await this.requireRepo(root, signal)
-      const probe = await this.probe(root, signal)
-      if (probe.remote === undefined) throw new GitError('NO_REMOTE')
-      await runGit({ cwd: root, args: ['fetch', '--prune', probe.remote], signal, timeoutMs: 90_000 })
-      return { remote: probe.remote }
-    })
+    // fetch 只更新远端跟踪分支，不碰 index/staging；与 status/log 一样可与本地 commit/stage 并行。
+    await this.requireRepo(root, signal)
+    const probe = await this.probe(root, signal)
+    if (probe.remote === undefined) throw new GitError('NO_REMOTE')
+    await runGit({ cwd: root, args: ['fetch', '--prune', probe.remote], signal, timeoutMs: 90_000 })
+    return { remote: probe.remote }
   }
 
   async createBranch(root: string, name: string, signal?: AbortSignal): Promise<GitCreateBranchResult> {
