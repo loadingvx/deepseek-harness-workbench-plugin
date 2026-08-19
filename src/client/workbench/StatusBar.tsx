@@ -17,6 +17,7 @@ import {
 import { EDITOR_MODES, type EditorModeId } from './editor-mode.ts'
 import { IconChevron, IconFeedback, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
 import { readNearbyGit, retainNearbyGit, subscribeNearbyGit } from './nearby-git.ts'
+import { getGitAutoRefresh, subscribeGitAutoRefresh } from './git-auto-refresh.ts'
 import { fileName, showEditorStatusChrome, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
 import { browserTabLabel, terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import { readUsageLive, retainUsageLive, subscribeUsageLive } from './usage-live.ts'
@@ -73,6 +74,7 @@ export function StatusBar({
   const [updateNote, setUpdateNote] = useState<string | null>(null)
   const usage = useSyncExternalStore(subscribeUsageLive, readUsageLive, () => null)
   const nearby = useSyncExternalStore(subscribeNearbyGit, readNearbyGit, readNearbyGit)
+  const autoRefresh = useSyncExternalStore(subscribeGitAutoRefresh, getGitAutoRefresh, getGitAutoRefresh)
   const repoId = nearby.selectedId
 
   useEffect(() => retainUsageLive(client, sessionId), [client, sessionId])
@@ -129,8 +131,10 @@ export function StatusBar({
       }
       hasRemote = result.value.probe.remote !== undefined
       setStatus(result.value)
-      fetchRemote()
+      if (autoRefresh) fetchRemote()
     })
+    // 自动刷新开关关闭时：只保留挂载时的一次性状态加载，不注册任何定时轮询（GitSidebar 手动刷新仍可用）。
+    if (!autoRefresh) return () => { live = false }
     const statusTimer = window.setInterval(load, 8000)
     const fetchTimer = window.setInterval(fetchRemote, 60_000)
     const onVisible = (): void => {
@@ -143,7 +147,7 @@ export function StatusBar({
       window.clearInterval(fetchTimer)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [client, workspaceId, repoId])
+  }, [client, workspaceId, repoId, autoRefresh])
 
   const probe = status?.probe
   const dirty = (status?.staged.length ?? 0) + (status?.unstaged.length ?? 0) + (status?.untracked.length ?? 0)

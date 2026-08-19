@@ -146,7 +146,9 @@
 .primary {
   background: var(--dsw-alias-brand-primary, #4f6ef7);
   border-color: var(--dsw-alias-brand-primary, #4f6ef7);
-  color: #fff;
+  /* Brand fill is light in dark themes; use the theme's on-brand foreground token
+     (white in light, dark in dark) so text stays legible on any theme. */
+  color: var(--dsw-alias-label-primary-foreground, #fff);
 }
 
 .danger {

@@ -3,6 +3,7 @@ import {
   CURRENT_REPO_ID, PARENT_REPO_ID, pickNearbyRepoId, visibleNearbyRepos,
 } from '../../shared/git-nearby.ts'
 import type { NearbyGitRepo, NearbyGitSnapshot, ParentGitDecision } from '../../shared/types.ts'
+import { getGitAutoRefresh } from './git-auto-refresh.ts'
 
 const POLL_MS = 8000
 const SELECTED_KEY = 'dsh-workbench-git-repo:'
@@ -125,7 +126,12 @@ export function retainNearbyGit(client: GitClient, workspaceId?: string): () => 
     void pull()
   }
   if (refs === 1) {
-    timer = window.setInterval(() => { void pull() }, POLL_MS)
+    // 自动刷新开关关闭时定时器空转（tick 直接返回），挂载时的一次性 pull 仍执行；
+    // 开关开启后自动恢复轮询。模块级 store 非 React，无法按开关重建 interval，空 tick 开销可忽略。
+    timer = window.setInterval(() => {
+      if (!getGitAutoRefresh()) return
+      void pull()
+    }, POLL_MS)
     document.addEventListener('visibilitychange', onVisible)
   }
   return () => {

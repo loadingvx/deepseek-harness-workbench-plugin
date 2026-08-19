@@ -6,6 +6,8 @@ export const NS = 'workbench'
 export const zh = {
   'panel.title': '源代码管理',
   'panel.refresh': '刷新并获取远程更新',
+  'panel.autoRefreshOn': '自动刷新 Git 状态已开启：每 8 秒轮询，页面隐藏时暂停（点击关闭）',
+  'panel.autoRefreshOff': '自动刷新已关闭：仅手动刷新与挂载时加载（点击开启）',
   'panel.retry': '重试',
   'panel.loading': '正在读取仓库状态…',
   'panel.noWorkspace': '还没有选中工作区。请先在左侧打开一个本地目录。',
@@ -686,6 +688,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const en = {
   'panel.title': 'Source Control',
   'panel.refresh': 'Refresh and fetch remote updates',
+  'panel.autoRefreshOn': 'Auto-refresh is on: polls every 8s and pauses when the page is hidden (click to turn off)',
+  'panel.autoRefreshOff': 'Auto-refresh is off: only manual refresh and mount-time load (click to turn on)',
   'panel.retry': 'Retry',
   'panel.loading': 'Reading repository status…',
   'panel.noWorkspace': 'No workspace selected. Open a local folder on the left first.',

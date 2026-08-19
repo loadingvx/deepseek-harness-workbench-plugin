@@ -499,6 +499,7 @@ export function IconNpm({ size = 16 }: { size?: number }) {
   )
 }
 
+
 /** 全局会话监控：轨道环 + 球心 + 活跃会话点，对应悬浮球语义。 */
 export function IconSessions() {
   return (
@@ -507,6 +508,16 @@ export function IconSessions() {
       <ellipse cx="8" cy="8" rx="7.2" ry="2.9" fill="none" stroke="currentColor" strokeWidth="1" transform="rotate(-24 8 8)" />
       <circle cx="8" cy="8" r="1.5" fill="currentColor" />
       <circle cx="12.5" cy="5" r="1.1" fill="currentColor" />
+    </Icon>
+    )
+}
+
+/** Git 自动刷新：双向循环箭头（开关语义：开启 = 定时轮询，关闭 = 仅手动刷新）。 */
+export function IconAutoRefresh() {
+  return (
+    <Icon>
+      <path d="M3.4 6.4A5 5 0 0 1 12.8 5.2M12.9 2.4v3.2h-3.2" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M12.6 9.6A5 5 0 0 1 3.2 10.8M3.1 13.6v-3.2h3.2" fill="none" stroke="currentColor" strokeWidth="1.3" />
     </Icon>
   )
 }
