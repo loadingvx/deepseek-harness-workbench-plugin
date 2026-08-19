@@ -259,9 +259,20 @@ DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作�
 + dsh-workbench-plugin@0.1.22
 ```
 
-维护者发布 npm 请执行 `bash devops/release.sh`。该脚本使用本机已有的 `npm login` 会话；不得将账号或凭据写入仓库。
+维护者发布 npm 请执行 `bash devops/release.sh`（在 `dev` 分支执行）。该脚本使用本机已有的 `npm login` 会话；不得将账号或凭据写入仓库。
 
-应用市场走 GitHub 安装（`github:loadingvx/deepseek-harness-workbench-plugin`），**不会在用户机器上编译**。每次推 GitHub 之前先执行 `bash devops/build.sh`，把 `lib/index.js` 和 `lib/client.js` 与源码一起提交。
+### 分支策略
+
+应用市场走 GitHub 安装（`github:loadingvx/deepseek-harness-workbench-plugin`），装的是默认分支 **main** 的仓库内容，**不会在用户机器上编译**。仓库因此分成两个**永不合并**的分支：
+
+| 分支 | 内容 | 用途 |
+| --- | --- | --- |
+| `dev` | 源码、测试、文档、构建脚本 | 唯一的代码开发分支 |
+| `main` | 预构建产物（`lib/`）、`package.json`、`cordis.patch.yml`、README / LICENSE | GitHub 安装的产物分支（默认分支） |
+
+发布流程：在 `dev` 上开发与测试 → 执行 `bash devops/build.sh` 构建 → 把 `lib/` 产物和 `package.json` 的版本号同步到 `main` 并推送。**`dev` 与 `main` 永不合并。**
+
+这样分工是为了减少合作开发时的文件冲突：`lib/` 是每次构建都会整体重写的生成物，多人共用一个分支同时改源码、提交产物，会产生大量与内容无关的冲突；两个分支各管一件事、互不合并，源码开发与产物发布互不干扰。
 
 ## 安装
 
@@ -297,7 +308,7 @@ minimumReleaseAgeExclude:
 dsh plugin --profile web add github:loadingvx/deepseek-harness-workbench-plugin
 ```
 
-默认分支里必须已经有构建好的 `lib/index.js` 和 `lib/client.js`。只提交源码会装不上：pnpm 默认拦截 git 包的 `prepare` 构建脚本，用户会看到 `allowBuilds` 报错。装完后同样重启 `dsh web`，再打开工作台。
+main（默认分支）里必须已经有构建好的 `lib/index.js` 和 `lib/client.js`。只提交源码会装不上：pnpm 默认拦截 git 包的 `prepare` 构建脚本，用户会看到 `allowBuilds` 报错。装完后同样重启 `dsh web`，再打开工作台。
 
 ## 升级
 

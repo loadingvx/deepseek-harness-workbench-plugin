@@ -260,9 +260,20 @@ Rules the panel enforces (you will see a Chinese or English reason under the fie
 + dsh-workbench-plugin@0.1.22
 ```
 
-Maintainers publish npm with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
+Maintainers publish npm with `bash devops/release.sh` (run on `dev`). The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
 
-The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbench-plugin`). That path does **not** compile on the user's machine. Before every GitHub push: `bash devops/build.sh`, then commit `lib/index.js` and `lib/client.js` together with the source.
+### Branch strategy
+
+The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbench-plugin`), which pulls the default branch — **`main`** — and does **not** compile on the user's machine. The repository is therefore split into two branches that are **never merged**:
+
+| Branch | Contents | Purpose |
+| --- | --- | --- |
+| `dev` | Source, tests, docs, build scripts | The only code-development branch |
+| `main` | Prebuilt artifacts (`lib/`), `package.json`, `cordis.patch.yml`, README / LICENSE | The artifact branch used by GitHub installs (default branch) |
+
+Release flow: develop and test on `dev` → run `bash devops/build.sh` → sync the `lib/` artifacts and the `package.json` version to `main` and push. **`dev` and `main` are never merged.**
+
+The split exists to reduce file conflicts during collaborative development: `lib/` is regenerated wholesale on every build, so sharing one branch where multiple people edit source and commit artifacts at the same time produces constant noise conflicts. Keeping source and artifacts on separate branches, with no merging between them, keeps development and release work from colliding.
 
 ## Installation
 
@@ -298,7 +309,7 @@ The market command installs the GitHub tree, not the npm tarball:
 dsh plugin --profile web add github:loadingvx/deepseek-harness-workbench-plugin
 ```
 
-This only works when the default branch already contains built `lib/index.js` and `lib/client.js`. A source-only commit will fail: pnpm blocks the git-hosted `prepare` script unless the user adds `allowBuilds`. After install, restart `dsh web` and open Workbench as above.
+This only works when `main` (the default branch) already contains built `lib/index.js` and `lib/client.js`. A source-only commit will fail: pnpm blocks the git-hosted `prepare` script unless the user adds `allowBuilds`. After install, restart `dsh web` and open Workbench as above.
 
 ## Upgrade
 
