@@ -64,6 +64,7 @@ Host 端 `/new` 只回执（ack），真正的会话切换在 client 端做—�
 - **采用「插件 source 的 matchEnter 返回 claim」**：
   - 轮询顺序保证：裸 `/new` 由 command source 先处理（'handled'）→ bridge 开空白会话；`/new <text>` command source 返回 undefined → 插件 source claim → 带参数一次 Enter 直接 `submit`。
   - `submit(args)` 内做实际动作：`startNewSession(get, args)`。
+- **幽灵提示（`<第一句话，可空>`）走 matchSpace**：claim 只在 Enter 判定里产生，所以输入 `/new `（空格）时不会有 `/steer <引导内容>` 那种提示。给插件 source 加 `matchSpace`（token === '/new' 时返回同一个 claim），空格一敲即进入 claimed 相、draft 变成 `/new ` 并显示幽灵提示；再 Enter 直接走 claim.submit。command source 对 `/new` 的 matchSpace 返回 undefined（无 host input），不冲突。
 - 桥接（`installNewSessionBridge`）保留并增强：裸 `/new` 与菜单点选仍开空白会话，现在把解析出的文本一并传给 `startNewSession`（空文本时行为不变）。
 
 ### 3.3 startNewSession 的发送时序（核心代码路径）
@@ -85,7 +86,7 @@ Host 端 `/new` 只回执（ack），真正的会话切换在 client 端做—�
 
 ### 3.5 改动文件清单
 
-- `src/client/ultra-slash/new-session.ts`：新增 `leadingCommandInput`、`newSlashMatchEnter`；`startNewSession` 支持 initialText + 首条消息发送（`sendFirstMessage` / `waitForNewSession`）；桥接签名带 initialText。
+- `src/client/ultra-slash/new-session.ts`：新增 `leadingCommandInput`、`newSlashMatchEnter`、`newSlashMatchSpace`（共享 `newClaim`）；`startNewSession` 支持 initialText + 首条消息发送（`sendFirstMessage` / `waitForNewSession`）；桥接签名带 initialText。
 - `src/client/ultra-slash/install.ts`：插件 source 挂 `matchEnter`；桥接传参。
 - `src/shared/ultra-slash/locales.ts`：更新 `new.description`；新增 `new.hint`、`new.started`。
 - `tests/ultra-slash-new-session.spec.ts`：覆盖文本解析、claim submit、首条消息发送（fake sessions：startSession 翻转 current 并通知订阅者）、桥接传参。
@@ -100,5 +101,5 @@ Host 端 `/new` 只回执（ack），真正的会话切换在 client 端做—�
 
 ## 5. 验证
 
-- `pnpm test`：vitest 全量（68 个文件，572 用例）。
+- `pnpm test`：vitest 全量（68 个文件，577 通过 / 1 跳过）。
 - `pnpm run build`（或 `bash devops/build.sh`）：tsdown 产出 `lib/index.js` 与 `lib/client.js`；**推 GitHub 前必须把这两份与源码一起提交**（市场 `github:...` 装的是仓库内容，不编译）。

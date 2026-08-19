@@ -1,8 +1,7 @@
 deepseek-harness
 node_modules
-lib/*
+lib
 .pnpm-store
 *.tgz
 coverage
-.DS_Storeo
-.git/
+.DS_Store

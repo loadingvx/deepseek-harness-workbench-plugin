@@ -253,27 +253,16 @@ Rules the panel enforces (you will see a Chinese or English reason under the fie
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.22** (npm tag `latest`) |
+| Version | **0.1.23** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.22
++ dsh-workbench-plugin@0.1.23
 ```
 
-Maintainers publish npm with `bash devops/release.sh` (run on `dev`). The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
+Maintainers publish npm with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
 
-### Branch strategy
-
-The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbench-plugin`), which pulls the default branch — **`main`** — and does **not** compile on the user's machine. The repository is therefore split into two branches that are **never merged**:
-
-| Branch | Contents | Purpose |
-| --- | --- | --- |
-| `dev` | Source, tests, docs, build scripts | The only code-development branch |
-| `main` | Prebuilt artifacts (`lib/`), `package.json`, `cordis.patch.yml`, README / LICENSE | The artifact branch used by GitHub installs (default branch) |
-
-Release flow: develop and test on `dev` → run `bash devops/build.sh` → sync the `lib/` artifacts and the `package.json` version to `main` and push. **`dev` and `main` are never merged.**
-
-The split exists to reduce file conflicts during collaborative development: `lib/` is regenerated wholesale on every build, so sharing one branch where multiple people edit source and commit artifacts at the same time produces constant noise conflicts. Keeping source and artifacts on separate branches, with no merging between them, keeps development and release work from colliding.
+The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbench-plugin`). That path does **not** compile on the user's machine. Before every GitHub push: `bash devops/build.sh`, then commit `lib/index.js` and `lib/client.js` together with the source.
 
 ## Installation
 
@@ -283,13 +272,13 @@ The split exists to reduce file conflicts during collaborative development: `lib
 
 ### Procedure
 
-1. Install the plugin (pin the version; do not omit `@0.1.22`):
+1. Install the plugin (pin the version; do not omit `@0.1.23`):
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.22
+dsh plugin --profile web add dsh-workbench-plugin@0.1.23
 ```
 
-`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.22` requests that release explicitly.
+`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.23` requests that release explicitly.
 
 If a pinned install is still refused as too new, add this to `~/.dsh/profiles/web/pnpm-workspace.yaml` and run the command again:
 
@@ -309,7 +298,7 @@ The market command installs the GitHub tree, not the npm tarball:
 dsh plugin --profile web add github:loadingvx/deepseek-harness-workbench-plugin
 ```
 
-This only works when `main` (the default branch) already contains built `lib/index.js` and `lib/client.js`. A source-only commit will fail: pnpm blocks the git-hosted `prepare` script unless the user adds `allowBuilds`. After install, restart `dsh web` and open Workbench as above.
+This only works when the default branch already contains built `lib/index.js` and `lib/client.js`. A source-only commit will fail: pnpm blocks the git-hosted `prepare` script unless the user adds `allowBuilds`. After install, restart `dsh web` and open Workbench as above.
 
 ## Upgrade
 
@@ -325,7 +314,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.22 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.23 manually using the command above. Later releases will prompt in the UI.
 
 ## Workspace terminal
 

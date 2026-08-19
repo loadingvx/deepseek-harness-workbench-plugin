@@ -252,27 +252,16 @@ DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作�
 | 项目 | 说明 |
 | --- | --- |
 | 包名 | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| 当前版本 | **0.1.22**（npm 标签 `latest`） |
+| 当前版本 | **0.1.23**（npm 标签 `latest`） |
 | 软件源 | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.22
++ dsh-workbench-plugin@0.1.23
 ```
 
-维护者发布 npm 请执行 `bash devops/release.sh`（在 `dev` 分支执行）。该脚本使用本机已有的 `npm login` 会话；不得将账号或凭据写入仓库。
+维护者发布 npm 请执行 `bash devops/release.sh`。该脚本使用本机已有的 `npm login` 会话；不得将账号或凭据写入仓库。
 
-### 分支策略
-
-应用市场走 GitHub 安装（`github:loadingvx/deepseek-harness-workbench-plugin`），装的是默认分支 **main** 的仓库内容，**不会在用户机器上编译**。仓库因此分成两个**永不合并**的分支：
-
-| 分支 | 内容 | 用途 |
-| --- | --- | --- |
-| `dev` | 源码、测试、文档、构建脚本 | 唯一的代码开发分支 |
-| `main` | 预构建产物（`lib/`）、`package.json`、`cordis.patch.yml`、README / LICENSE | GitHub 安装的产物分支（默认分支） |
-
-发布流程：在 `dev` 上开发与测试 → 执行 `bash devops/build.sh` 构建 → 把 `lib/` 产物和 `package.json` 的版本号同步到 `main` 并推送。**`dev` 与 `main` 永不合并。**
-
-这样分工是为了减少合作开发时的文件冲突：`lib/` 是每次构建都会整体重写的生成物，多人共用一个分支同时改源码、提交产物，会产生大量与内容无关的冲突；两个分支各管一件事、互不合并，源码开发与产物发布互不干扰。
+应用市场走 GitHub 安装（`github:loadingvx/deepseek-harness-workbench-plugin`），**不会在用户机器上编译**。每次推 GitHub 之前先执行 `bash devops/build.sh`，把 `lib/index.js` 和 `lib/client.js` 与源码一起提交。
 
 ## 安装
 
@@ -282,13 +271,13 @@ DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作�
 
 ### 步骤
 
-1. 安装插件（必须带版本号，不要省略 `@0.1.22`）：
+1. 安装插件（必须带版本号，不要省略 `@0.1.23`）：
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.22
+dsh plugin --profile web add dsh-workbench-plugin@0.1.23
 ```
 
-`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.22` 才会明确要这一版。
+`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.23` 才会明确要这一版。
 
 若指定版本后仍提示太新、装不上，在 `~/.dsh/profiles/web/pnpm-workspace.yaml` 加上下面两行，再执行一次安装命令：
 
@@ -308,7 +297,7 @@ minimumReleaseAgeExclude:
 dsh plugin --profile web add github:loadingvx/deepseek-harness-workbench-plugin
 ```
 
-main（默认分支）里必须已经有构建好的 `lib/index.js` 和 `lib/client.js`。只提交源码会装不上：pnpm 默认拦截 git 包的 `prepare` 构建脚本，用户会看到 `allowBuilds` 报错。装完后同样重启 `dsh web`，再打开工作台。
+默认分支里必须已经有构建好的 `lib/index.js` 和 `lib/client.js`。只提交源码会装不上：pnpm 默认拦截 git 包的 `prepare` 构建脚本，用户会看到 `allowBuilds` 报错。装完后同样重启 `dsh web`，再打开工作台。
 
 ## 升级
 
@@ -324,7 +313,7 @@ main（默认分支）里必须已经有构建好的 `lib/index.js` 和 `lib/cli
 
 ### 从 0.1.1 升级
 
-**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.22；此后版本将通过界面提示。
+**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.23；此后版本将通过界面提示。
 
 ## 工作区终端
 
