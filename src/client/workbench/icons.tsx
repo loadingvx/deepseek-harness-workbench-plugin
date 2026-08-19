@@ -498,3 +498,13 @@ export function IconNpm({ size = 16 }: { size?: number }) {
     </Icon>
   )
 }
+
+/** Git 自动刷新：双向循环箭头（开关语义：开启 = 定时轮询，关闭 = 仅手动刷新）。 */
+export function IconAutoRefresh() {
+  return (
+    <Icon>
+      <path d="M3.4 6.4A5 5 0 0 1 12.8 5.2M12.9 2.4v3.2h-3.2" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M12.6 9.6A5 5 0 0 1 3.2 10.8M3.1 13.6v-3.2h3.2" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </Icon>
+  )
+}
