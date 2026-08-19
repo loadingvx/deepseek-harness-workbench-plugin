@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ackMany,
   ackSession,
@@ -9,12 +9,15 @@ import {
   getBeepOn,
   groupSessions,
   isAcked,
+  isPersistedUnread,
   isUnread,
   pendingLabelKey,
   projectOf,
+  reconcilePersistedAttention,
   relativeTime,
   resetAckStore,
   resetBeepStore,
+  resetPersistedAttention,
   sessionStatsOf,
   setBeepOn,
   subscribeAck,
@@ -48,6 +51,7 @@ const emptyAck = new Set<string>()
 afterEach(() => {
   resetAckStore()
   resetBeepStore()
+  resetPersistedAttention()
 })
 
 describe('isUnread', () => {
@@ -273,5 +277,90 @@ describe('page-session beep store', () => {
     setBeepOn(true)
     expect(seen).toEqual([false, true])
     off()
+  })
+})
+
+describe('persisted attention (跨页面会话的完成未查看记认)', () => {
+  it('arms completed-unread on the running→idle edge and feeds isUnread/countAttention', () => {
+    // 页面 1：b 正在运行（首次观察记录 running 位）
+    reconcilePersistedAttention(list([session({ id: 'b', running: true })], 'a'))
+    expect(isPersistedUnread('b')).toBe(false)
+    // b 完成（非当前会话）
+    reconcilePersistedAttention(list([session({ id: 'b', running: false })], 'a'))
+    expect(isPersistedUnread('b')).toBe(true)
+    // 即使壳层 completed 未标记，插件记认也计入未读
+    expect(isUnread(session({ id: 'b', running: false }), undefined, emptyAck)).toBe(true)
+    expect(countAttention(list([session({ id: 'b' })], 'a'), emptyAck)).toBe(1)
+    const groups = groupSessions(list([session({ id: 'b' })], 'a'), emptyAck)
+    expect(groups.completed.map((s) => s.id)).toEqual(['b'])
+  })
+
+  it('restores completed-unread across a page reload via localStorage', async () => {
+    // 安装 localStorage mock（node 环境默认无）
+    const store = new Map<string, string>()
+    const localStorageMock = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => { store.set(k, v) },
+      removeItem: (k: string) => { store.delete(k) },
+      clear: () => { store.clear() },
+      key: () => null,
+      length: 0,
+    }
+    ;(globalThis as Record<string, unknown>).localStorage = localStorageMock
+    try {
+      // 页面 1：观察 b 运行 → 完成（记入并持久化）
+      reconcilePersistedAttention(list([session({ id: 'b', running: true })], 'a'))
+      reconcilePersistedAttention(list([session({ id: 'b', running: false })], 'a'))
+      expect(isPersistedUnread('b')).toBe(true)
+      expect(store.size).toBeGreaterThan(0)
+
+      // 页面 2：全新模块实例（模拟刷新），从 localStorage 恢复
+      vi.resetModules()
+      const fresh = await import('../src/client/workbench/session-monitor.ts')
+      expect(fresh.isPersistedUnread('b')).toBe(true)
+      // 恢复后 isUnread 依然成立（壳层 completed 是 undefined）
+      expect(fresh.isUnread({ id: 'b' } as never, undefined, new Set())).toBe(true)
+    } finally {
+      ;(globalThis as Record<string, unknown>).localStorage = undefined
+    }
+  })
+
+  it('clears on explicit ack (open / mark-read) and on re-run or becoming current', () => {
+    reconcilePersistedAttention(list([session({ id: 'b', running: true })], 'a'))
+    reconcilePersistedAttention(list([session({ id: 'b', running: false })], 'a'))
+    expect(isPersistedUnread('b')).toBe(true)
+
+    // 显式记认（打开会话 / 全部标为已读）
+    ackSession('b')
+    expect(isPersistedUnread('b')).toBe(false)
+    reconcilePersistedAttention(list([session({ id: 'b', running: false })], 'a'))
+    reconcilePersistedAttention(list([session({ id: 'c', running: true })], 'a'))
+    reconcilePersistedAttention(list([session({ id: 'c', running: false })], 'a'))
+    expect(isPersistedUnread('c')).toBe(true)
+    ackMany(['c'])
+    expect(isPersistedUnread('c')).toBe(false)
+
+    // 再次运行清除
+    reconcilePersistedAttention(list([session({ id: 'd', running: true })], 'a'))
+    reconcilePersistedAttention(list([session({ id: 'd', running: false })], 'a'))
+    expect(isPersistedUnread('d')).toBe(true)
+    reconcilePersistedAttention(list([session({ id: 'd', running: true })], 'a'))
+    expect(isPersistedUnread('d')).toBe(false)
+
+    // 成为当前会话（被查看）清除
+    reconcilePersistedAttention(list([session({ id: 'e', running: true })], 'a'))
+    reconcilePersistedAttention(list([session({ id: 'e', running: false })], 'a'))
+    expect(isPersistedUnread('e')).toBe(true)
+    reconcilePersistedAttention(list([session({ id: 'e', running: false })], 'e'))
+    expect(isPersistedUnread('e')).toBe(false)
+  })
+
+  it('backs up the shell completed flag into the persisted record and drops vanished sessions', () => {
+    // 壳层本页武装 completed → 持久化兜底
+    reconcilePersistedAttention(list([session({ id: 'c', completed: true })], 'a'))
+    expect(isPersistedUnread('c')).toBe(true)
+    // 会话从列表消失 → 清理残留
+    reconcilePersistedAttention(list([session({ id: 'x' })], 'a'))
+    expect(isPersistedUnread('c')).toBe(false)
   })
 })

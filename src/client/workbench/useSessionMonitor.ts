@@ -26,9 +26,12 @@ import {
   countRunning,
   getAckVersion,
   getBeepOn,
+  getPersistVersion,
+  reconcilePersistedAttention,
   setBeepOn,
   subscribeAck,
   subscribeBeep,
+  subscribePersist,
   type SessionListLike,
   type WorkspaceListLike,
 } from './session-monitor.ts'
@@ -47,6 +50,8 @@ export function useAttentionCounts(
   useWorkspaces: WorkspaceSelectorHook,
 ): AttentionCounts {
   const ackVersion = useSyncExternalStore(subscribeAck, getAckVersion, getAckVersion)
+  // 持久化"完成未查看"提醒变化时也要重算（reconcile 在 useEffect 里改模块态后 bump）。
+  const persistVersion = useSyncExternalStore(subscribePersist, getPersistVersion, getPersistVersion)
   // 归档集数组引用在未变化时保持稳定（workspaces 快照按 Object.is 比对选择器结果），
   // 故该订阅只在归档集合真正变化时触发重渲染。
   const archivedIds = useWorkspaces((state) => (state as WorkspaceListLike).archivedSessionIds) as
@@ -59,7 +64,34 @@ export function useAttentionCounts(
   const attention = useSessions((state) => countAttention(state, ackSnapshot(), archived)) as number
   const running = useSessions((state) => countRunning(state, archived)) as number
   void ackVersion
+  void persistVersion
   return { attention, running }
+}
+
+/**
+ * 持久化"完成未查看"提醒接线（挂在始终渲染的 WorkbenchInner 上，面板未打开也生效）：
+ * 订阅完整会话列表，任一变化即协调一次持久化记认（跨页面会话恢复完成提醒）。
+ */
+export function useAttentionPersist(
+  useSessions: SessionSelectorHook,
+  useWorkspaces: WorkspaceSelectorHook,
+): void {
+  const list = useSessions((s) => s) as SessionListLike
+  const archivedIds = useWorkspaces((state) => (state as WorkspaceListLike).archivedSessionIds) as
+    | string[]
+    | undefined
+  const archived = useMemo(() => {
+    const ids = archivedIds ?? []
+    return ids.length === 0 ? undefined : new Set(ids)
+  }, [archivedIds])
+  useEffect(() => {
+    reconcilePersistedAttention(list, archived)
+  }, [list, archived])
+}
+
+/** 持久化记认版本订阅（面板读取共享持久化状态时调用，触发重渲染）。 */
+export function usePersistVersion(): number {
+  return useSyncExternalStore(subscribePersist, getPersistVersion, getPersistVersion)
 }
 
 export function useAckVersion(): number {
@@ -98,6 +130,36 @@ function getAudioCtor(): typeof AudioContext | null {
   const webkitAC = (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
   return (typeof AudioContext !== 'undefined' ? AudioContext : webkitAC) ?? null
 }
+
+/**
+ * 全局共享的 AudioContext 持有者（Workbench 自动响铃用，模块级跨组件/重挂载复用）。
+ *
+ * V3 提示音升级（0055e1e）把 V1 的"单个复用 AudioContext"改成了每次响铃新建：
+ * ① 新 AudioContext 默认 suspended，resume() 需用户手势（自动播放策略）——循环提醒
+ *    与空闲时的首次提醒都发生在手势之外，resume 被拒 → 无声；
+ * ② 上下文数量上限（Chrome 约 6 个）——每次响铃泄漏一个，循环提醒每 10s 一个，
+ *    约 1 分钟后 new AudioContext() 直接抛错，被 catch 静默吞掉 → 永久无声。
+ * 共享复用 + 首次用户手势解锁后上下文常驻 running，所有响铃稳定出声（V1 等效行为）。
+ */
+export const sharedBeepRef: { current: { ac: AudioContext | null } } = { current: { ac: null } }
+
+let unlockWired = false
+
+/** 首次用户手势（点击/按键）时恢复共享上下文，此后所有响铃无需再等手势。 */
+function wireGestureUnlock(): void {
+  if (unlockWired || typeof window === 'undefined') return
+  unlockWired = true
+  const unlock = (): void => {
+    const ac = sharedBeepRef.current.ac
+    if (ac !== null && ac.state === 'suspended') {
+      ac.resume().catch(() => { /* 仍被策略阻止：下个手势再试 */ })
+    }
+  }
+  window.addEventListener('pointerdown', unlock)
+  window.addEventListener('keydown', unlock)
+}
+
+wireGestureUnlock()
 
 /**
  * Play a built-in sound using Web Audio synthesis.

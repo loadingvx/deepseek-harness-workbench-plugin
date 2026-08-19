@@ -80,13 +80,13 @@ export interface SessionGroups {
   current: string | undefined
 }
 
-/** 未读 = 完成且未查看：completed 事实由运行时维护（打开会话即清除），本地 ack 只记显式记认。 */
+/** 未读 = 完成且未查看：壳层 completed（运行时维护，打开会话即清除）+ 插件持久化记认（跨页面会话）双重来源，本地 ack 只记显式记认。 */
 export function isUnread(
   s: SessionRowLike,
   current: string | undefined,
   acked: ReadonlySet<string>,
 ): boolean {
-  return s.completed === true && s.id !== current && !acked.has(s.id)
+  return (s.completed === true || isPersistedUnread(s.id)) && s.id !== current && !acked.has(s.id)
 }
 
 function topRows(list: SessionListLike, archived?: ReadonlySet<string>): SessionRowLike[] {
@@ -200,6 +200,139 @@ export function projectOf(s: SessionRowLike, wsItems: readonly WorkspaceItemLike
   return ''
 }
 
+// —— 持久化"完成未查看"提醒（跨页面会话，满足全局语义）——
+//
+// 壳层 dsh 的 completed 提醒是页面会话期内存态：刷新/重开页面后，已 idle 会话的
+// 完成提醒不会重新武装，导致"实际需要被注意但列表不显示"。插件在 localStorage 持久化
+// 自己的完成记认，来源有二：
+//   ① running→idle 边沿（prevRunning 落盘，跨页面会话也能检测到：上页运行 → 本页 idle）；
+//   ② 壳层 completed 出现（本页武装）时兜底记入，防后续刷新丢失。
+// 清除时机：会话再次运行、会话成为当前（被查看）、显式标为已读、会话从列表消失。
+
+const ATTENTION_PERSIST_KEY = 'dsh-workbench-attention-persist-v1'
+
+interface PersistedAttention {
+  /** 上次观察到的 running 位（跨页面会话检测完成边沿）。 */
+  prevRunning: Record<string, boolean>
+  /** 完成未查看：sessionId -> 完成时间戳。 */
+  completedUnread: Record<string, number>
+}
+
+function loadPersistedAttention(): PersistedAttention {
+  try {
+    if (typeof localStorage === 'undefined') return { prevRunning: {}, completedUnread: {} }
+    const raw = localStorage.getItem(ATTENTION_PERSIST_KEY)
+    if (raw !== null) {
+      const parsed = JSON.parse(raw) as Partial<PersistedAttention>
+      return {
+        prevRunning: parsed.prevRunning ?? {},
+        completedUnread: parsed.completedUnread ?? {},
+      }
+    }
+  } catch { /* 存储不可用：静默降级为会话内态 */ }
+  return { prevRunning: {}, completedUnread: {} }
+}
+
+function savePersistedAttention(): void {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(ATTENTION_PERSIST_KEY, JSON.stringify(persistedAttention))
+  } catch { /* 存储不可用：静默降级 */ }
+}
+
+let persistedAttention = loadPersistedAttention()
+let persistVersion = 0
+const persistListeners = new Set<() => void>()
+
+function bumpPersist(): void {
+  persistVersion += 1
+  for (const fn of persistListeners) fn()
+}
+
+/** 持久化记认版本订阅（React useSyncExternalStore 用）。 */
+export function subscribePersist(fn: () => void): () => void {
+  persistListeners.add(fn)
+  return () => { persistListeners.delete(fn) }
+}
+
+export function getPersistVersion(): number {
+  return persistVersion
+}
+
+/** 持久化记认的完成未查看是否包含该会话。 */
+export function isPersistedUnread(id: string): boolean {
+  return persistedAttention.completedUnread[id] !== undefined
+}
+
+/** 测试辅助：清空持久化提醒状态（含 localStorage）。 */
+export function resetPersistedAttention(): void {
+  persistedAttention = { prevRunning: {}, completedUnread: {} }
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(ATTENTION_PERSIST_KEY)
+  } catch { /* ignore */ }
+  bumpPersist()
+}
+
+/**
+ * 从最新列表快照协调持久化提醒状态（挂在始终渲染的 WorkbenchInner 上调用）。
+ * ① running→idle 边沿（含跨页面会话）且非当前会话 → 记完成未查看；
+ * ② 壳层 completed 出现 → 记入持久化兜底；
+ * ③ 当前会话（被查看）→ 清除；再次运行 → 清除；会话消失 → 清理残留。
+ */
+export function reconcilePersistedAttention(list: SessionListLike, archived?: ReadonlySet<string>): void {
+  const current = list.current
+  const prev = persistedAttention.prevRunning
+  const unread = persistedAttention.completedUnread
+  let changed = false
+  const seen = new Set<string>()
+  for (const s of topRows(list, archived)) {
+    seen.add(s.id)
+    const wasRunning = prev[s.id]
+    if (wasRunning === true && !s.running) {
+      // 完成边沿（上页运行 / 本页刚停）→ 记完成未查看
+      if (s.id !== current && unread[s.id] === undefined) {
+        unread[s.id] = Date.now()
+        changed = true
+      }
+    } else if (s.running) {
+      if (unread[s.id] !== undefined) {
+        delete unread[s.id]
+        changed = true
+      }
+    }
+    if (s.completed === true && unread[s.id] === undefined) {
+      // 壳层本页武装的 completed → 持久化兜底，防后续刷新丢失
+      unread[s.id] = Date.now()
+      changed = true
+    }
+    if (s.id === current && unread[s.id] !== undefined) {
+      // 当前会话 = 正在查看 → 消费完成提醒（与壳层 select 即清除语义一致）
+      delete unread[s.id]
+      changed = true
+    }
+    if (prev[s.id] !== s.running) {
+      prev[s.id] = s.running
+      changed = true
+    }
+  }
+  for (const id of Object.keys(prev)) {
+    if (!seen.has(id)) {
+      delete prev[id]
+      changed = true
+    }
+  }
+  for (const id of Object.keys(unread)) {
+    if (!seen.has(id)) {
+      delete unread[id]
+      changed = true
+    }
+  }
+  if (changed) {
+    savePersistedAttention()
+    bumpPersist()
+  }
+}
+
 // —— 页面会话期共享状态（刷新后重置，与悬浮球的内存态一致）——
 
 let ackVersion = 0
@@ -231,8 +364,12 @@ export function isAcked(id: string): boolean {
 }
 
 export function ackSession(id: string): void {
-  if (ackIds.has(id)) return
+  if (ackIds.has(id) && persistedAttention.completedUnread[id] === undefined) return
   ackIds.add(id)
+  if (persistedAttention.completedUnread[id] !== undefined) {
+    delete persistedAttention.completedUnread[id]
+    savePersistedAttention()
+  }
   bumpAck()
 }
 
@@ -243,8 +380,15 @@ export function ackMany(ids: Iterable<string>): void {
       ackIds.add(id)
       changed = true
     }
+    if (persistedAttention.completedUnread[id] !== undefined) {
+      delete persistedAttention.completedUnread[id]
+      changed = true
+    }
   }
-  if (changed) bumpAck()
+  if (changed) {
+    savePersistedAttention()
+    bumpAck()
+  }
 }
 
 /** 测试辅助：清空页面会话期的已读记认。 */
