@@ -19,6 +19,8 @@ export interface WorkbenchInjected {
   mount?: WorkbenchMount
   /** Official composer file chips. Host mount only. */
   fileRefs?: FileRefApi
+  /** Client runtime session navigation face（全局会话监控跳转用）。 */
+  sessions?: { open: (id: string) => void }
   /** Official composer chips for inspected browser elements. Host mount only. */
   browserEls?: BrowserElApi
 }

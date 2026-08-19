@@ -1,0 +1,29 @@
+.badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  z-index: 2;
+  box-sizing: border-box;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 8px;
+  border: 1.5px solid var(--dsw-alias-bg-base, #fff);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.attention {
+  background: var(--dsw-alias-state-error-primary, #fa5252);
+}
+
+.running {
+  background: #f59f00;
+}

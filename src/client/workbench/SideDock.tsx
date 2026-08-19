@@ -7,11 +7,15 @@ import { GitSidebar } from './GitSidebar.tsx'
 import { IconButton } from './IconButton.tsx'
 import type { DevtoolsDock } from './browser-dock.ts'
 import { DevToolsPanel } from './DevToolsPanel.tsx'
-import { IconDevtools, IconFiles, IconGit, IconPanelOff, IconSlash, IconUsage } from './icons.tsx'
+import { IconDevtools, IconFiles, IconGit, IconPanelOff, IconSessions, IconSlash, IconUsage } from './icons.tsx'
 import type { Translate } from './types.ts'
+import { SessionsPanel } from './SessionsPanel.tsx'
+import { TabBadge } from './TabBadge.tsx'
 import { UpdateBanner } from './UpdateBanner.tsx'
 import { UsagePanel } from './UsagePanel.tsx'
 import { SlashPanel } from '../ultra-slash/SlashPanel.tsx'
+import { useAttentionCounts, type SessionSelectorHook } from './useSessionMonitor.ts'
+import type { WorkspaceListLike } from './session-monitor.ts'
 import {
   defaultUsageDock,
   isNavHostReady,
@@ -25,7 +29,7 @@ import css from './SideDock.module.css'
 export type { SideTab }
 
 export function SideDock({
-  client, workspaceId, workspaceTitle, workspacePath, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, t, devtoolsDock = 'side', onDevtoolsDock,
+  client, workspaceId, workspaceTitle, workspacePath, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, useSessions, useWorkspaces, openSession, t, devtoolsDock = 'side', onDevtoolsDock,
 }: {
   client: GitClient
   workspaceId?: string
@@ -47,6 +51,9 @@ export function SideDock({
   leadingSash?: ReactNode
   update?: PluginUpdateSnapshot | null
   onDismissUpdate?: () => void
+  useSessions: SessionSelectorHook
+  useWorkspaces: (selector: (state: WorkspaceListLike) => unknown) => unknown
+  openSession: (id: string) => void
   t: Translate
   devtoolsDock?: DevtoolsDock
   onDevtoolsDock?: (dock: DevtoolsDock) => void
@@ -54,6 +61,7 @@ export function SideDock({
   const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
   const navReady = useSyncExternalStore(subscribeNavHost, isNavHostReady, () => false)
   const showUsageTab = usageTabVisible(dock, navReady)
+  const { attention, running: runningCount } = useAttentionCounts(useSessions, useWorkspaces)
 
   useLayoutEffect(() => {
     if (!showUsageTab && tab === 'usage') onTab('files')
@@ -78,6 +86,12 @@ export function SideDock({
         <IconButton label={t('ide.slash')} active={tab === 'slash'} onClick={() => { onTab('slash') }}>
           <IconSlash />
         </IconButton>
+        <span className={css.tabBadgeWrap}>
+          <IconButton label={t('ide.sessions')} active={tab === 'sessions'} onClick={() => { onTab('sessions') }}>
+            <IconSessions />
+          </IconButton>
+          <TabBadge count={attention > 0 ? attention : runningCount} tone={attention > 0 ? 'attention' : 'running'} />
+        </span>
         <IconButton label={t('ide.devtools')} active={tab === 'devtools'} onClick={() => { onTab('devtools') }}>
           <IconDevtools />
         </IconButton>
@@ -106,6 +120,13 @@ export function SideDock({
           />
         ) : tab === 'slash' ? (
           <SlashPanel />
+        ) : tab === 'sessions' ? (
+          <SessionsPanel
+            useSessions={useSessions}
+            useWorkspaces={useWorkspaces}
+            openSession={openSession}
+            t={t}
+          />
         ) : tab === 'devtools' ? (
           <DevToolsPanel
             dock={devtoolsDock}
