@@ -26,6 +26,8 @@ import {
 } from './session-monitor.ts'
 import type { Translate } from './types.ts'
 import { useAckVersion, useBeepOn, useLoopReminder, useReminderInterval, type SessionSelectorHook, type WorkspaceSelectorHook } from './useSessionMonitor.ts'
+import { IconButton } from './IconButton.tsx'
+import { IconBell, IconTimer } from './icons.tsx'
 import { SoundSettings } from './SoundSettings.tsx'
 import css from './SessionsPanel.module.css'
 
@@ -151,28 +153,28 @@ export function SessionsPanel({
         ) : null}
       </div>
       <div className={css.reminder}>
-        <button
-          type="button"
-          className={`${css.toggle}${beepOn ? '' : ` ${css.off}`}`}
+        <IconButton
+          dense
+          label={beepOn ? t('sessions.beepOff') : t('sessions.beepOn')}
+          active={beepOn}
           onClick={() => setBeepOn(!beepOn)}
           title={beepOn ? t('sessions.beepOnHint') : t('sessions.beepOffHint')}
-          aria-label={beepOn ? t('sessions.beepOff') : t('sessions.beepOn')}
           aria-pressed={beepOn}
         >
-          {beepOn ? '🔔' : '🔕'}
-        </button>
+          <IconBell />
+        </IconButton>
         <SoundSettings t={t} />
-        <button
-          type="button"
-          className={`${css.toggle}${loopActive ? '' : ` ${css.off}`}`}
-          onClick={() => setLoopOn(!loopOn)}
+        <IconButton
+          dense
+          label={!beepOn ? t('sessions.loopDisabledHint') : loopOn ? t('sessions.loopOff') : t('sessions.loopOn')}
+          active={loopActive}
           disabled={!beepOn}
+          onClick={() => setLoopOn(!loopOn)}
           title={!beepOn ? t('sessions.loopDisabledHint') : loopOn ? t('sessions.loopOnHint', { n: intervalSec }) : t('sessions.loopOffHint')}
-          aria-label={!beepOn ? t('sessions.loopDisabledHint') : loopOn ? t('sessions.loopOff') : t('sessions.loopOn')}
           aria-pressed={loopActive}
         >
-          ⏰
-        </button>
+          <IconTimer />
+        </IconButton>
         {loopActive ? (
           <label className={css.interval} title={t('sessions.intervalHint', { min: REMINDER_INTERVAL_MIN, max: REMINDER_INTERVAL_MAX })}>
             <span>{t('sessions.intervalLabel')}</span>

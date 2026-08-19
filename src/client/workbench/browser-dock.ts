@@ -41,12 +41,14 @@ export function saveDevtoolsDock(dock: DevtoolsDock): void {
   writeStorage(DEVTOOLS_DOCK_KEY, isDevtoolsDock(dock) ? dock : DEFAULT_DEVTOOLS_DOCK)
 }
 
+/** DevTools stays closed on load; only opens after the user clicks DevTools in the browser toolbar. */
 export function loadDevtoolsOpen(): boolean {
-  return readStorage(DEVTOOLS_OPEN_KEY) === '1'
+  return false
 }
 
-export function saveDevtoolsOpen(open: boolean): void {
-  writeStorage(DEVTOOLS_OPEN_KEY, open ? '1' : '0')
+/** Session-only flag; intentionally not persisted (see loadDevtoolsOpen). */
+export function saveDevtoolsOpen(_open: boolean): void {
+  /* no-op */
 }
 
 export function loadDevtoolsPane(): DevtoolsPane {

@@ -212,6 +212,14 @@ export function IconStop() {
   )
 }
 
+export function IconPlay() {
+  return (
+    <Icon>
+      <path d="M5.8 4.2 12.2 8 5.8 11.8z" fill="currentColor" stroke="none" />
+    </Icon>
+  )
+}
+
 export function IconSparkle({ size = 16 }: { size?: number }) {
   return (
     <Icon size={size}>
@@ -510,6 +518,37 @@ export function IconSessions() {
       <circle cx="12.5" cy="5" r="1.1" fill="currentColor" />
     </Icon>
     )
+}
+
+/** 提示音开关：铃铛。 */
+export function IconBell() {
+  return (
+    <Icon>
+      <path d="M8 2.4c-1.7 0-3 1.5-3 3.3v2.6c0 .7-.3 1.4-.8 1.9L3.6 12h8.8l-.6-1.8c-.5-.5-.8-1.2-.8-1.9V5.7c0-1.8-1.3-3.3-3-3.3z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6.6 12.4c0 1 .7 1.8 1.4 1.8s1.4-.8 1.4-1.8" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
+/** 提示音选择：扬声器。 */
+export function IconVolume() {
+  return (
+    <Icon>
+      <path d="M3.4 6h2.2l3-2.2v8.4l-3-2.2H3.4z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M10.6 5.6c.9.7 1.4 1.6 1.4 2.4s-.5 1.7-1.4 2.4M12.2 4.2c1.5 1.2 2.4 2.7 2.4 3.8s-.9 2.6-2.4 3.8" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
+/** 循环提醒：闹钟表盘。 */
+export function IconTimer() {
+  return (
+    <Icon>
+      <circle cx="8" cy="9.2" r="4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M8 7.2v2.4l1.6 1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M5.8 3.4 4.6 2.2M10.2 3.4l1.2-1.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
 }
 
 /** Git 自动刷新：双向循环箭头（开关语义：开启 = 定时轮询，关闭 = 仅手动刷新）。 */

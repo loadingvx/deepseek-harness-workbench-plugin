@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bottomChromeVisible, isDevtoolsDock, isDevtoolsPane } from '../src/client/workbench/browser-dock.ts'
+import { bottomChromeVisible, isDevtoolsDock, isDevtoolsPane, loadDevtoolsOpen } from '../src/client/workbench/browser-dock.ts'
 import { isBottomTool } from '../src/client/workbench/bottom-layout.ts'
 import { BROWSER_EL_SOURCE } from '../src/shared/browser-el.ts'
 import { browserElExisting, installBrowserElClient } from '../src/client/workbench/browser-el-client.ts'
@@ -20,6 +20,12 @@ describe('bottomChromeVisible', () => {
     expect(isDevtoolsPane('files')).toBe(true)
     expect(isDevtoolsPane('console')).toBe(true)
     expect(isDevtoolsPane('profiler')).toBe(false)
+  })
+})
+
+describe('loadDevtoolsOpen', () => {
+  it('always starts closed', () => {
+    expect(loadDevtoolsOpen()).toBe(false)
   })
 })
 

@@ -56,49 +56,15 @@
   flex: 1;
 }
 
-/* 提醒设置行：提示音（🔔）/ 循环提醒（⏰）/ 间隔输入 */
+/* 提醒设置行：提示音 / 铃声 / 循环提醒 / 间隔输入（图标风格与侧栏 tabs 一致） */
 .reminder {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   min-height: 30px;
-  padding: 3px 8px 3px 12px;
+  padding: 3px 8px 3px 10px;
   border-bottom: 1px solid var(--dsw-alias-border-l2);
-}
-
-.toggle {
-  flex: none;
-  width: 24px;
-  height: 22px;
-  padding: 0;
-  cursor: pointer;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  line-height: 1;
-}
-
-.toggle:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
-.toggle.off {
-  opacity: 0.6;
-}
-
-/* 提示音关闭时循环提醒联动失效：置灰不可点，不响应 hover */
-.toggle:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.toggle:disabled:hover {
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary);
 }
 
 .interval {

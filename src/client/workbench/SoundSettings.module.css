@@ -9,23 +9,7 @@
 }
 
 .soundBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  font-size: 14px;
-  cursor: pointer;
-  border-radius: 4px;
-  opacity: 0.7;
-  transition: opacity 0.15s;
-}
-
-.soundBtn:hover {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.1);
+  flex: none;
 }
 
 .dropdown {
@@ -35,10 +19,10 @@
   z-index: 100;
   min-width: 260px;
   max-width: 320px;
-  background: #2a2a2a;
-  border: 1px solid #444;
+  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-base));
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
   overflow: hidden;
   margin-top: 4px;
 }
@@ -48,16 +32,16 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-bottom: 1px solid #444;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
   font-size: 12px;
-  color: #aaa;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .uploadBtn {
-  background: #4c8dff;
+  background: var(--dsw-alias-state-business-primary, #7aa2ff);
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   padding: 4px 8px;
   font-size: 11px;
   cursor: pointer;
@@ -65,7 +49,7 @@
 }
 
 .uploadBtn:hover {
-  background: #3a7ae8;
+  filter: brightness(0.92);
 }
 
 .soundList {
@@ -75,49 +59,67 @@
 
 .soundItem {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 12px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
   cursor: pointer;
   transition: background 0.1s;
-  position: relative;
 }
 
 .soundItem:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .soundItem.selected {
-  background: rgba(76, 141, 255, 0.15);
+  background: rgba(122, 162, 255, 0.14);
+}
+
+.soundMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .soundLabel {
   font-size: 13px;
-  color: #eee;
+  color: var(--dsw-alias-label-primary);
 }
 
 .soundDesc {
   font-size: 11px;
-  color: #888;
+  color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.soundActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.playBtn {
+  flex: none;
+}
+
 .deleteBtn {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
+  flex: none;
   background: transparent;
   border: none;
-  color: #888;
+  color: var(--dsw-alias-label-tertiary);
   font-size: 16px;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  line-height: 1;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
 }
 
 .soundItem:hover .deleteBtn {
@@ -125,29 +127,8 @@
 }
 
 .deleteBtn:hover {
-  background: rgba(255, 100, 100, 0.2);
-  color: #f66;
-}
-
-.dropdownFooter {
-  padding: 8px 12px;
-  border-top: 1px solid #444;
-}
-
-.previewBtn {
-  width: 100%;
-  background: #333;
-  color: #ccc;
-  border: none;
-  border-radius: 4px;
-  padding: 6px 12px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.previewBtn:hover {
-  background: #444;
+  background: rgba(250, 82, 82, 0.16);
+  color: var(--dsw-alias-state-error-secondary, #ffa8a8);
 }
 
 /* Upload panel */
@@ -157,10 +138,10 @@
   left: 0;
   z-index: 101;
   min-width: 280px;
-  background: #2a2a2a;
-  border: 1px solid #444;
+  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-base));
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
   margin-top: 4px;
   overflow: hidden;
 }
@@ -170,15 +151,15 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-bottom: 1px solid #444;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
   font-size: 12px;
-  color: #aaa;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .closeBtn {
   background: transparent;
   border: none;
-  color: #888;
+  color: var(--dsw-alias-label-tertiary);
   font-size: 18px;
   cursor: pointer;
   padding: 0 4px;
@@ -187,8 +168,8 @@
 }
 
 .closeBtn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
 }
 
 .uploadBody {
@@ -200,15 +181,15 @@
 
 .fileInput {
   font-size: 12px;
-  color: #ccc;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .uploadHint {
   font-size: 11px;
-  color: #777;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .uploadStatus {
   font-size: 11px;
-  color: #4c8dff;
+  color: var(--dsw-alias-state-business-primary, #7aa2ff);
 }

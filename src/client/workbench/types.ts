@@ -6,6 +6,11 @@ import type { BrowserElApi } from './browser-el-client.ts'
 
 export type Translate = (key: string, vars?: Record<string, string | number>) => string
 
+/** Infer UI language from the host-bound workbench translator. */
+export function uiLocaleFromTranslate(t: Translate): 'zh' | 'en' {
+  return t('sessions.intervalUnit') === 's' ? 'en' : 'zh'
+}
+
 export interface WorkspaceChoice {
   workspaceId: string
   path: string

@@ -3,6 +3,10 @@
  */
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { BUILTIN_SOUNDS } from '../../shared/workbench-sounds/builtins.ts'
+import { MAX_SOUND_UPLOAD_BYTES } from '../../shared/workbench-sounds/types.ts'
+import { IconButton } from './IconButton.tsx'
+import { IconPlay, IconVolume } from './icons.tsx'
+import { uiLocaleFromTranslate, type Translate } from './types.ts'
 import { playBuiltinSound, playCustomSound } from './useSessionMonitor.ts'
 import css from './SoundSettings.module.css'
 
@@ -25,12 +29,27 @@ interface SoundOption {
 }
 
 export interface SoundSettingsProps {
-  t: (key: string, vars?: Record<string, string | number>) => string
-  /** Language code: 'zh' | 'en' */
-  lang?: 'zh' | 'en'
+  t: Translate
 }
 
-export function SoundSettings({ t, lang = 'zh' }: SoundSettingsProps) {
+function builtinSoundKey(id: string, field: 'name' | 'desc'): string {
+  return `sessions.sound.builtin.${id}.${field}`
+}
+
+function mapUploadError(message: string, t: Translate): string {
+  const trimmed = message.trim()
+  if (trimmed === '') return t('sessions.soundUploadFail')
+  if (/unsupported audio format/i.test(trimmed)) return t('sessions.soundUploadUnsupported')
+  if (/file too large/i.test(trimmed)) {
+    return t('sessions.soundUploadTooLarge', { max: Math.round(MAX_SOUND_UPLOAD_BYTES / 1024 / 1024) })
+  }
+  if (/empty file/i.test(trimmed)) return t('sessions.soundUploadEmpty')
+  if (/expected multipart|no file found/i.test(trimmed)) return t('sessions.soundUploadFail')
+  return t('sessions.soundUploadFail')
+}
+
+export function SoundSettings({ t }: SoundSettingsProps) {
+  const lang = uiLocaleFromTranslate(t)
   const [selectedId, setSelectedId] = useState<string>(() => {
     try { return localStorage.getItem(PREF_KEY) ?? 'chime-ascending' } catch { return 'chime-ascending' }
   })
@@ -42,7 +61,6 @@ export function SoundSettings({ t, lang = 'zh' }: SoundSettingsProps) {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Load custom sounds on mount
   useEffect(() => {
     fetch(`${SOUNDS_HTTP_PREFIX}/`)
       .then(r => r.json())
@@ -57,7 +75,6 @@ export function SoundSettings({ t, lang = 'zh' }: SoundSettingsProps) {
       .catch(() => { /* ignore */ })
   }, [])
 
-  // Close dropdown on outside click
   useEffect(() => {
     if (!showDropdown) return
     const handler = (e: MouseEvent) => {
@@ -72,9 +89,9 @@ export function SoundSettings({ t, lang = 'zh' }: SoundSettingsProps) {
   const allSounds: SoundOption[] = [
     ...BUILTIN_SOUNDS.map(s => ({
       id: s.id,
-      label: lang === 'zh' ? s.nameZh : s.name,
+      label: t(builtinSoundKey(s.id, 'name')),
       kind: 'builtin' as const,
-      desc: lang === 'zh' ? s.descriptionZh : s.description,
+      desc: t(builtinSoundKey(s.id, 'desc')),
     })),
     ...customSounds.map(s => ({
       id: s.id,
@@ -85,27 +102,30 @@ export function SoundSettings({ t, lang = 'zh' }: SoundSettingsProps) {
   ]
 
   const selectedSound = allSounds.find(s => s.id === selectedId) ?? allSounds[0]
+  const pickerLabel = selectedSound !== undefined
+    ? `${selectedSound.label} — ${selectedSound.desc}`
+    : t('sessions.soundSelect')
 
   const savePref = (id: string) => {
     try { localStorage.setItem(PREF_KEY, id) } catch { /* ignore */ }
     setSelectedId(id)
   }
 
-  const preview = () => {
-    const builtin = BUILTIN_SOUNDS.find(s => s.id === selectedId)
+  const previewSound = (id: string, event?: ReactMouseEvent): void => {
+    event?.stopPropagation()
+    const builtin = BUILTIN_SOUNDS.find(s => s.id === id)
     if (builtin) {
       playBuiltinSound(builtin, acRef)
-    } else {
-      const custom = customSounds.find(s => s.id === selectedId)
-      if (custom) {
-        playCustomSound(custom.playUrl)
-      }
+      return
+    }
+    const custom = customSounds.find(s => s.id === id)
+    if (custom) {
+      playCustomSound(custom.playUrl)
     }
   }
 
   const handleSelect = (id: string) => {
     savePref(id)
-    setShowDropdown(false)
   }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -130,13 +150,12 @@ export function SoundSettings({ t, lang = 'zh' }: SoundSettingsProps) {
         setUploadStatus(t('sessions.soundUploadOk'))
         setShowUpload(false)
       } else {
-        setUploadStatus(data.message ?? t('sessions.soundUploadFail'))
+        setUploadStatus(mapUploadError(data.message ?? '', t))
       }
     } catch {
       setUploadStatus(t('sessions.soundUploadFail'))
     }
 
-    // Reset file input
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -154,14 +173,16 @@ export function SoundSettings({ t, lang = 'zh' }: SoundSettingsProps) {
   return (
     <div className={css.root}>
       <div className={css.soundPicker} ref={dropdownRef}>
-        <button
-          type="button"
+        <IconButton
+          dense
+          label={pickerLabel}
+          active={showDropdown}
           className={css.soundBtn}
           onClick={() => { setShowDropdown(!showDropdown); setShowUpload(false) }}
-          title={selectedSound.desc}
+          title={pickerLabel}
         >
-          🔊
-        </button>
+          <IconVolume />
+        </IconButton>
         {showDropdown && (
           <div className={css.dropdown}>
             <div className={css.dropdownHeader}>
@@ -179,27 +200,45 @@ export function SoundSettings({ t, lang = 'zh' }: SoundSettingsProps) {
                 <div
                   key={sound.id}
                   className={`${css.soundItem}${sound.id === selectedId ? ` ${css.selected}` : ''}`}
-                  onClick={() => handleSelect(sound.id)}
+                  onClick={() => { handleSelect(sound.id) }}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={sound.id === selectedId}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      handleSelect(sound.id)
+                    }
+                  }}
                 >
-                  <span className={css.soundLabel}>{sound.label}</span>
-                  <span className={css.soundDesc}>{sound.desc}</span>
-                  {sound.kind === 'custom' && (
-                    <button
-                      type="button"
-                      className={css.deleteBtn}
-                      onClick={(e) => handleDelete(sound.id, e)}
-                      title={t('sessions.soundDelete')}
+                  <div className={css.soundMain}>
+                    <span className={css.soundLabel}>{sound.label}</span>
+                    <span className={css.soundDesc}>{sound.desc}</span>
+                  </div>
+                  <div className={css.soundActions}>
+                    <IconButton
+                      dense
+                      className={css.playBtn}
+                      label={t('sessions.soundPreview')}
+                      title={t('sessions.soundPreview')}
+                      onClick={(event) => { previewSound(sound.id, event) }}
                     >
-                      ×
-                    </button>
-                  )}
+                      <IconPlay />
+                    </IconButton>
+                    {sound.kind === 'custom' ? (
+                      <button
+                        type="button"
+                        className={css.deleteBtn}
+                        onClick={(e) => handleDelete(sound.id, e)}
+                        title={t('sessions.soundDelete')}
+                        aria-label={t('sessions.soundDelete')}
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               ))}
-            </div>
-            <div className={css.dropdownFooter}>
-              <button type="button" className={css.previewBtn} onClick={preview}>
-                ▶ {t('sessions.soundPreview')}
-              </button>
             </div>
           </div>
         )}
@@ -208,8 +247,15 @@ export function SoundSettings({ t, lang = 'zh' }: SoundSettingsProps) {
       {showUpload && (
         <div className={css.uploadPanel}>
           <div className={css.uploadHeader}>
-            <span>{t('sessions.soundUpload')}</span>
-            <button type="button" className={css.closeBtn} onClick={() => setShowUpload(false)}>×</button>
+            <span>{t('sessions.soundUploadPanel')}</span>
+            <button
+              type="button"
+              className={css.closeBtn}
+              onClick={() => setShowUpload(false)}
+              aria-label={t('sessions.soundClose')}
+            >
+              ×
+            </button>
           </div>
           <div className={css.uploadBody}>
             <input
@@ -220,7 +266,7 @@ export function SoundSettings({ t, lang = 'zh' }: SoundSettingsProps) {
               onChange={handleFileChange}
             />
             <span className={css.uploadHint}>{t('sessions.soundUploadHint')}</span>
-            {uploadStatus && <span className={css.uploadStatus}>{uploadStatus}</span>}
+            {uploadStatus !== '' ? <span className={css.uploadStatus}>{uploadStatus}</span> : null}
           </div>
         </div>
       )}

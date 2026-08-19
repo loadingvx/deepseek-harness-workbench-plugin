@@ -29,7 +29,7 @@ import css from './SideDock.module.css'
 export type { SideTab }
 
 export function SideDock({
-  client, workspaceId, workspaceTitle, workspacePath, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, useSessions, useWorkspaces, openSession, t, devtoolsDock = 'side', onDevtoolsDock,
+  client, workspaceId, workspaceTitle, workspacePath, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, useSessions, useWorkspaces, openSession, t, devtoolsDock = 'side', onDevtoolsDock, showDevtoolsTab = false,
 }: {
   client: GitClient
   workspaceId?: string
@@ -57,6 +57,8 @@ export function SideDock({
   t: Translate
   devtoolsDock?: DevtoolsDock
   onDevtoolsDock?: (dock: DevtoolsDock) => void
+  /** After the user opens DevTools from the browser toolbar, allow the sidebar tab. */
+  showDevtoolsTab?: boolean
 }) {
   const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
   const navReady = useSyncExternalStore(subscribeNavHost, isNavHostReady, () => false)
@@ -66,6 +68,10 @@ export function SideDock({
   useLayoutEffect(() => {
     if (!showUsageTab && tab === 'usage') onTab('files')
   }, [showUsageTab, tab, onTab])
+
+  useLayoutEffect(() => {
+    if (!showDevtoolsTab && tab === 'devtools') onTab('files')
+  }, [showDevtoolsTab, tab, onTab])
 
   return (
     <aside className={css.root} data-git-ide-panel="side">
@@ -92,9 +98,11 @@ export function SideDock({
           </IconButton>
           <TabBadge count={attention > 0 ? attention : runningCount} tone={attention > 0 ? 'attention' : 'running'} />
         </span>
-        <IconButton label={t('ide.devtools')} active={tab === 'devtools'} onClick={() => { onTab('devtools') }}>
-          <IconDevtools />
-        </IconButton>
+        {showDevtoolsTab ? (
+          <IconButton label={t('ide.devtools')} active={tab === 'devtools'} onClick={() => { onTab('devtools') }}>
+            <IconDevtools />
+          </IconButton>
+        ) : null}
         <span className={css.spacer} />
         <IconButton label={t('ide.hideSide')} onClick={onCollapse}>
           <IconPanelOff />

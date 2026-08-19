@@ -219,7 +219,17 @@ function WorkbenchInner(props: WorkbenchProps) {
   const [lastTermId, setLastTermId] = useState(TERMINAL_TAB_ID)
   const [devtoolsDock, setDevtoolsDock] = useState<DevtoolsDock>(() => loadDevtoolsDock())
   const [devtoolsOpen, setDevtoolsOpen] = useState(() => loadDevtoolsOpen())
-  const [bottomTool, setBottomTool] = useState<BottomTool>(() => loadBottomTool())
+  const [bottomTool, setBottomTool] = useState<BottomTool>(() => {
+    const saved = loadBottomTool()
+    return saved === 'devtools' ? 'terminal' : saved
+  })
+
+  // DevTools is session-only: never restore an open panel or sidebar tab from persisted chrome.
+  useEffect(() => {
+    if (getWorkbenchChrome().sideTab === 'devtools') {
+      patchWorkbenchChrome({ sideTab: 'files' })
+    }
+  }, [])
   const changeEditorMode = useCallback((mode: EditorModeId): void => {
     saveEditorMode(mode)
     setEditorMode(mode)
@@ -300,7 +310,7 @@ function WorkbenchInner(props: WorkbenchProps) {
   const pending = (props.useSession?.(state => state.pending)?.length ?? 0) as number
   const split = shouldSplitWorkbench(enabled)
   const termShown = termDock === 'bottom' && termPanelShown
-  const panelOn = bottomChromeVisible(termDock, termPanelShown, { dock: devtoolsDock, open: devtoolsOpen || bottomTool === 'devtools' })
+  const panelOn = bottomChromeVisible(termDock, termPanelShown, { dock: devtoolsDock, open: devtoolsOpen })
   const spanNow = layoutBottomSpan(termDock, bottomSpan, { editor: editorOpen, side: sideOpen })
   const fileTabs = fileTabsOf(tabs)
   const termTabs = termTabsOf(tabs)
@@ -968,6 +978,7 @@ function WorkbenchInner(props: WorkbenchProps) {
           t={t}
           devtoolsDock={devtoolsDock}
           onDevtoolsDock={changeDevtoolsDock}
+          showDevtoolsTab={devtoolsOpen}
         />
       ) : (
         <div className={railCss.rail} data-git-ide-panel="rail-side">
@@ -991,11 +1002,13 @@ function WorkbenchInner(props: WorkbenchProps) {
             </IconButton>
             <TabBadge count={attention > 0 ? attention : runningCount} tone={attention > 0 ? 'attention' : 'running'} />
           </span>
-          <IconButton label={t('ide.devtools')} onClick={() => {
-            changeDevtoolsDock('side')
-          }}>
-            <IconDevtools />
-          </IconButton>
+          {devtoolsOpen ? (
+            <IconButton label={t('ide.devtools')} onClick={() => {
+              changeDevtoolsDock('side')
+            }}>
+              <IconDevtools />
+            </IconButton>
+          ) : null}
         </div>
       )}
       <UsageNavPortal
@@ -1008,7 +1021,7 @@ function WorkbenchInner(props: WorkbenchProps) {
       <div data-git-ide-panel="bottom">
         {panelOn ? (
           <div data-git-ide-panel="bottom-tools">
-            {termShown || (devtoolsDock === 'bottom' && (devtoolsOpen || bottomTool === 'devtools')) ? (
+            {termShown || (devtoolsDock === 'bottom' && devtoolsOpen) ? (
           <TerminalPanel
             client={client}
             workspaceId={workspaceId}
@@ -1037,7 +1050,7 @@ function WorkbenchInner(props: WorkbenchProps) {
               <DevToolsPanel dock="bottom" onDock={changeDevtoolsDock} t={t} />
             )}
             devtoolsActive={bottomTool === 'devtools'}
-            onActivateDevtools={() => { changeDevtoolsDock('bottom') }}
+            onActivateDevtools={devtoolsOpen ? () => { changeDevtoolsDock('bottom') } : undefined}
           />
             ) : null}
           </div>
