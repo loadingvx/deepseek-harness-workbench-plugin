@@ -30,6 +30,12 @@ describe('term ref codec', () => {
     expect(serializeTermRefRef('garbage')).toContain('已过期')
   })
 
+  it('prepends the shell context when present', () => {
+    const built = buildTermReference({ text: 'ls: cannot access x', context: 'pwd: /root/app · shell: bash' })
+    expect(built?.label).toBe('ls: cannot access x')
+    expect(serializeTermRefRef(built!.ref)).toBe('【终端内容】pwd: /root/app · shell: bash\n---\nls: cannot access x')
+  })
+
   it('builds a reference with a compact first-line label', () => {
     const built = buildTermReference({ text: 'npm test\n  ✓ 70 files' })
     expect(built?.source).toBe(TERM_REF_SOURCE)

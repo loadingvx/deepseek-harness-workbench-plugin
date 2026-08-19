@@ -71,4 +71,29 @@ describe('buildCurlCommand', () => {
     expect(buildCurlCommand('GET', 'https://a.com/x"y', 'windows')).toBe('curl.exe "https://a.com/x""y"')
     expect(buildCurlCommand('GET', 'https://a.com/%25', 'windows')).toBe('curl.exe "https://a.com/%%25"')
   })
+
+  it('emits headers and body when present', () => {
+    const extra = {
+      headers: [['Content-Type', 'application/json'], [':authority', 'skip'], ['Authorization', 'Bearer abc']] as Array<[string, string]>,
+      postData: '{"a":1}',
+    }
+    expect(buildCurlCommand('POST', 'https://a.com/api', 'linux', extra)).toBe(
+      "curl -X POST 'https://a.com/api' -H 'Content-Type: application/json' -H 'Authorization: Bearer abc' --data-raw '{\"a\":1}'",
+    )
+    // Windows cmd: embedded quotes inside a double-quoted argument are doubled.
+    expect(buildCurlCommand('POST', 'https://a.com/api', 'windows', extra)).toBe(
+      'curl.exe -X POST "https://a.com/api" -H "Content-Type: application/json" -H "Authorization: Bearer abc" --data-raw "{""a"":1}"'.replace('{ ""a"":1}', '{ ""a"":1}'),
+    )
+    // cmd escaping: JSON body quotes double up inside the double-quoted argument.
+    expect(buildCurlCommand('POST', 'https://a.com/api', 'windows', { headers: [], postData: '{"a":1}' })).toBe(
+      'curl.exe -X POST "https://a.com/api" --data-raw "{""a"":1}"'.replace('{ ""a"":1}', '{ ""a"":1}'),
+    )
+  })
+
+  it('serializes the full curl with the source page route comment', () => {
+    expect(serializeNetRef({ method: 'POST', url: 'https://a.com/api', postData: 'x=1', pageUrl: 'https://a.com/form' })).toBe(
+      "curl -X POST 'https://a.com/api' --data-raw 'x=1'\n# 来源页面: https://a.com/form",
+    )
+    expect(serializeNetRef({ method: 'GET', url: 'https://a.com/x' })).toBe("curl 'https://a.com/x'")
+  })
 })

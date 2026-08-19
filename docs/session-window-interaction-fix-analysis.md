@@ -88,3 +88,42 @@ React 重渲染后按钮 onClick 闭包里的 `selection` 已是 null → 点击
 - 凡在客户端访问 `ctx.sessions` / `ctx.scope`，必须确认 `inject` 数组包含 `'sessions'`；
 - 涉及「写入会话输入框」的功能，验收标准应包含一次真实运行时的端到端冒烟（无头 drop 测试）；
 - 相关机制备忘已沉淀为 skill：`.cursor/skills/session-window-interaction/SKILL.md`。
+## 7. 追加：胶囊内容富化（第二轮反馈）
+
+功能恢复后，按反馈把各胶囊的「模型可见内容」做厚，让 agent 拿到即能定位问题：
+
+### 7.1 DevTools 网络请求 → 完整 curl
+
+- 注入脚本（`browser-inspect-script.ts`）的 XHR/fetch 钩子新增采集：
+  - XHR：包装 `setRequestHeader` 记录请求头、`send` 记录 body；
+  - fetch：读 `init.headers`（Headers / 数组 / 对象）与 `init.body`（字符串/Blob/FormData 等，best-effort 转文本）；
+  - 每个 net entry 附带 `requestHeaders`（≤20 条）、`postData`（≤2000 字符）、`pageUrl`（来源页面地址栏 URL）；
+- 归一化（`browser-devtools.ts`）：头值经 `redactSecrets` 脱敏 + 截断（值 ≤300），body 脱敏 + 截断，丢弃 `:method` 等伪头；
+- `buildCurlCommand` 增补 `-H 'Name: value'` 与 `--data-raw '...'`（Windows 用 cmd 引号规则，内嵌双引号翻倍）；
+- `serializeNetRef` 输出完整 curl，另加 `# 来源页面: <pageUrl>` 注释；
+- 右键「复制为 curl（Linux/Windows）」与「添加到会话」、拖拽载荷全部走同一完整 snapshot；
+  拖拽读取端必须用 shared `normalizeNetRefSnapshot`，不能手写只读 method/url 的简化版（否则 headers/body 丢失）。
+
+### 7.2 终端内容 → 附 pwd/shell 上下文
+
+- `TermRefSnapshot` 增加 `context`（`pwd: … · shell: …`），由 TerminalView 的 `cwd`/`shell` 状态实时拼装；
+- `serializeTermRef` 输出 `【终端内容】pwd: … · shell: …` + 分隔线 + 原文。
+
+### 7.3 浏览器元素 → 地址栏URL / 路由前置
+
+- `serializeBrowserEl` 把「地址栏URL」「路由」（path+search）提到最前，帮 agent 对齐前端路由与源码文件；
+- 胶囊标签改为 `tag#id` / `tag.class`（DevTools 风格），不再只有裸 `a`/`div`。
+
+### 7.4 终端按钮体验
+
+- hover 不再换背景（深色终端上背景突变像按钮消失），改为 `filter: brightness(1.06)` 微调；
+- 按钮整体改为中性设计系统按钮（border-l2 + bg-base + label-primary，参考 Git 页 dialogCancel），不再是亮色胶囊。
+
+## 8. 相关文件索引
+
+- 注入脚本：`src/shared/browser-inspect-script.ts`
+- 网络条目类型/归一化：`src/shared/browser-devtools.ts`
+- 网络胶囊 + curl 构造：`src/shared/browser-net-ref.ts`、`src/client/workbench/net-ref-client.ts`
+- 终端胶囊：`src/shared/term-ref.ts`、`src/client/workbench/term-ref-client.ts`
+- 浏览器元素胶囊：`src/shared/browser-el.ts`
+- 交互接线：`src/client/workbench/Workbench.tsx`、`DevToolsPanel.tsx`、`TerminalView.tsx`

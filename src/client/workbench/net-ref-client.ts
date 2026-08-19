@@ -11,6 +11,7 @@ import {
   NET_REF_TRIGGER,
   buildNetReference,
   clipboardNetRef,
+  normalizeNetRefSnapshot,
   serializeNetRefRef,
   type NetRefOccurrence,
   type NetRefSnapshot,
@@ -295,7 +296,7 @@ export function readDragNetRef(dt: DataTransfer | null): NetRefSnapshot | null {
   const raw = dt.getData(NET_REF_DRAG_TYPE)
   if (raw === '') return null
   try {
-    return normalizeDragNetRef(JSON.parse(raw) as unknown)
+    return normalizeNetRefSnapshot(JSON.parse(raw) as unknown)
   } catch {
     return null
   }
@@ -303,13 +304,4 @@ export function readDragNetRef(dt: DataTransfer | null): NetRefSnapshot | null {
 
 export function dragCarriesNetRef(dt: DataTransfer | null): boolean {
   return dt !== null && dt.types.includes(NET_REF_DRAG_TYPE)
-}
-
-function normalizeDragNetRef(raw: unknown): NetRefSnapshot | null {
-  if (raw === null || typeof raw !== 'object') return null
-  const rec = raw as Record<string, unknown>
-  const url = String(rec.url ?? '').trim()
-  if (url === '') return null
-  const method = String(rec.method ?? 'GET').trim().toUpperCase()
-  return { method: /^[A-Z]{1,12}$/.test(method) ? method : 'GET', url: url.slice(0, 1500) }
 }
