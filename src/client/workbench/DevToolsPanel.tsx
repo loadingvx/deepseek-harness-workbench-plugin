@@ -114,6 +114,7 @@ function NetworkPane({
   activeId,
   rows,
   t,
+  pageUrl = '',
   onAddNetToChat,
   onAddTextToChat,
 }: {
@@ -121,6 +122,8 @@ function NetworkPane({
   activeId: string | null
   rows: BrowserNetEntry[]
   t: Translate
+  /** Address-bar URL of the inspected page (route context for chat payloads). */
+  pageUrl?: string
   onAddNetToChat?: (snapshot: NetRefSnapshot) => boolean
   onAddTextToChat?: (text: string) => boolean
 }) {
@@ -156,9 +159,17 @@ function NetworkPane({
     showToast(okLabel)
   }
 
+  const snapshotOf = (row: BrowserNetEntry): NetRefSnapshot => ({
+    method: row.method,
+    url: row.url,
+    ...(row.requestHeaders !== undefined ? { headers: row.requestHeaders } : {}),
+    ...(row.postData !== undefined ? { postData: row.postData } : {}),
+    ...(row.pageUrl !== undefined && row.pageUrl !== '' ? { pageUrl: row.pageUrl } : pageUrl !== '' ? { pageUrl } : {}),
+  })
+
   const copyCurl = async (row: BrowserNetEntry, target: CurlTarget): Promise<void> => {
     await copyText(
-      buildCurlCommand(row.method, row.url, target),
+      buildCurlCommand(row.method, row.url, target, snapshotOf(row)),
       target === 'windows' ? t('browser.info.netCopyCurlWindowsDone') : t('browser.info.netCopyCurlLinuxDone'),
     )
   }
@@ -172,12 +183,12 @@ function NetworkPane({
 
   const addToChat = (row: BrowserNetEntry): void => {
     if (onAddNetToChat !== undefined) {
-      const ok = onAddNetToChat({ method: row.method, url: row.url })
+      const ok = onAddNetToChat(snapshotOf(row))
       if (!ok) showToast(t('browser.info.netAddToChatFailed'))
       return
     }
     if (onAddTextToChat !== undefined) {
-      const ok = onAddTextToChat(buildCurlCommand(row.method, row.url, 'linux'))
+      const ok = onAddTextToChat(buildCurlCommand(row.method, row.url, 'linux', snapshotOf(row)))
       if (!ok) showToast(t('browser.info.netAddToChatFailed'))
       return
     }
@@ -270,8 +281,8 @@ function NetworkPane({
                     onClick={() => { setSelectedId(row.id) }}
                     onContextMenu={(event) => { openCtxMenu(event, row) }}
                     onDragStart={(event) => {
-                      event.dataTransfer.setData(NET_REF_DRAG_TYPE, JSON.stringify({ method: row.method, url: row.url }))
-                      event.dataTransfer.setData('text/plain', row.url)
+                      event.dataTransfer.setData(NET_REF_DRAG_TYPE, JSON.stringify(snapshotOf(row)))
+                      event.dataTransfer.setData('text/plain', buildCurlCommand(row.method, row.url, 'linux', snapshotOf(row)))
                       event.dataTransfer.effectAllowed = 'copy'
                     }}
                   >
@@ -668,6 +679,7 @@ export function DevToolsPanel({
           activeId={activeId}
           rows={network}
           t={t}
+          pageUrl={page?.url || state.committed}
           onAddNetToChat={onAddNetToChat}
           onAddTextToChat={onAddTextToChat}
         />

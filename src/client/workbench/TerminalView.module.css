@@ -103,8 +103,10 @@
   white-space: nowrap;
 }
 
+/* Hover keeps the same look on purpose: a background swap on the dark
+   terminal read as "the button vanished". Only a subtle brightness lift. */
 .selChatBtn:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  filter: brightness(1.06);
 }
 
 .copyFlash {

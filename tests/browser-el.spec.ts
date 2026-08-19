@@ -32,11 +32,13 @@ function snap(over: Partial<BrowserElSnapshot> = {}): BrowserElSnapshot {
 }
 
 describe('browser element chips', () => {
-  it('shows only the outer tag on the chip', () => {
-    expect(browserElChipLabel('DIV', [])).toBe('div')
-    expect(browserElChipLabel('span', [{ label: 'span' }])).toBe('span · 2')
-    expect(buildBrowserElReference(snap())?.label).toBe('div')
-    expect(buildBrowserElReference(snap(), [{ label: 'div' }])?.label).toBe('div · 2')
+  it('labels the tag with an id/class hint on the chip', () => {
+    expect(browserElChipLabel('DIV', '', '', [])).toBe('div')
+    expect(browserElChipLabel('DIV', 'hero', 'hero card', [])).toBe('div#hero')
+    expect(browserElChipLabel('a', '', 'nav-link', [])).toBe('a.nav-link')
+    expect(browserElChipLabel('span', '', '', [{ label: 'span' }])).toBe('span · 2')
+    expect(buildBrowserElReference(snap())?.label).toBe('div#hero')
+    expect(buildBrowserElReference(snap(), [{ label: 'div#hero' }])?.label).toBe('div#hero · 2')
     expect(buildBrowserElReference(snap())?.source).toBe(BROWSER_EL_SOURCE)
   })
 
@@ -48,6 +50,8 @@ describe('browser element chips', () => {
     expect(text).toContain('XPath: /html[1]/body[1]/section[1]')
     expect(text).toContain('JSPath: document.querySelector("#hero")')
     expect(text).toContain('【浏览器元素】')
+    expect(text).toContain('地址栏URL: https://example.com/app')
+    expect(text).toContain('路由: /app')
     const built = buildBrowserElReference(packed)!
     expect(serializeBrowserElRef(built.ref)).toContain(html)
     expect(parseBrowserEl(built.ref)?.html).toBe(html)

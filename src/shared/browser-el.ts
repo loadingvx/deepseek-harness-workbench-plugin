@@ -49,9 +49,17 @@ export function normalizeBrowserElTag(tag: string): string {
   return lower
 }
 
-/** Chip label: the outer tag only (`div`, `span`). Duplicates become `div · 2`. */
-export function browserElChipLabel(tag: string, existing: ReadonlyArray<BrowserElOccurrence>): string {
-  const name = normalizeBrowserElTag(tag)
+/** Distinguishing suffix for the chip label: `div#id` / `div.class` (like DevTools inspectors). */
+export function browserElLabelHint(id: string, className: string): string {
+  const i = String(id ?? '').trim()
+  if (i !== '') return '#' + i
+  const c = String(className ?? '').trim().split(/\s+/)[0] ?? ''
+  return c === '' ? '' : '.' + c
+}
+
+/** Chip label: the outer tag with an id/class hint (`a#nav`, `div.card`). Duplicates become `div · 2`. */
+export function browserElChipLabel(tag: string, id: string, className: string, existing: ReadonlyArray<BrowserElOccurrence>): string {
+  const name = normalizeBrowserElTag(tag) + browserElLabelHint(id, className)
   const taken = new Set(
     existing
       .filter(row => typeof row.label === 'string' && row.label !== '')
@@ -119,6 +127,16 @@ function line(label: string, value: string): string | null {
   return `${label}: ${redactSecrets(text)}`
 }
 
+/** The address-bar route (path + search) of the page — lets the agent align with source routes. */
+export function browserElRouteOf(url: string): string {
+  try {
+    const u = new URL(String(url ?? ''))
+    return u.pathname + u.search
+  } catch {
+    return ''
+  }
+}
+
 /**
  * Model form. HTML is always present so the agent can see the original markup.
  */
@@ -128,7 +146,8 @@ export function serializeBrowserEl(snapshot: BrowserElSnapshot): string {
   const truncated = snapshot.htmlTruncated || clipped.htmlTruncated
   const rows = [
     '【浏览器元素】',
-    line('页面', snapshot.url),
+    line('地址栏URL', snapshot.url),
+    line('路由', browserElRouteOf(snapshot.url)),
     line('标题', snapshot.title),
     `标签: ${snapshot.tag}`,
     line('id', snapshot.id),
@@ -174,7 +193,7 @@ export function buildBrowserElReference(
   return {
     source: BROWSER_EL_SOURCE,
     ref,
-    label: browserElChipLabel(normalized.tag, existing),
+    label: browserElChipLabel(normalized.tag, normalized.id, normalized.className, existing),
     clipboardText: clipboardBrowserEl(ref),
   }
 }

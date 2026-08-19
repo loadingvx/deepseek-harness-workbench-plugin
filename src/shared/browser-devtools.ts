@@ -34,6 +34,12 @@ export interface BrowserNetEntry {
   pending: boolean
   failed: boolean
   startAt: number
+  /** Request headers captured by the injected net hooks (name/value pairs, redacted + capped). */
+  requestHeaders?: Array<[string, string]>
+  /** Request body captured by the injected net hooks (best-effort, redacted + capped). */
+  postData?: string
+  /** The page route (address-bar URL) the request originated from. */
+  pageUrl?: string
 }
 
 export interface BrowserStoreRow {
@@ -172,7 +178,35 @@ export function normalizeNetEntry(raw: unknown): BrowserNetEntry | null {
     pending: row.pending === true,
     failed: row.failed === true,
     startAt: Math.max(0, finiteNumber(row.startAt, Date.now())),
+    requestHeaders: normalizeNetHeaders(row.requestHeaders),
+    postData: normalizeNetPostData(row.postData),
+    pageUrl: clipUrl(String(row.pageUrl ?? '')).trim() === '' ? undefined : clipUrl(String(row.pageUrl ?? '')),
   }
+}
+
+const NET_HEADER_MAX = 20
+const NET_HEADER_VALUE_MAX = 300
+const NET_POST_MAX = 2000
+
+function normalizeNetHeaders(raw: unknown): Array<[string, string]> | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const out: Array<[string, string]> = []
+  for (const item of raw) {
+    if (!Array.isArray(item) || item.length < 2) continue
+    const name = String(item[0] ?? '').trim()
+    const value = String(item[1] ?? '')
+    if (name === '' || name.startsWith(':')) continue
+    const clipped = clip(redactSecrets(value), NET_HEADER_VALUE_MAX).text
+    out.push([clip(name, 64).text, clipped])
+    if (out.length >= NET_HEADER_MAX) break
+  }
+  return out.length === 0 ? undefined : out
+}
+
+function normalizeNetPostData(raw: unknown): string | undefined {
+  const text = String(raw ?? '')
+  if (text === '') return undefined
+  return redactSecrets(clip(text, NET_POST_MAX).text)
 }
 
 export function normalizeNetEntries(raw: unknown): BrowserNetEntry[] {

@@ -742,8 +742,8 @@ function WorkbenchInner(props: WorkbenchProps) {
     }, t)
   }, [netRefs, inputOccurrences, t])
 
-  /** 终端选中内容 / 最近输出 → 官方胶囊（与文件、网络请求同一机制）。 */
-  const sendTermToChat = useCallback((text: string): boolean => {
+  /** 终端选中内容 / 最近输出 → 官方胶囊（与文件、网络请求同一机制），附 pwd/shell 上下文。 */
+  const sendTermToChat = useCallback((text: string, context?: string): boolean => {
     if (termRefs === undefined) return false
     const live = fileRefDropRef.current
     if (live.sessionId === undefined) return false
@@ -753,7 +753,7 @@ function WorkbenchInner(props: WorkbenchProps) {
       : { start: live.draftLength, end: live.draftLength }
     return termRefs.insertChip({
       sessionId: live.sessionId,
-      snapshot: { text },
+      snapshot: context !== undefined && context !== '' ? { text, context } : { text },
       span: { start: range.start, end: range.end, draftRev: live.draftRev },
       existing: termRefExisting(inputOccurrences),
       phase: live.phase,

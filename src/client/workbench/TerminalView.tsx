@@ -35,7 +35,7 @@ export function TerminalView({
   /** Ctrl+D / `exit` 0: close this tab or hide the panel; do not paint an error. */
   onCleanExit?: () => TermCleanExitAction
   /** 终端选中内容 / 最近输出 → 原生会话胶囊。 */
-  onAddTermToChat?: (text: string) => boolean
+  onAddTermToChat?: (text: string, context?: string) => boolean
 }) {
   const [cwd, setCwd] = useState('')
   const [shell, setShell] = useState('')
@@ -382,10 +382,18 @@ export function TerminalView({
     return selection?.text ?? ''
   }
 
+  /** Shell context attached to chat capsules so the agent can debug the exact environment. */
+  const termContext = (): string => {
+    const bits: string[] = []
+    if (cwd !== '') bits.push(`pwd: ${cwd}`)
+    if (shell !== '') bits.push(`shell: ${shell}`)
+    return bits.join(' · ')
+  }
+
   const addSelectionToChat = (): void => {
     const text = currentSelectionText()
     if (text === '') return
-    const ok = onAddTermToChatRef.current?.(text)
+    const ok = onAddTermToChatRef.current?.(text, termContext())
     if (ok) flash(t('term.menu.addedToChat'))
     termRef.current?.clearSelection()
     setSelection(null)
@@ -394,7 +402,7 @@ export function TerminalView({
   const addOutputToChat = (): void => {
     const text = readTranscript()
     if (text === '') return
-    const ok = onAddTermToChatRef.current?.(text)
+    const ok = onAddTermToChatRef.current?.(text, termContext())
     if (ok) flash(t('term.menu.addedToChat'))
   }
 

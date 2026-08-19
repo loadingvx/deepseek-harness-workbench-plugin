@@ -13,6 +13,12 @@ export const NET_REF_DRAG_TYPE = 'application/x-dsh-net-ref'
 export interface NetRefSnapshot {
   readonly method: string
   readonly url: string
+  /** Request headers (name/value pairs) captured by the net hooks. */
+  readonly headers?: ReadonlyArray<readonly [string, string]>
+  /** Request body captured by the net hooks (best-effort). */
+  readonly postData?: string
+  /** The page route (address-bar URL) the request originated from. */
+  readonly pageUrl?: string
 }
 
 export interface NetRefOccurrence {
@@ -38,7 +44,36 @@ export function normalizeNetRefSnapshot(raw: unknown): NetRefSnapshot | null {
   const rec = raw as Record<string, unknown>
   const url = clipNetRefUrl(String(rec.url ?? ''))
   if (url === '') return null
-  return { method: normalizeNetRefMethod(String(rec.method ?? 'GET')), url }
+  const headers = normalizeNetRefHeaders(rec.headers)
+  const postData = normalizeNetRefPostData(rec.postData)
+  const pageUrl = clipNetRefUrl(String(rec.pageUrl ?? ''))
+  return {
+    method: normalizeNetRefMethod(String(rec.method ?? 'GET')),
+    url,
+    ...(headers !== undefined ? { headers } : {}),
+    ...(postData !== undefined ? { postData } : {}),
+    ...(pageUrl !== '' ? { pageUrl } : {}),
+  }
+}
+
+function normalizeNetRefHeaders(raw: unknown): Array<[string, string]> | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const out: Array<[string, string]> = []
+  for (const item of raw) {
+    if (!Array.isArray(item) || item.length < 2) continue
+    const name = String(item[0] ?? '').trim()
+    const value = String(item[1] ?? '')
+    if (name === '' || name.startsWith(':')) continue
+    out.push([name.slice(0, 64), value.slice(0, 300)])
+    if (out.length >= 20) break
+  }
+  return out.length === 0 ? undefined : out
+}
+
+function normalizeNetRefPostData(raw: unknown): string | undefined {
+  const text = String(raw ?? '')
+  if (text === '') return undefined
+  return text.slice(0, 2000)
 }
 
 /** Short human label: the Linux-style curl command, clamped. */
@@ -78,9 +113,14 @@ export function parseNetRef(ref: string): NetRefSnapshot | null {
   }
 }
 
-/** Model form: the Linux-style curl command. */
+/** Model form: the full Linux-style curl command, with the source page route as a shell comment. */
 export function serializeNetRef(snapshot: NetRefSnapshot): string {
-  return buildCurlCommand(snapshot.method, snapshot.url, 'linux')
+  const curl = buildCurlCommand(snapshot.method, snapshot.url, 'linux', snapshot)
+  const page = clipNetRefUrl(String(snapshot.pageUrl ?? ''))
+  if (page !== '' && page !== snapshot.url) {
+    return `${curl}\n# 来源页面: ${page}`
+  }
+  return curl
 }
 
 export function serializeNetRefRef(ref: string): string {
@@ -124,15 +164,32 @@ function cmdQuote(value: string): string {
 }
 
 /**
- * Copy-as-curl. Only method + url are recorded by the net hooks, so the
- * command is minimal (no headers/body). Linux uses single quotes; Windows
- * uses the cmd.exe quoting rules and the `curl.exe` binary name.
+ * Copy-as-curl. Linux uses single quotes; Windows uses the cmd.exe quoting
+ * rules and the `curl.exe` binary name. When headers / a body are present
+ * they are emitted as `-H 'Name: value'` / `--data-raw '...'`.
  */
-export function buildCurlCommand(method: string, url: string, target: CurlTarget): string {
+export function buildCurlCommand(
+  method: string,
+  url: string,
+  target: CurlTarget,
+  extra?: Pick<NetRefSnapshot, 'headers' | 'postData'>,
+): string {
   const m = normalizeNetRefMethod(method)
   const u = clipNetRefUrl(url)
   const curl = target === 'windows' ? 'curl.exe' : 'curl'
-  const quoted = target === 'windows' ? cmdQuote(u) : shQuote(u)
-  const flag = m === 'GET' ? '' : ` -X ${m}`
-  return `${curl}${flag} ${quoted}`
+  const quote = target === 'windows' ? cmdQuote : shQuote
+  const headers = extra?.headers ?? []
+  const postData = extra?.postData
+  const hasBody = postData !== undefined && postData !== ''
+  const parts: string[] = []
+  parts.push(`${curl}${m === 'GET' && !hasBody ? '' : ` -X ${m}`}`)
+  parts.push(quote(u))
+  for (const pair of headers) {
+    const name = String(pair[0] ?? '').trim()
+    if (name === '' || name.startsWith(':')) continue
+    const value = String(pair[1] ?? '')
+    parts.push(`-H ${quote(`${name}: ${value}`)}`)
+  }
+  if (hasBody) parts.push(`--data-raw ${quote(postData)}`)
+  return parts.join(' ')
 }

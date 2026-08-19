@@ -51,8 +51,8 @@ export function TerminalPanel({
   onResizeReset: () => void
   onCleanExit?: (tabId: string) => TermCleanExitAction
   t: Translate
-  /** 终端选中内容 / 输出 → 原生会话胶囊。 */
-  onAddTermToChat?: (text: string) => boolean
+  /** 终端选中内容 / 输出 → 原生会话胶囊（带 pwd/shell 上下文）。 */
+  onAddTermToChat?: (text: string, context?: string) => boolean
   devtools?: ReactNode
   devtoolsActive?: boolean
   onActivateDevtools?: () => void

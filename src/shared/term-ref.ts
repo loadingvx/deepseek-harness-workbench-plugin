@@ -9,6 +9,8 @@ export const TERM_REF_TRIGGER = '@' as const
 
 export interface TermRefSnapshot {
   readonly text: string
+  /** Shell context (pwd / shell) captured when the content was added to chat. */
+  readonly context?: string
 }
 
 export interface TermRefOccurrence {
@@ -30,7 +32,8 @@ export function normalizeTermRefSnapshot(raw: unknown): TermRefSnapshot | null {
   const rec = raw as Record<string, unknown>
   const text = clipTermRefText(String(rec.text ?? '')).trim()
   if (text === '') return null
-  return { text }
+  const context = clipTermRefText(String(rec.context ?? '')).trim()
+  return context === '' ? { text } : { text, context }
 }
 
 /** Short human label: first line, whitespace compacted, clamped. */
@@ -71,9 +74,10 @@ export function parseTermRef(ref: string): TermRefSnapshot | null {
   }
 }
 
-/** Model form: the raw selected terminal text. */
 export function serializeTermRef(snapshot: TermRefSnapshot): string {
-  return snapshot.text
+  const ctx = String(snapshot.context ?? '').trim()
+  if (ctx === '') return snapshot.text
+  return `【终端内容】${ctx}\n---\n${snapshot.text}`
 }
 
 export function serializeTermRefRef(ref: string): string {
