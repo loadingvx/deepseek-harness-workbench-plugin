@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
-import * as ReactNs from 'react'
+import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ErrorInfo, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { BrowserElSnapshot } from '../../shared/browser-el.ts'
+import { redactSecrets } from '../../shared/redact.ts'
 import type { GitFail } from '../../shared/types.ts'
 import {
   defaultWorkbenchChrome,
@@ -33,22 +34,36 @@ import {
   TERM_DEFAULT_H,
   TERM_H_KEY,
   TERM_HEADER_H,
-  termPanelVisible,
   termTabsOf,
   visibleTermId,
   type BottomSpan,
   type TermDock,
 } from './bottom-layout.ts'
 import { EditorPane } from './EditorPane.tsx'
+import {
+  bottomChromeVisible,
+  loadDevtoolsDock,
+  loadDevtoolsOpen,
+  saveDevtoolsDock,
+  saveDevtoolsOpen,
+  type DevtoolsDock,
+} from './browser-dock.ts'
+import {
+  dropBrowserTab,
+  ensureBrowserTab,
+  setActiveBrowserId,
+} from './browser-session.ts'
+import { browserElExisting } from './browser-el-client.ts'
+import { DevToolsPanel } from './DevToolsPanel.tsx'
 import { loadEditorMode, saveEditorMode, type EditorModeId } from './editor-mode.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconChat, IconEditor, IconFiles, IconGit, IconLayout, IconSlash, IconUsage } from './icons.tsx'
+import { IconChat, IconDevtools, IconEditor, IconFiles, IconGit, IconGlobe, IconLayout, IconSlash, IconUsage } from './icons.tsx'
 import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
 import { SideDock } from './SideDock.tsx'
 import { termIdFromTabId } from '../../shared/new-file-path.ts'
 import type { TermCleanExitAction } from './term-session.ts'
-import { createTerminalTab, nextTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type WorkbenchInjected } from './types.ts'
+import { createTerminalTab, nextBrowserTab, nextTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type Translate, type WorkbenchInjected } from './types.ts'
 import { previewKindOfPath } from '../../shared/preview-kind.ts'
 import { isTermAssistHotkey, isTermNewTabHotkey } from '../../shared/term-assist.ts'
 import { StatusBar } from './StatusBar.tsx'
@@ -100,64 +115,42 @@ function findConversationColumn(): HTMLElement | null {
   return root instanceof HTMLElement ? root : null
 }
 
-let __wbRenderCount = 0
-let __wbActiveId = 0
-function __wbHookKinds(fiber: unknown): string[] {
-  const kind = (h: unknown): string => {
-    const ms = (h as { memoizedState?: unknown } | null)?.memoizedState
-    if (ms !== null && typeof ms === 'object' && ms !== undefined && 'deps' in (ms as object)) return 'effect'
-    if (ms !== null && typeof ms === 'object' && ms !== undefined && 'queue' in (ms as object)) return 'state'
-    return ms === undefined ? 'undef' : ms === null ? 'null' : typeof ms
+class WorkbenchGate extends Component<{ children: ReactNode; t: Translate }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null }
+
+  static getDerivedStateFromError(error: Error): { error: Error } {
+    return { error }
   }
-  const out: string[] = []
-  let h = fiber as { next?: unknown } | null
-  let i = 0
-  while (h && i < 80) {
-    out.push(`${i}:${kind(h)}`)
-    h = h.next as { next?: unknown } | null
-    i++
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error('[workbench]', error.message, info.componentStack)
   }
-  return out
-}
-function __wbDump(tag: string, fiber: unknown): string {
-  try {
-    const f = fiber as { memoizedState?: unknown; alternate?: { memoizedState?: unknown } }
-    const wip = __wbHookKinds(f.memoizedState)
-    const cur = f.alternate ? __wbHookKinds(f.alternate.memoizedState) : []
-    const max = Math.max(wip.length, cur.length)
-    const diffs: string[] = []
-    for (let i = 0; i < max; i++) {
-      const a = wip[i] ?? '(none)'
-      const b = cur[i] ?? '(none)'
-      if (a.split(':')[1] !== b.split(':')[1]) diffs.push(`${i} wip=${a} cur=${b}`)
+
+  render(): ReactNode {
+    if (this.state.error !== null) {
+      const detail = redactSecrets(this.state.error.message).trim()
+      return (
+        <div className={css.crash} data-git-ide-panel="crash" role="alert">
+          <p className={css.crashTitle}>{this.props.t('ide.crash')}</p>
+          {detail !== '' ? <p className={css.crashDetail}>{this.props.t('ide.crashReason', { detail })}</p> : null}
+          <p className={css.crashHint}>{this.props.t('ide.crashHint')}</p>
+        </div>
+      )
     }
-    return `[FIBER]${tag} wip=${wip.length} cur=${cur.length} diffs=[${diffs.join(' | ')}] wip=${wip.join(',')} cur=${cur.join(',')}`
-  } catch (e) {
-    return `[FIBER]${tag} dump failed: ${String(e)}`
+    return this.props.children
   }
 }
 
 /** Header toggle + portal: native chat stays left; editor and files/git split to the right. */
 export function Workbench(props: WorkbenchProps) {
-  __wbRenderCount += 1
-  __wbActiveId += 1
-  const renderId = __wbActiveId
-  console.log('[WB-DEBUG] render', renderId, __wbRenderCount, { useSessionType: typeof props.useSession })
-  try {
-    const mount = props.mount ?? 'toggle'
-    if (workbenchShowsToggle(mount)) return <WorkbenchToggle t={props.t} />
-    if (!workbenchOwnsPortal(mount)) return null
-    return <WorkbenchInner {...props} />
-  } catch (error) {
-    let dump = ''
-    try {
-      const ns = ReactNs as unknown as { __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED?: { ReactCurrentOwner?: { current?: unknown } } }
-      const owner = ns.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED?.ReactCurrentOwner?.current
-      if (owner !== undefined) dump = __wbDump('CRASH', owner)
-    } catch { /* ignore */ }
-    console.error('[WB-CATCH]', renderId, __wbRenderCount, String(error), dump)
-    throw error
-  }
+  const mount = props.mount ?? 'toggle'
+  if (workbenchShowsToggle(mount)) return <WorkbenchToggle t={props.t} />
+  if (!workbenchOwnsPortal(mount)) return null
+  return (
+    <WorkbenchGate t={props.t}>
+      <WorkbenchInner {...props} />
+    </WorkbenchGate>
+  )
 }
 
 function WorkbenchToggle({ t }: Pick<WorkbenchProps, 't'>) {
@@ -186,7 +179,7 @@ function WorkbenchToggle({ t }: Pick<WorkbenchProps, 't'>) {
 }
 
 function WorkbenchInner(props: WorkbenchProps) {
-  const { client, t, useSessions, useWorkspaces, sessionId, fileRefs } = props
+  const { client, t, useSessions, useWorkspaces, sessionId, fileRefs, browserEls } = props
   const chrome = useSyncExternalStore(subscribeWorkbenchChrome, getWorkbenchChrome, defaultWorkbenchChrome)
   const { enabled, chatOpen, editorOpen, sideOpen, sideTab } = chrome
   const usageDock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
@@ -218,6 +211,8 @@ function WorkbenchInner(props: WorkbenchProps) {
   const [termPanelShown, setTermPanelShown] = useState(true)
   const [lastFileId, setLastFileId] = useState<string | null>(null)
   const [lastTermId, setLastTermId] = useState(TERMINAL_TAB_ID)
+  const [devtoolsDock, setDevtoolsDock] = useState<DevtoolsDock>(() => loadDevtoolsDock())
+  const [devtoolsOpen, setDevtoolsOpen] = useState(() => loadDevtoolsOpen())
   const changeEditorMode = useCallback((mode: EditorModeId): void => {
     saveEditorMode(mode)
     setEditorMode(mode)
@@ -277,10 +272,13 @@ function WorkbenchInner(props: WorkbenchProps) {
     existing: fileRefExisting(inputOccurrences),
   }
   fileRefs?.rememberOccurrences(sessionId, fileRefDropRef.current.existing)
+  browserEls?.rememberOccurrences(sessionId, browserElExisting(inputOccurrences))
   const running = Boolean(props.useSession?.(state => state.running))
   const pending = (props.useSession?.(state => state.pending)?.length ?? 0) as number
   const split = shouldSplitWorkbench(enabled)
-  const panelOn = termPanelVisible(termDock) && termPanelShown
+  const termShown = termDock === 'bottom' && termPanelShown
+  const panelOn = bottomChromeVisible(termDock, termPanelShown, { dock: devtoolsDock, open: devtoolsOpen })
+  const devtoolsBottom = devtoolsDock === 'bottom' && devtoolsOpen
   const spanNow = layoutBottomSpan(termDock, bottomSpan, { editor: editorOpen, side: sideOpen })
   const fileTabs = fileTabsOf(tabs)
   const termTabs = termTabsOf(tabs)
@@ -295,6 +293,7 @@ function WorkbenchInner(props: WorkbenchProps) {
     if (tab === undefined) return
     if (tab.kind === 'terminal') setLastTermId(tab.id)
     else setLastFileId(tab.id)
+    if (tab.kind === 'browser') setActiveBrowserId(tab.id)
   }, [activeId, tabs])
 
   useEffect(() => {
@@ -556,7 +555,7 @@ function WorkbenchInner(props: WorkbenchProps) {
   const renamePath = (from: string, to: string): void => {
     if (from === to) return
     setTabs(current => current.map(tab => {
-      if (tab.kind === 'terminal') return tab
+      if (tab.kind === 'terminal' || tab.kind === 'browser') return tab
       if (tab.path !== from && !tab.path.startsWith(from + '/')) return tab
       const nextPath = tab.path === from ? to : to + tab.path.slice(from.length)
       if (tab.kind === 'file' || tab.kind === 'preview') {
@@ -591,7 +590,7 @@ function WorkbenchInner(props: WorkbenchProps) {
     const closing = new Set<string>()
     setTabs(current => {
       const next = current.filter(tab => {
-        if (tab.kind === 'terminal') return true
+        if (tab.kind === 'terminal' || tab.kind === 'browser') return true
         if (tab.path === path || tab.path.startsWith(path + '/')) {
           closing.add(tab.id)
           return false
@@ -627,6 +626,66 @@ function WorkbenchInner(props: WorkbenchProps) {
       setAiTermIds(current => current.includes(tab.id) ? current : [...current, tab.id])
     }
   }, [revealTermPanel, termDock])
+
+  const openNewBrowser = useCallback((): void => {
+    patchWorkbenchChrome({ editorOpen: true })
+    const tab = nextBrowserTab(tabsRef.current)
+    ensureBrowserTab(tab.id)
+    setActiveBrowserId(tab.id)
+    setTabs(current => [...current, tab])
+    setActiveId(tab.id)
+  }, [])
+
+  const changeDevtoolsDock = useCallback((dock: DevtoolsDock): void => {
+    saveDevtoolsDock(dock)
+    setDevtoolsDock(dock)
+    saveDevtoolsOpen(true)
+    setDevtoolsOpen(true)
+    if (dock === 'side') {
+      patchWorkbenchChrome({ sideOpen: true, sideTab: 'devtools' })
+      return
+    }
+    if (sideTab === 'devtools') patchWorkbenchChrome({ sideTab: 'files' })
+  }, [sideTab])
+
+  const openDevtools = useCallback((): void => {
+    saveDevtoolsOpen(true)
+    setDevtoolsOpen(true)
+    if (devtoolsDock === 'side') {
+      patchWorkbenchChrome({ sideOpen: true, sideTab: 'devtools' })
+    }
+  }, [devtoolsDock])
+
+  const pickBrowserEl = useCallback((snapshot: BrowserElSnapshot): boolean => {
+    if (browserEls === undefined) return false
+    const live = fileRefDropRef.current
+    if (live.sessionId === undefined) return false
+    const seat = document.querySelector<HTMLElement>('[data-composer-seat]')
+    const range = seat !== null
+      ? composerSelection(seat, live.draftLength)
+      : { start: live.draftLength, end: live.draftLength }
+    return browserEls.insertChip({
+      sessionId: live.sessionId,
+      snapshot,
+      span: { start: range.start, end: range.end, draftRev: live.draftRev },
+      existing: browserElExisting(inputOccurrences),
+      phase: live.phase,
+    }, t)
+  }, [browserEls, inputOccurrences, t])
+
+  const renameBrowserTitle = useCallback((tabId: string, title: string, url: string): void => {
+    const host = (() => {
+      try {
+        return url === '' ? '' : new URL(url).host
+      } catch {
+        return ''
+      }
+    })()
+    const nextTitle = title.trim() || host
+    setTabs(current => current.map(tab => (
+      tab.id === tabId && tab.kind === 'browser' ? { ...tab, title: nextTitle } : tab
+    )))
+  }, [])
 
   const toggleTermAi = useCallback((tabId: string, open: boolean): void => {
     setAiTermIds(current => {
@@ -734,6 +793,11 @@ function WorkbenchInner(props: WorkbenchProps) {
     if (workspaceId !== undefined) {
       for (const id of closable) {
         if (id.startsWith('terminal:')) void client.closeTerm(workspaceId, termIdFromTabId(id))
+        if (id.startsWith('browser:')) dropBrowserTab(id)
+      }
+    } else {
+      for (const id of closable) {
+        if (id.startsWith('browser:')) dropBrowserTab(id)
       }
     }
     const closing = new Set(closable)
@@ -776,9 +840,8 @@ function WorkbenchInner(props: WorkbenchProps) {
     return 'hide'
   }
 
-  let panels: ReturnType<typeof createPortal> | null = null
-  try {
-    panels = split && host !== null ? createPortal(
+  if (!split || host === null) return null
+  return createPortal(
     <>
       {chatOpen ? null : (
         <div className={railCss.rail} data-edge="start" data-git-ide-panel="rail-chat">
@@ -812,6 +875,10 @@ function WorkbenchInner(props: WorkbenchProps) {
           termSeed={termSeed}
           editorMode={editorMode}
           onNewTerminal={openNewTerminal}
+          onNewBrowser={openNewBrowser}
+          onOpenDevtools={openDevtools}
+          onPickBrowserEl={pickBrowserEl}
+          onBrowserTitle={renameBrowserTitle}
           onDockToBottom={termDock === 'tab' ? () => { changeTermDock('bottom') } : undefined}
           terminalDocked={termDock === 'bottom'}
           aiTermIds={aiTermIds}
@@ -837,6 +904,9 @@ function WorkbenchInner(props: WorkbenchProps) {
           <IconButton label={t('ide.showEditor')} onClick={() => { patchWorkbenchChrome({ editorOpen: true }) }}>
             <IconEditor />
           </IconButton>
+          <IconButton label={t('editor.addBrowser')} onClick={openNewBrowser}>
+            <IconGlobe />
+          </IconButton>
         </div>
       )}
       {sideOpen ? (
@@ -851,7 +921,10 @@ function WorkbenchInner(props: WorkbenchProps) {
           activePath={tabs.find(tab => tab.id === activeId)?.path}
           selected={selectedDiff}
           tab={sideTab}
-          onTab={(tab) => { patchWorkbenchChrome({ sideTab: tab }) }}
+          onTab={(tab) => {
+            if (tab === 'devtools') changeDevtoolsDock('side')
+            else patchWorkbenchChrome({ sideTab: tab })
+          }}
           onOpenFile={(path) => { void openFile(path) }}
           onOpenDiff={openDiff}
           onOpenCommitDiff={openCommitDiff}
@@ -861,6 +934,8 @@ function WorkbenchInner(props: WorkbenchProps) {
           update={updateInfo}
           onDismissUpdate={() => { setUpdateHidden(true) }}
           t={t}
+          devtoolsDock={devtoolsDock}
+          onDevtoolsDock={changeDevtoolsDock}
         />
       ) : (
         <div className={railCss.rail} data-git-ide-panel="rail-side">
@@ -878,6 +953,11 @@ function WorkbenchInner(props: WorkbenchProps) {
           <IconButton label={t('ide.slash')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'slash' }) }}>
             <IconSlash />
           </IconButton>
+          <IconButton label={t('ide.devtools')} onClick={() => {
+            changeDevtoolsDock('side')
+          }}>
+            <IconDevtools />
+          </IconButton>
         </div>
       )}
       <UsageNavPortal
@@ -889,6 +969,13 @@ function WorkbenchInner(props: WorkbenchProps) {
       />
       <div data-git-ide-panel="bottom">
         {panelOn ? (
+          <div data-git-ide-panel="bottom-tools">
+            {devtoolsBottom ? (
+              <div data-git-ide-panel="devtools">
+                <DevToolsPanel dock="bottom" onDock={changeDevtoolsDock} t={t} />
+              </div>
+            ) : null}
+            {termShown ? (
           <TerminalPanel
             client={client}
             workspaceId={workspaceId}
@@ -912,6 +999,8 @@ function WorkbenchInner(props: WorkbenchProps) {
             onCleanExit={handleTermCleanExit}
             t={t}
           />
+            ) : null}
+          </div>
         ) : null}
         <StatusBar
           client={client}
@@ -973,10 +1062,5 @@ function WorkbenchInner(props: WorkbenchProps) {
       ) : null}
     </>,
     host,
-  ) : null
-  } catch {
-    panels = null
-  }
-
-  return panels
+  )
 }

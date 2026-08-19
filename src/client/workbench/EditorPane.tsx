@@ -3,15 +3,17 @@ import type { GitClient } from '../api.ts'
 import type { GitFail } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
 import { joinWorkspaceFile, suggestNewFileDir, termIdFromTabId } from '../../shared/new-file-path.ts'
-import { IconClose, IconDiff, IconEditor, IconEye, IconMore, IconPanelOff, IconPlus, IconSave, IconSplit, IconTerminal } from './icons.tsx'
+import { IconClose, IconDiff, IconEditor, IconEye, IconGlobe, IconMore, IconPanelOff, IconPlus, IconSave, IconSplit, IconTerminal } from './icons.tsx'
 import { PathBreadcrumb } from './PathBreadcrumb.tsx'
 import { TerminalView } from './TerminalView.tsx'
-import { TERMINAL_TAB_ID, terminalTabLabel, type FileBuffer, type FileTab, type Translate } from './types.ts'
+import { BrowserView } from './BrowserView.tsx'
+import { TERMINAL_TAB_ID, browserTabLabel, terminalTabLabel, type FileBuffer, type FileTab, type Translate } from './types.ts'
 import { CodeEditor } from './CodeEditor.tsx'
 import { isMarkdownPath } from './code-language.ts'
 import type { EditorModeId } from './editor-mode.ts'
 import { FilePreview } from './FilePreview.tsx'
 import { MarkdownPreview } from './MarkdownPreview.tsx'
+import type { BrowserElSnapshot } from '../../shared/browser-el.ts'
 import type { TermCleanExitAction } from './term-session.ts'
 import css from './EditorPane.module.css'
 
@@ -33,6 +35,10 @@ export interface EditorPaneProps {
   workspaceTitle?: string
   leadingSash?: ReactNode
   onNewTerminal?: () => void
+  onNewBrowser?: () => void
+  onOpenDevtools?: () => void
+  onPickBrowserEl?: (snapshot: BrowserElSnapshot) => boolean
+  onBrowserTitle?: (tabId: string, title: string, url: string) => void
   onCreateFile?: (path: string) => Promise<GitFail | null>
   aiTermIds?: readonly string[]
   onAiModeChange?: (tabId: string, open: boolean) => void
@@ -85,7 +91,7 @@ type MdViewMode = 'edit' | 'preview' | 'split'
 /** Center editor: explorer + tabs + text/diff, with unsaved-close confirmation. */
 export function EditorPane({
   client, workspaceId, tabs, activeId, buffers,
-  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onCreateFile, aiTermIds, onAiModeChange, editorMode, onDockToBottom, onTermCleanExit, terminalDocked, t,
+  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onNewBrowser, onOpenDevtools, onPickBrowserEl, onBrowserTitle, onCreateFile, aiTermIds, onAiModeChange, editorMode, onDockToBottom, onTermCleanExit, terminalDocked, t,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.id === activeId) ?? null
   const buffer = active?.kind === 'file' ? buffers[active.path] : undefined
@@ -242,6 +248,16 @@ export function EditorPane({
         onCleanExit={onTermCleanExit === undefined ? undefined : () => onTermCleanExit(active.id)}
       />
     )
+  } else if (active?.kind === 'browser') {
+    body = (
+      <BrowserView
+        tabId={active.id}
+        onTitle={(title, url) => { onBrowserTitle?.(active.id, title, url) }}
+        onOpenDevtools={() => { onOpenDevtools?.() }}
+        onPick={(snapshot) => onPickBrowserEl?.(snapshot) === true}
+        t={t}
+      />
+    )
   } else if (active === null) {
     body = (
       <div className={css.empty}>
@@ -346,7 +362,7 @@ export function EditorPane({
   )
 
   return (
-    <section className={css.root} aria-label={active?.kind === 'terminal' ? t('term.title') : t('editor.empty')} data-git-ide-panel="editor">
+    <section className={css.root} aria-label={active?.kind === 'terminal' ? t('term.title') : active?.kind === 'browser' ? t('browser.tab') : t('editor.empty')} data-git-ide-panel="editor">
       {leadingSash}
       <div className={css.main}>
         <div className={css.crumbRow}>
@@ -411,11 +427,13 @@ export function EditorPane({
                 && buffers[tab.path]!.draft !== buffers[tab.path]!.original
               const tabLabel = tab.kind === 'terminal'
                 ? terminalTabLabel(tab, t)
-                : tab.kind === 'diff'
-                  ? `${fileName(tab.path)} · ${t('editor.diffTab')}`
-                  : tab.kind === 'commitDiff'
-                    ? `${fileName(tab.path)} · ${t('editor.commitDiffTab')}`
-                    : fileName(tab.path)
+                : tab.kind === 'browser'
+                  ? browserTabLabel(tab, t)
+                  : tab.kind === 'diff'
+                    ? `${fileName(tab.path)} · ${t('editor.diffTab')}`
+                    : tab.kind === 'commitDiff'
+                      ? `${fileName(tab.path)} · ${t('editor.commitDiffTab')}`
+                      : fileName(tab.path)
               return (
                 <div
                   key={tab.id}
@@ -438,6 +456,8 @@ export function EditorPane({
                   {tabDirty ? <span className={css.dirtyDot} title={t('editor.dirty')} /> : null}
                   {tab.kind === 'terminal' ? (
                     <span className={css.termMark} title={t('term.pinned')}><IconTerminal /></span>
+                  ) : tab.kind === 'browser' ? (
+                    <span className={css.termMark} title={t('browser.tab')}><IconGlobe /></span>
                   ) : null}
                   {tab.kind === 'terminal' && tab.id === TERMINAL_TAB_ID ? null : (
                     <IconButton
@@ -452,6 +472,11 @@ export function EditorPane({
             })}
           </div>
           <div className={css.tabActions}>
+            {onNewBrowser !== undefined ? (
+              <IconButton label={t('editor.addBrowser')} onClick={onNewBrowser}>
+                <IconGlobe />
+              </IconButton>
+            ) : null}
             <div className={css.menuWrap}>
               <IconButton
                 label={t('editor.add')}
@@ -477,6 +502,19 @@ export function EditorPane({
                     >
                       {t('editor.addTerminal')}
                     </button>
+                    {onNewBrowser !== undefined ? (
+                      <button
+                        type="button"
+                        className={css.menuItem}
+                        role="menuitem"
+                        onClick={() => {
+                          setAddOpen(false)
+                          onNewBrowser()
+                        }}
+                      >
+                        {t('editor.addBrowser')}
+                      </button>
+                    ) : null}
                     {onDockToBottom !== undefined ? (
                       <button
                         type="button"

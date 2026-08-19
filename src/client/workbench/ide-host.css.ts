@@ -149,6 +149,21 @@ export const IDE_HOST_CSS = `
   min-height: 0;
   overflow: hidden;
 }
+[data-git-ide-panel=bottom-tools]{
+  flex: none;
+  height: var(--git-term-h, 220px);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+[data-git-ide-panel=bottom-tools] [data-git-ide-panel=terminal],
+[data-git-ide-panel=bottom-tools] [data-git-ide-panel=devtools]{
+  height: auto;
+  flex: 1;
+  min-height: 0;
+}
 /* Full-width bottom chrome: chat stops above the panel so commands get the whole row. */
 [data-git-ide][data-git-bottom-span=full] > [data-conversation-scroll]{
   grid-row: 2;

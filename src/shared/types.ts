@@ -49,6 +49,11 @@ export type GitErrorCode =
   | 'EDITOR_UNKNOWN'
   | 'TERM_NO_SHELL'
   | 'TERM_FAILED'
+  | 'BROWSER_BAD_URL'
+  | 'BROWSER_TOO_LARGE'
+  | 'BROWSER_TIMEOUT'
+  | 'BROWSER_FAILED'
+  | 'BROWSER_SELF'
 
 export interface GitFail {
   ok: false

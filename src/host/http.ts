@@ -16,6 +16,20 @@ import { sanitizeTermId } from '../shared/new-file-path.ts'
 import { checkPluginUpdate } from './update-check.ts'
 import { readProviderUsage } from './provider-usage.ts'
 import type { WorkspaceFs } from './workspace-fs.ts'
+import {
+  browserFailPage,
+  fetchBrowserPage,
+  injectBrowserHooks,
+  inspectScriptBody,
+} from './browser-proxy.ts'
+import { isWorkbenchSelfUrl, readBrowserViewTarget, workbenchHrefFromHost } from '../shared/browser-url.ts'
+
+function sendHtml(res: ServerResponse, status: number, html: string): void {
+  res.statusCode = status
+  res.setHeader('content-type', 'text/html; charset=utf-8')
+  res.setHeader('cache-control', 'no-store')
+  res.end(html)
+}
 
 function send(res: ServerResponse, status: number, body: unknown): void {
   const json = JSON.stringify(redactFail(body))
@@ -145,6 +159,39 @@ export function registerGitHttp(
     if (method === 'OPTIONS') {
       res.statusCode = 204
       res.end()
+      return
+    }
+
+    if (method === 'GET' && route === '/git/browser/inspect.js') {
+      res.statusCode = 200
+      res.setHeader('content-type', 'application/javascript; charset=utf-8')
+      res.setHeader('cache-control', 'no-store')
+      res.end(inspectScriptBody())
+      return
+    }
+
+    if (method === 'GET' && route === '/git/browser/view') {
+      const target = readBrowserViewTarget(req.url ?? '')
+      if (target === null) {
+        sendHtml(res, 400, browserFailPage(fail('BROWSER_BAD_URL')))
+        return
+      }
+      const selfHref = workbenchHrefFromHost(host)
+      if (isWorkbenchSelfUrl(target, selfHref)) {
+        sendHtml(res, 400, browserFailPage(fail('BROWSER_SELF'), target))
+        return
+      }
+      const ua = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined
+      try {
+        const page = await fetchBrowserPage(target, ua)
+        if (!page.ok) {
+          sendHtml(res, 502, browserFailPage(page.fail, page.url ?? target))
+          return
+        }
+        sendHtml(res, 200, injectBrowserHooks(page.body, page.url))
+      } catch (error) {
+        sendHtml(res, 502, browserFailPage(toFail(error), target))
+      }
       return
     }
 

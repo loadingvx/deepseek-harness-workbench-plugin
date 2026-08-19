@@ -194,6 +194,26 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     messageZh: '工作区命令行没有启动成功。',
     hintZh: '请确认已经打开本地工作区，然后点「重新连接」。若反复失败，请确认本机有 bash/zsh，并且 DeepSeek Harness 能创建伪终端。',
   },
+  BROWSER_BAD_URL: {
+    messageZh: '这个地址不是网页。',
+    hintZh: '请输入 http:// 或 https:// 开头的地址，例如 https://example.com 或 http://127.0.0.1:5173 。',
+  },
+  BROWSER_TOO_LARGE: {
+    messageZh: '这个网页太大，没法在工作台里打开。',
+    hintZh: '请换一个更小的页面，或在系统自带的浏览器里打开。',
+  },
+  BROWSER_TIMEOUT: {
+    messageZh: '打开网页超时。',
+    hintZh: '请确认这个网站本机能打开，然后点刷新再试。本地服务要先启动，地址要写完整端口。',
+  },
+  BROWSER_FAILED: {
+    messageZh: '网页没有加载成功。',
+    hintZh: '请确认地址正确，并且本机网络能打开这个网站。',
+  },
+  BROWSER_SELF: {
+    messageZh: '不能在这里打开工作台自己。',
+    hintZh: '地址栏填的是当前工作台页面。请改成你要预览的网站，例如本地开发地址 http://127.0.0.1:5173 。',
+  },
 }
 
 /** Structured Git failure with Chinese copy the UI can show as-is. */
@@ -205,7 +225,7 @@ export class GitError extends Error {
   constructor(code: GitErrorCode, detail?: string) {
     const copy = COPY[code]
     const safe = detail === undefined ? undefined : redactSecrets(detail)
-    const messageZh = safe && (code === 'GIT_FAILED' || code === 'LLM_FAILED' || code === 'TERM_FAILED')
+    const messageZh = safe && (code === 'GIT_FAILED' || code === 'LLM_FAILED' || code === 'TERM_FAILED' || code === 'BROWSER_FAILED')
       ? `${copy.messageZh} ${safe}`
       : copy.messageZh
     super(`${code}: ${messageZh}`)

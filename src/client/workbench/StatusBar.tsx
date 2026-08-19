@@ -18,7 +18,7 @@ import { EDITOR_MODES, type EditorModeId } from './editor-mode.ts'
 import { IconChevron, IconFeedback, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
 import { readNearbyGit, retainNearbyGit, subscribeNearbyGit } from './nearby-git.ts'
 import { fileName, showEditorStatusChrome, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
-import { terminalTabLabel, type FileTab, type Translate } from './types.ts'
+import { browserTabLabel, terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import { readUsageLive, retainUsageLive, subscribeUsageLive } from './usage-live.ts'
 import css from './StatusBar.module.css'
 
@@ -408,9 +408,11 @@ function StatusTabs({
         ) : tabs.map(tab => {
           const label = tab.kind === 'terminal'
             ? terminalTabLabel(tab, t)
-            : tab.kind === 'diff' || tab.kind === 'commitDiff'
-              ? t('status.diff', { name: fileName(tab.path) })
-              : fileName(tab.path)
+            : tab.kind === 'browser'
+              ? browserTabLabel(tab, t)
+              : tab.kind === 'diff' || tab.kind === 'commitDiff'
+                ? t('status.diff', { name: fileName(tab.path) })
+                : fileName(tab.path)
           const title = tab.kind === 'file' || tab.kind === 'preview'
             || tab.kind === 'diff' || tab.kind === 'commitDiff'
             ? redactSecrets(tab.path)

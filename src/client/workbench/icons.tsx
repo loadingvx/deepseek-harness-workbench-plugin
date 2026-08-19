@@ -277,6 +277,58 @@ export function IconDockBottom() {
   )
 }
 
+export function IconSidePanel() {
+  return (
+    <Icon>
+      <path d="M2 3h12v10H2z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M10 3h4v10h-4z" />
+    </Icon>
+  )
+}
+
+export function IconGlobe() {
+  return (
+    <Icon>
+      <circle cx="8" cy="8" r="5.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M8 2.8v10.4M2.8 8h10.4M4.1 4.6c1.2.9 2.5 1.4 3.9 1.4s2.7-.5 3.9-1.4M4.1 11.4c1.2-.9 2.5-1.4 3.9-1.4s2.7.5 3.9 1.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
+export function IconInspect() {
+  return (
+    <Icon>
+      <path d="M3.2 3.2h4.2v4.2H3.2zM8.6 8.6l4.2 4.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M8.6 3.2h4.2v4.2H8.6z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
+export function IconDevtools() {
+  return (
+    <Icon>
+      <path d="M2.5 3.5h11v9h-11z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M2.5 6.2h11M5.2 9.2l1.6 1.6 3.4-3.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
+export function IconChevronLeft() {
+  return (
+    <Icon>
+      <path d="M10.2 3.2 5.4 8l4.8 4.8" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </Icon>
+  )
+}
+
+export function IconChevronRight() {
+  return (
+    <Icon>
+      <path d="M5.8 3.2 10.6 8l-4.8 4.8" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </Icon>
+  )
+}
+
 export function IconSearch() {
   return (
     <Icon>

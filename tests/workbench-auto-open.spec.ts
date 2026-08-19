@@ -118,6 +118,7 @@ describe('parseWorkbenchChrome', () => {
     })
     expect(isSideTab('usage')).toBe(true)
     expect(isSideTab('slash')).toBe(true)
+    expect(isSideTab('devtools')).toBe(true)
     expect(isSideTab('nope')).toBe(false)
   })
 })

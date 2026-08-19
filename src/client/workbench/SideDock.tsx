@@ -5,7 +5,9 @@ import type { SideTab } from './auto-open.ts'
 import { FileTree } from './FileTree.tsx'
 import { GitSidebar } from './GitSidebar.tsx'
 import { IconButton } from './IconButton.tsx'
-import { IconFiles, IconGit, IconPanelOff, IconSlash, IconUsage } from './icons.tsx'
+import type { DevtoolsDock } from './browser-dock.ts'
+import { DevToolsPanel } from './DevToolsPanel.tsx'
+import { IconDevtools, IconFiles, IconGit, IconPanelOff, IconSlash, IconUsage } from './icons.tsx'
 import type { Translate } from './types.ts'
 import { UpdateBanner } from './UpdateBanner.tsx'
 import { UsagePanel } from './UsagePanel.tsx'
@@ -23,7 +25,7 @@ import css from './SideDock.module.css'
 export type { SideTab }
 
 export function SideDock({
-  client, workspaceId, workspaceTitle, workspacePath, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, t,
+  client, workspaceId, workspaceTitle, workspacePath, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, t, devtoolsDock = 'side', onDevtoolsDock,
 }: {
   client: GitClient
   workspaceId?: string
@@ -46,6 +48,8 @@ export function SideDock({
   update?: PluginUpdateSnapshot | null
   onDismissUpdate?: () => void
   t: Translate
+  devtoolsDock?: DevtoolsDock
+  onDevtoolsDock?: (dock: DevtoolsDock) => void
 }) {
   const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
   const navReady = useSyncExternalStore(subscribeNavHost, isNavHostReady, () => false)
@@ -74,6 +78,9 @@ export function SideDock({
         <IconButton label={t('ide.slash')} active={tab === 'slash'} onClick={() => { onTab('slash') }}>
           <IconSlash />
         </IconButton>
+        <IconButton label={t('ide.devtools')} active={tab === 'devtools'} onClick={() => { onTab('devtools') }}>
+          <IconDevtools />
+        </IconButton>
         <span className={css.spacer} />
         <IconButton label={t('ide.hideSide')} onClick={onCollapse}>
           <IconPanelOff />
@@ -99,6 +106,12 @@ export function SideDock({
           />
         ) : tab === 'slash' ? (
           <SlashPanel />
+        ) : tab === 'devtools' ? (
+          <DevToolsPanel
+            dock={devtoolsDock}
+            onDock={(next) => { onDevtoolsDock?.(next) }}
+            t={t}
+          />
         ) : (
           <FileTree
             client={client}
