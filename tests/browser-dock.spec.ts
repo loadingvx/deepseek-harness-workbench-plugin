@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { bottomChromeVisible, isDevtoolsDock, isDevtoolsPane } from '../src/client/workbench/browser-dock.ts'
+import { isBottomTool } from '../src/client/workbench/bottom-layout.ts'
 import { BROWSER_EL_SOURCE } from '../src/shared/browser-el.ts'
 import { browserElExisting, installBrowserElClient } from '../src/client/workbench/browser-el-client.ts'
 import { createBrowserTab, createTerminalTab } from '../src/client/workbench/types.ts'
@@ -19,6 +20,14 @@ describe('bottomChromeVisible', () => {
     expect(isDevtoolsPane('files')).toBe(true)
     expect(isDevtoolsPane('console')).toBe(true)
     expect(isDevtoolsPane('profiler')).toBe(false)
+  })
+})
+
+describe('bottom tool tab sits with the terminal', () => {
+  it('only accepts terminal or devtools', () => {
+    expect(isBottomTool('devtools')).toBe(true)
+    expect(isBottomTool('terminal')).toBe(true)
+    expect(isBottomTool('network')).toBe(false)
   })
 })
 

@@ -17,6 +17,11 @@ export type BottomSpan = (typeof BOTTOM_SPANS)[number]
 
 export const DEFAULT_TERM_DOCK: TermDock = 'bottom'
 export const DEFAULT_BOTTOM_SPAN: BottomSpan = 'full'
+export const BOTTOM_TOOLS = ['terminal', 'devtools'] as const
+export type BottomTool = (typeof BOTTOM_TOOLS)[number]
+export const DEFAULT_BOTTOM_TOOL: BottomTool = 'terminal'
+export const BOTTOM_TOOL_KEY = 'dsh-workbench-bottom-tool-v1'
+export const BOTTOM_DEVTOOLS_TAB_ID = 'devtools:panel'
 
 export const TERM_DOCK_KEY = 'dsh-workbench-term-dock-v2'
 export const BOTTOM_SPAN_KEY = 'dsh-workbench-bottom-span-v2'
@@ -37,6 +42,10 @@ export function isTermDock(value: string): value is TermDock {
 
 export function isBottomSpan(value: string): value is BottomSpan {
   return (BOTTOM_SPANS as readonly string[]).includes(value)
+}
+
+export function isBottomTool(value: string): value is BottomTool {
+  return (BOTTOM_TOOLS as readonly string[]).includes(value)
 }
 
 function readStorage(key: string): string | null {
@@ -80,6 +89,15 @@ export function loadTermPanelOpen(): boolean {
 
 export function saveTermPanelOpen(open: boolean): void {
   writeStorage(TERM_PANEL_OPEN_KEY, open ? '1' : '0')
+}
+
+export function loadBottomTool(): BottomTool {
+  const raw = readStorage(BOTTOM_TOOL_KEY)
+  return raw !== null && isBottomTool(raw) ? raw : DEFAULT_BOTTOM_TOOL
+}
+
+export function saveBottomTool(tool: BottomTool): void {
+  writeStorage(BOTTOM_TOOL_KEY, isBottomTool(tool) ? tool : DEFAULT_BOTTOM_TOOL)
 }
 
 /** Bottom dock always keeps a grid row; collapse only shrinks it to the tab strip. */

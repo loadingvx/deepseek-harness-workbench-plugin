@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { BROWSER_DUMP_EVAL } from '../../shared/browser-dump-eval.ts'
 import { BROWSER_MSG_SOURCE } from '../../shared/browser-msg.ts'
 import { normalizeBrowserElSnapshot, type BrowserElSnapshot } from '../../shared/browser-el.ts'
 import { browserViewSrc, isWorkbenchSelfUrl, normalizeBrowserUrl } from '../../shared/browser-url.ts'
@@ -57,11 +58,15 @@ export function BrowserView({
   inspectRef.current = state.inspect
   const evalWaitRef = useRef<{ nonce: number; timer: number } | null>(null)
   const seenEvalRef = useRef<number | null>(null)
+  const silentEvalRef = useRef(new Set<number>())
+  const dumpNonceRef = useRef(1_000_000_000)
+  const dumpTimerRef = useRef(0)
   const src = state.committed === '' ? '' : browserViewSrc(state.committed)
   const showEmpty = state.committed === ''
 
   useEffect(() => {
     ensureBrowserTab(tabId)
+    return () => { window.clearTimeout(dumpTimerRef.current) }
   }, [tabId])
 
   useEffect(() => {
@@ -74,6 +79,20 @@ export function BrowserView({
     const win = frameRef.current?.contentWindow
     if (win === null || win === undefined) return
     win.postMessage({ source: BROWSER_MSG_SOURCE, type: 'inspect', on }, '*')
+  }
+
+  const sendPageDump = (): void => {
+    const win = frameRef.current?.contentWindow
+    if (win === null || win === undefined) return
+    dumpNonceRef.current += 1
+    const id = dumpNonceRef.current
+    silentEvalRef.current.add(id)
+    win.postMessage({ source: BROWSER_MSG_SOURCE, type: 'eval', id, code: BROWSER_DUMP_EVAL }, '*')
+  }
+
+  const schedulePageDump = (): void => {
+    window.clearTimeout(dumpTimerRef.current)
+    dumpTimerRef.current = window.setTimeout(() => { sendPageDump() }, 250)
   }
 
   useEffect(() => {
@@ -119,6 +138,7 @@ export function BrowserView({
     const win = frameRef.current?.contentWindow
     if (win === null || win === undefined) return
     win.postMessage({ source: BROWSER_MSG_SOURCE, type: 'probe' }, '*')
+    schedulePageDump()
   }, [state.probeRequest, tabId])
 
   useEffect(() => {
@@ -152,6 +172,7 @@ export function BrowserView({
         })
         onTitle(title, url)
         if (inspectRef.current) postInspect(true)
+        schedulePageDump()
         return
       }
       if (type === 'fail') {
@@ -180,6 +201,10 @@ export function BrowserView({
         if (evalWaitRef.current !== null && evalWaitRef.current.nonce === nonce) {
           window.clearTimeout(evalWaitRef.current.timer)
           evalWaitRef.current = null
+        }
+        if (silentEvalRef.current.has(nonce)) {
+          silentEvalRef.current.delete(nonce)
+          return
         }
         const ok = data.ok !== false
         const text = typeof data.text === 'string' ? data.text : (ok ? 'undefined' : t('browser.info.consoleEvalFailed'))
@@ -356,6 +381,8 @@ export function BrowserView({
                 { source: BROWSER_MSG_SOURCE, type: 'query' },
                 '*',
               )
+              schedulePageDump()
+              window.setTimeout(() => { schedulePageDump() }, 900)
             }}
           />
         )}

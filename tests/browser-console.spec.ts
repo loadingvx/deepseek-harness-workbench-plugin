@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  commitBrowserUrl,
   ensureBrowserTab,
+  getPreferredBrowserId,
   patchBrowserTab,
   pushBrowserConsole,
   readActiveBrowserTab,
   readBrowserTab,
+  readPreferredBrowserTab,
   requestBrowserEval,
   resetBrowserSession,
+  setActiveBrowserId,
   upsertBrowserNetwork,
 } from '../src/client/workbench/browser-session.ts'
 
@@ -83,5 +87,13 @@ describe('browser console session', () => {
     })
     expect(readBrowserTab('browser:1').network).toEqual([])
     expect(readBrowserTab('browser:1').files).toEqual([])
+  })
+
+  it('finds a loaded browser tab even if it is not marked active', () => {
+    ensureBrowserTab('browser:1')
+    commitBrowserUrl('browser:1', 'https://example.com/')
+    setActiveBrowserId(null)
+    expect(getPreferredBrowserId()).toBe('browser:1')
+    expect(readPreferredBrowserTab().committed).toBe('https://example.com/')
   })
 })

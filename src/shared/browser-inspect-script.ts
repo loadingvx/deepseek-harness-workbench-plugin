@@ -303,6 +303,7 @@ export const BROWSER_INSPECT_SCRIPT = `(function () {
   var netSeq = 0;
   var netQueue = [];
   var netFlush = 0;
+  window.__DSH_NET_HOOKS__ = true;
   function clipUrl(u) {
     u = String(u || '');
     if (u.length > 1500) u = u.slice(0, 1500);
@@ -356,6 +357,7 @@ export const BROWSER_INSPECT_SCRIPT = `(function () {
       this.__dsh = { method: String(method || 'GET').toUpperCase(), url: clipUrl(url), start: Date.now() };
       return XO.apply(this, arguments);
     };
+    XMLHttpRequest.prototype.open.__dshNet = true;
     XMLHttpRequest.prototype.send = function () {
       var self = this;
       var meta = self.__dsh || { method: 'GET', url: '', start: Date.now() };
@@ -415,6 +417,7 @@ export const BROWSER_INSPECT_SCRIPT = `(function () {
           throw err;
         });
       };
+      window.fetch.__dshNet = true;
     }
   } catch (fetchErr) {}
 

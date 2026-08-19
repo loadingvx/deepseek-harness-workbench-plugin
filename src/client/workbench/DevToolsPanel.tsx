@@ -20,8 +20,8 @@ import {
 import {
   clearBrowserConsole,
   clearBrowserNetwork,
-  getActiveBrowserId,
-  readActiveBrowserTab,
+  getPreferredBrowserId,
+  readPreferredBrowserTab,
   requestBrowserEval,
   requestBrowserProbe,
   subscribeBrowserSession,
@@ -478,8 +478,8 @@ export function DevToolsPanel({
   onDock: (dock: DevtoolsDock) => void
   t: Translate
 }) {
-  const state = useSyncExternalStore(subscribeBrowserSession, readActiveBrowserTab, readActiveBrowserTab)
-  const activeId = useSyncExternalStore(subscribeBrowserSession, getActiveBrowserId, getActiveBrowserId)
+  const state = useSyncExternalStore(subscribeBrowserSession, readPreferredBrowserTab, readPreferredBrowserTab)
+  const activeId = useSyncExternalStore(subscribeBrowserSession, getPreferredBrowserId, getPreferredBrowserId)
   const page = state.page
   const hasPage = activeId !== null && state.committed !== ''
   const [pane, setPane] = useState<DevtoolsPane>(() => loadDevtoolsPane())

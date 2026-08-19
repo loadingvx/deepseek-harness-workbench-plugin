@@ -24,11 +24,13 @@ import {
   fileTabsOf,
   layoutBottomSpan,
   loadBottomSpan,
+  loadBottomTool,
   loadTermDock,
   loadTermPanelOpen,
   pickTabId,
   reservedAboveTerm,
   saveBottomSpan,
+  saveBottomTool,
   saveTermDock,
   saveTermPanelOpen,
   TERM_DEFAULT_H,
@@ -37,6 +39,7 @@ import {
   termTabsOf,
   visibleTermId,
   type BottomSpan,
+  type BottomTool,
   type TermDock,
 } from './bottom-layout.ts'
 import { EditorPane } from './EditorPane.tsx'
@@ -213,6 +216,7 @@ function WorkbenchInner(props: WorkbenchProps) {
   const [lastTermId, setLastTermId] = useState(TERMINAL_TAB_ID)
   const [devtoolsDock, setDevtoolsDock] = useState<DevtoolsDock>(() => loadDevtoolsDock())
   const [devtoolsOpen, setDevtoolsOpen] = useState(() => loadDevtoolsOpen())
+  const [bottomTool, setBottomTool] = useState<BottomTool>(() => loadBottomTool())
   const changeEditorMode = useCallback((mode: EditorModeId): void => {
     saveEditorMode(mode)
     setEditorMode(mode)
@@ -277,8 +281,7 @@ function WorkbenchInner(props: WorkbenchProps) {
   const pending = (props.useSession?.(state => state.pending)?.length ?? 0) as number
   const split = shouldSplitWorkbench(enabled)
   const termShown = termDock === 'bottom' && termPanelShown
-  const panelOn = bottomChromeVisible(termDock, termPanelShown, { dock: devtoolsDock, open: devtoolsOpen })
-  const devtoolsBottom = devtoolsDock === 'bottom' && devtoolsOpen
+  const panelOn = bottomChromeVisible(termDock, termPanelShown, { dock: devtoolsDock, open: devtoolsOpen || bottomTool === 'devtools' })
   const spanNow = layoutBottomSpan(termDock, bottomSpan, { editor: editorOpen, side: sideOpen })
   const fileTabs = fileTabsOf(tabs)
   const termTabs = termTabsOf(tabs)
@@ -642,19 +645,26 @@ function WorkbenchInner(props: WorkbenchProps) {
     saveDevtoolsOpen(true)
     setDevtoolsOpen(true)
     if (dock === 'side') {
+      saveBottomTool('terminal')
+      setBottomTool('terminal')
       patchWorkbenchChrome({ sideOpen: true, sideTab: 'devtools' })
       return
     }
+    saveBottomTool('devtools')
+    setBottomTool('devtools')
+    if (termDock !== 'bottom') {
+      saveTermDock('bottom')
+      setTermDock('bottom')
+    }
+    setTermPanelShown(true)
+    setTermPanelOpen(true)
+    saveTermPanelOpen(true)
     if (sideTab === 'devtools') patchWorkbenchChrome({ sideTab: 'files' })
-  }, [sideTab])
+  }, [sideTab, termDock])
 
   const openDevtools = useCallback((): void => {
-    saveDevtoolsOpen(true)
-    setDevtoolsOpen(true)
-    if (devtoolsDock === 'side') {
-      patchWorkbenchChrome({ sideOpen: true, sideTab: 'devtools' })
-    }
-  }, [devtoolsDock])
+    changeDevtoolsDock('bottom')
+  }, [changeDevtoolsDock])
 
   const pickBrowserEl = useCallback((snapshot: BrowserElSnapshot): boolean => {
     if (browserEls === undefined) return false
@@ -970,34 +980,36 @@ function WorkbenchInner(props: WorkbenchProps) {
       <div data-git-ide-panel="bottom">
         {panelOn ? (
           <div data-git-ide-panel="bottom-tools">
-            {devtoolsBottom ? (
-              <div data-git-ide-panel="devtools">
-                <DevToolsPanel dock="bottom" onDock={changeDevtoolsDock} t={t} />
-              </div>
-            ) : null}
-            {termShown ? (
+            {termShown || (devtoolsDock === 'bottom' && (devtoolsOpen || bottomTool === 'devtools')) ? (
           <TerminalPanel
             client={client}
             workspaceId={workspaceId}
-            tabs={termTabs}
+            tabs={termShown ? termTabs : []}
             activeId={termActiveId}
             termSeed={termSeed}
             aiTermIds={aiTermIds}
             dragging={dragging === 'term'}
             onActivate={(id) => {
+              saveBottomTool('terminal')
+              setBottomTool('terminal')
               setActiveId(id)
               if (!termPanelOpen) changeTermPanelOpen(true)
             }}
             onClose={closeTab}
-            onNewTerminal={openNewTerminal}
+            onNewTerminal={termShown ? openNewTerminal : undefined}
             onAiModeChange={toggleTermAi}
-            onDockTab={() => { changeTermDock('tab') }}
+            onDockTab={termShown ? () => { changeTermDock('tab') } : undefined}
             expanded={termPanelOpen}
             onToggleExpand={() => { changeTermPanelOpen(!termPanelOpen) }}
             onResizePointerDown={beginTermResize}
             onResizeReset={resetTermHeight}
             onCleanExit={handleTermCleanExit}
             t={t}
+            devtools={(
+              <DevToolsPanel dock="bottom" onDock={changeDevtoolsDock} t={t} />
+            )}
+            devtoolsActive={bottomTool === 'devtools'}
+            onActivateDevtools={() => { changeDevtoolsDock('bottom') }}
           />
             ) : null}
           </div>

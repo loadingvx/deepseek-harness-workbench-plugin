@@ -147,6 +147,19 @@ export function readActiveBrowserTab(): BrowserTabState {
   return activeId === null ? EMPTY_TAB : readBrowserTab(activeId)
 }
 
+export function getPreferredBrowserId(): string | null {
+  if (activeId !== null && tabOf(activeId).committed !== '') return activeId
+  for (const [id, state] of tabs) {
+    if (state.committed !== '') return id
+  }
+  return activeId
+}
+
+export function readPreferredBrowserTab(): BrowserTabState {
+  const id = getPreferredBrowserId()
+  return id === null ? EMPTY_TAB : readBrowserTab(id)
+}
+
 export function ensureBrowserTab(id: string): BrowserTabState {
   const current = tabs.get(id)
   if (current !== undefined) return current

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { BROWSER_DUMP_EVAL } from '../src/shared/browser-dump-eval.ts'
 import {
   classifyBrowserResource,
   formatBrowserBytes,
@@ -85,5 +86,16 @@ describe('format helpers', () => {
     expect(formatBrowserBytes(1500)).toContain('KB')
     expect(formatBrowserDuration(0)).toBe('')
     expect(formatBrowserDuration(12)).toBe('12 ms')
+  })
+})
+
+describe('dump eval payload', () => {
+  it('posts files, css, app, and net from inside the page', () => {
+    expect(() => { new Function(BROWSER_DUMP_EVAL) }).not.toThrow()
+    expect(BROWSER_DUMP_EVAL).toContain("type: 'files'")
+    expect(BROWSER_DUMP_EVAL).toContain("type: 'css'")
+    expect(BROWSER_DUMP_EVAL).toContain("type: 'app'")
+    expect(BROWSER_DUMP_EVAL).toContain("type: 'net'")
+    expect(BROWSER_DUMP_EVAL).toContain('performance.getEntriesByType')
   })
 })
