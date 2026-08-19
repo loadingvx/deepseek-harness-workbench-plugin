@@ -59,7 +59,6 @@ export function SoundSettings({ t }: SoundSettingsProps) {
   const [customSounds, setCustomSounds] = useState<CustomSound[]>([])
   const [showUpload, setShowUpload] = useState(false)
   const [uploadStatus, setUploadStatus] = useState<string>('')
-  const acRef = useRef<{ ac: AudioContext | null }>({ ac: null })
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -100,7 +99,7 @@ export function SoundSettings({ t }: SoundSettingsProps) {
     event?.stopPropagation()
     const builtin = BUILTIN_SOUNDS.find(s => s.id === id)
     if (builtin) {
-      playBuiltinSound(builtin, acRef)
+      playBuiltinSound(builtin)
       return
     }
     const custom = customSounds.find(s => s.id === id)

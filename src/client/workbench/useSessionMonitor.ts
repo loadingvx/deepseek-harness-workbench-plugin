@@ -9,8 +9,13 @@
  *
  * 提示音播放：Web Audio API（内置合成）；用户自定义音频（ogg/mp3/wav/webm/m4a/flac）
  * 经 HTMLAudioElement 播放。
+ *
+ * 内置音必须复用模块级同一个 AudioContext（sharedBeepRef）：
+ * 浏览器新上下文默认 suspended，resume() 需要用户手势；Chrome 同时存活的
+ * AudioContext 大约 6 个封顶。每次响铃 new 一个会在循环提醒（默认 10s）下
+ * 约 1 分钟触顶，错误再被 catch 静默吞掉，表现为完全不出声。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import {
   getLoopReminder,
   getReminderInterval,
@@ -81,11 +86,19 @@ export function useReminderInterval(): [number, (sec: number) => void] {
   return [sec, setSec]
 }
 
-export interface BeepState {
-  last: number
-  had: boolean
-  ac: AudioContext | null
-}
+const SOUND_PREF_KEY = 'dsh-workbench-sound-id'
+const DEFAULT_SOUND_ID = 'chime-ascending'
+
+/**
+ * 模块级共享 AudioContext：Workbench 提示、循环提醒、设置页试听全部复用这一个。
+ * 切勿在播放路径上 new AudioContext——新上下文默认 suspended，且数量有上限。
+ */
+const sharedBeepRef: { current: { ac: AudioContext | null } } = { current: { ac: null } }
+
+/** resume() 被自动播放策略挡住时，记下最近一次要播的内置音，等用户手势解锁后补播。 */
+let pendingBuiltin: BuiltinSoundDef | null = null
+let unlockHandler: (() => void) | null = null
+let visibilityHandler: (() => void) | null = null
 
 /** Get AudioContext constructor (browser only, with webkit prefix fallback). */
 function getAudioCtor(): typeof AudioContext | null {
@@ -94,50 +107,149 @@ function getAudioCtor(): typeof AudioContext | null {
   return (typeof AudioContext !== 'undefined' ? AudioContext : webkitAC) ?? null
 }
 
+function unbindAudioUnlock(): void {
+  if (typeof window === 'undefined') return
+  if (unlockHandler !== null) {
+    window.removeEventListener('pointerdown', unlockHandler, true)
+    window.removeEventListener('keydown', unlockHandler, true)
+    window.removeEventListener('click', unlockHandler, true)
+    unlockHandler = null
+  }
+  if (visibilityHandler !== null) {
+    document.removeEventListener('visibilitychange', visibilityHandler)
+    visibilityHandler = null
+  }
+}
+
+function getSharedAudioContext(): AudioContext | null {
+  const AC = getAudioCtor()
+  if (!AC) return null
+  const existing = sharedBeepRef.current.ac
+  if (existing !== null && existing.state !== 'closed') return existing
+  try {
+    const ac = new AC()
+    sharedBeepRef.current.ac = ac
+    return ac
+  } catch {
+    sharedBeepRef.current.ac = null
+    return null
+  }
+}
+
+function synthPlay(ac: AudioContext, sound: BuiltinSoundDef): void {
+  const { synth } = sound
+  const now = ac.currentTime
+  synth.notes.forEach((freq, i) => {
+    const osc = ac.createOscillator()
+    const gain = ac.createGain()
+    osc.type = synth.waveform
+    osc.frequency.value = freq
+    const startTime = now + (synth.delays[i] ?? 0) / 1000
+    gain.gain.setValueAtTime(0.0001, startTime)
+    gain.gain.exponentialRampToValueAtTime(synth.volume, startTime + synth.attack)
+    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + synth.attack + synth.decay)
+    osc.connect(gain)
+    gain.connect(ac.destination)
+    osc.start(startTime)
+    osc.stop(startTime + synth.duration)
+  })
+}
+
+function playWhenRunning(ac: AudioContext, sound: BuiltinSoundDef): void {
+  if (ac.state !== 'running') {
+    pendingBuiltin = sound
+    return
+  }
+  pendingBuiltin = null
+  try {
+    synthPlay(ac, sound)
+  } catch { /* 合成失败：静默降级，不影响监控面板本体 */ }
+}
+
+function flushPending(ac: AudioContext): void {
+  const queued = pendingBuiltin
+  if (queued !== null) playWhenRunning(ac, queued)
+}
+
+function resumeSharedAudio(): void {
+  const ac = getSharedAudioContext()
+  if (ac === null) return
+  if (ac.state === 'running') {
+    flushPending(ac)
+    return
+  }
+  void ac.resume().then(() => {
+    if (ac.state === 'running') flushPending(ac)
+  }).catch(() => { /* 仍被策略挡住：等下一次用户手势 */ })
+}
+
+/**
+ * 用户手势解锁共享 AudioContext（捕获阶段，点页面任意处即可）。
+ * 一直挂着：标签进后台后上下文可能再次 suspended，下次点击再 resume。
+ * 标签回到前台时也 resume 一次（后台标签页常把上下文挂起）。
+ */
+export function ensureAudioUnlockListener(): void {
+  if (typeof window === 'undefined') return
+  if (unlockHandler === null) {
+    const onGesture = (): void => { resumeSharedAudio() }
+    unlockHandler = onGesture
+    window.addEventListener('pointerdown', onGesture, true)
+    window.addEventListener('keydown', onGesture, true)
+    window.addEventListener('click', onGesture, true)
+  }
+  if (visibilityHandler === null) {
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') resumeSharedAudio()
+    }
+    visibilityHandler = onVisible
+    document.addEventListener('visibilitychange', onVisible)
+  }
+}
+
 /**
  * Play a built-in sound using Web Audio synthesis.
- * @param sound - The built-in sound definition
- * @param stateRef - Ref to AudioContext state (reused across calls)
+ * Always reuses the module-level shared AudioContext.
  */
-export function playBuiltinSound(sound: BuiltinSoundDef, stateRef: React.MutableRefObject<{ ac: AudioContext | null }>): void {
-  const AC = getAudioCtor()
-  if (!AC) return
+export function playBuiltinSound(sound: BuiltinSoundDef): void {
+  ensureAudioUnlockListener()
+  const ac = getSharedAudioContext()
+  if (ac === null) return
+  pendingBuiltin = sound
+  if (ac.state === 'running') {
+    playWhenRunning(ac, sound)
+    return
+  }
+  void ac.resume().then(() => {
+    if (ac.state === 'running') flushPending(ac)
+  }).catch(() => { /* 音频被策略阻止：保留 pending，等用户手势解锁后补播 */ })
+}
 
+/** 按当前选中的提示音偏好播放（Workbench 首次出现 / 循环提醒共用）。 */
+export function playWorkbenchSound(): void {
+  ensureAudioUnlockListener()
   try {
-    if (stateRef.current.ac === null) {
-      stateRef.current.ac = new AC()
+    const soundId = localStorage.getItem(SOUND_PREF_KEY) ?? DEFAULT_SOUND_ID
+    const builtin = BUILTIN_SOUNDS.find(s => s.id === soundId)
+    if (builtin) {
+      playBuiltinSound(builtin)
+      return
     }
-    const ac = stateRef.current.ac
+    playCustomSound(`/workbench-sounds/${soundId}`)
+  } catch { /* 读偏好或播放失败：静默降级 */ }
+}
 
-    const resumeAndPlay = (): void => {
-      const { synth } = sound
-      const now = ac.currentTime
+/** 测试辅助：当前共享 AudioContext（未创建则为 null）。 */
+export function getSharedBeepAudioContext(): AudioContext | null {
+  return sharedBeepRef.current.ac
+}
 
-      synth.notes.forEach((freq, i) => {
-        const osc = ac.createOscillator()
-        const gain = ac.createGain()
-
-        osc.type = synth.waveform
-        osc.frequency.value = freq
-
-        const startTime = now + (synth.delays[i] ?? 0) / 1000
-        gain.gain.setValueAtTime(0.0001, startTime)
-        gain.gain.exponentialRampToValueAtTime(synth.volume, startTime + synth.attack)
-        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + synth.attack + synth.decay)
-
-        osc.connect(gain)
-        gain.connect(ac.destination)
-        osc.start(startTime)
-        osc.stop(startTime + synth.duration)
-      })
-    }
-
-    if (ac.state === 'suspended') {
-      ac.resume().then(resumeAndPlay).catch(() => { /* 音频被策略阻止：静默降级 */ })
-    } else {
-      resumeAndPlay()
-    }
-  } catch { /* 音频不可用：静默降级，不影响监控面板本体 */ }
+/** 测试辅助：关闭并丢弃共享上下文，解开手势监听。 */
+export function resetSharedBeepAudio(): void {
+  unbindAudioUnlock()
+  pendingBuiltin = null
+  const ac = sharedBeepRef.current.ac
+  sharedBeepRef.current.ac = null
+  try { void ac?.close() } catch { /* ignore */ }
 }
 
 /**
@@ -152,6 +264,7 @@ let currentAudio: HTMLAudioElement | null = null
  * @param url - URL to the audio file (HTTP or data URL)
  */
 export function playCustomSound(url: string): void {
+  ensureAudioUnlockListener()
   try {
     // 替换上一次播放实例：先停旧播放并清空 src，再播新的
     if (currentAudio !== null) {
@@ -182,6 +295,10 @@ export function useSessionBeep(
   const [beepOn] = useBeepOn()
   const [loopReminder] = useLoopReminder()
   const [intervalSec] = useReminderInterval()
+
+  useEffect(() => {
+    ensureAudioUnlockListener()
+  }, [])
 
   useEffect(() => {
     if (!beepOn || attention === 0) {

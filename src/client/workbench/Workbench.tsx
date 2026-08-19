@@ -78,8 +78,7 @@ import { DEFAULT_TERM_AI_OPEN, TERM_AI_OPEN_KEY, readBoolFlag, writeBoolFlag } f
 import { usePluginUpdate, visibleUpdate } from './UpdateBanner.tsx'
 import { updateTermSeed } from '../../shared/version.ts'
 import { useWorkspace } from './useWorkspace.ts'
-import { useAttentionCounts, useSessionBeep, playBuiltinSound, playCustomSound } from './useSessionMonitor.ts'
-import { BUILTIN_SOUNDS } from '../../shared/workbench-sounds/builtins.ts'
+import { useAttentionCounts, useSessionBeep, playWorkbenchSound } from './useSessionMonitor.ts'
 import {
   composerSeatOf,
   composerSelection,
@@ -270,20 +269,7 @@ function WorkbenchInner(props: WorkbenchProps) {
   const workspace = useWorkspace(useSessions, useWorkspaces)
   const workspaceId = workspace?.workspaceId
   const { attention } = useAttentionCounts(useSessions, useWorkspaces)
-  const playSound = useCallback(() => {
-    const acRef = { ac: null as AudioContext | null }
-    try {
-      const soundId = localStorage.getItem('dsh-workbench-sound-id') ?? 'chime-ascending'
-      const builtin = BUILTIN_SOUNDS.find(s => s.id === soundId)
-      if (builtin) {
-        playBuiltinSound(builtin, acRef)
-      } else {
-        // Custom sound via HTTP
-        playCustomSound(`/workbench-sounds/${soundId}`)
-      }
-    } catch { /* ignore */ }
-  }, [])
-  useSessionBeep(attention, playSound)
+  useSessionBeep(attention, playWorkbenchSound)
   const inputDraft = props.useInput?.(state => state.draft) ?? ''
   const inputPhase = props.useInput?.(state => state.phase) ?? ''
   const inputDraftRev = props.useInput?.(state => state.draftRev) ?? 0

@@ -1,0 +1,12 @@
+---
+description: 改代码必须在 dev 分支上进行；发现当前是 main 时立刻切到 dev
+alwaysApply: true
+---
+
+# 开发分支
+
+本仓库日常开发只在 `dev` 上进行。
+
+- 动手改代码前先看当前分支。若是 `main`（或其它非 `dev` 分支），立刻 `git switch dev`，不要在 `main` 上改。
+- 不要把功能提交到 `main`。需要发布时再按仓库既有流程从 `dev` 合入。
+- 用户没有明确要求时，不要主动切回 `main`。

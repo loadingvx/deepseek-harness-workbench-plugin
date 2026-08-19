@@ -6,73 +6,13 @@
  * Custom sounds are served via HTTP from ~/.dsh/workbench-sounds/.
  */
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { SoundEntry } from '../../shared/workbench-sounds/types.ts'
-import { BUILTIN_SOUNDS, type BuiltinSoundDef } from '../../shared/workbench-sounds/builtins.ts'
+import { BUILTIN_SOUNDS } from '../../shared/workbench-sounds/builtins.ts'
+import { playBuiltinSound, playCustomSound } from './useSessionMonitor.ts'
 
 const SOUNDS_HTTP_PREFIX = '/workbench-sounds'
 const PREF_KEY = 'dsh-workbench-sound-id'
-
-/** State for an AudioContext (browser only). */
-interface AudioState {
-  ac: AudioContext | null
-  webkitAC: typeof AudioContext | null
-}
-
-function getAudioState(): AudioState {
-  if (typeof window === 'undefined') return { ac: null, webkitAC: null }
-  const webkitAC = (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-  const AC = typeof AudioContext !== 'undefined' ? AudioContext : webkitAC
-  return { ac: AC ?? null, webkitAC: webkitAC ?? null }
-}
-
-/** Play a built-in sound using Web Audio synthesis. */
-function playBuiltin(sound: BuiltinSoundDef, stateRef: React.MutableRefObject<AudioState>): void {
-  const { ac: AC } = stateRef.current
-  if (AC === null) return
-
-  let ac = stateRef.current.ac
-  if (ac === null) {
-    ac = new AC()
-    stateRef.current.ac = ac
-  }
-
-  const resumeAndPlay = (): void => {
-    const { synth } = sound
-    const now = ac.currentTime
-
-    synth.notes.forEach((freq, i) => {
-      const osc = ac.createOscillator()
-      const gain = ac.createGain()
-
-      osc.type = synth.waveform
-      osc.frequency.value = freq
-
-      const startTime = now + (synth.delays[i] ?? 0) / 1000
-      gain.gain.setValueAtTime(0.0001, startTime)
-      gain.gain.exponentialRampToValueAtTime(synth.volume, startTime + synth.attack)
-      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + synth.attack + synth.decay)
-
-      osc.connect(gain)
-      gain.connect(ac.destination)
-      osc.start(startTime)
-      osc.stop(startTime + synth.duration)
-    })
-  }
-
-  if (ac.state === 'suspended') {
-    ac.resume().then(resumeAndPlay).catch(() => {})
-  } else {
-    resumeAndPlay()
-  }
-}
-
-/** Play a custom sound file via HTMLAudioElement. */
-function playCustomUrl(url: string): void {
-  const audio = new Audio(url)
-  audio.volume = 0.8
-  audio.play().catch(() => {})
-}
 
 export interface SoundPlayer {
   /** Play the currently selected sound. */
@@ -102,7 +42,6 @@ export interface SoundEntry extends SoundEntry {
 
 /** Sound preference + all sounds list hook. */
 export function useSoundPlayer(): UseSoundPlayerResult {
-  const audioStateRef = useRef<AudioState>(getAudioState())
   const [selectedId, setSelectedId] = useState<string>(() => {
     try { return localStorage.getItem(PREF_KEY) ?? 'chime-ascending' } catch { return 'chime-ascending' }
   })
@@ -179,12 +118,12 @@ export function useSoundPlayer(): UseSoundPlayerResult {
     play: useCallback(() => {
       if (selectedId.startsWith('builtin:') || BUILTIN_SOUNDS.some(s => s.id === selectedId)) {
         const builtin = BUILTIN_SOUNDS.find(s => s.id === selectedId) ?? BUILTIN_SOUNDS[0]
-        playBuiltin(builtin, audioStateRef)
+        playBuiltinSound(builtin)
       } else {
         // Custom sound
         const custom = customSounds.find(e => e.id === selectedId)
         if (custom) {
-          playCustomUrl(`${SOUNDS_HTTP_PREFIX}/${custom.id}`)
+          playCustomSound(`${SOUNDS_HTTP_PREFIX}/${custom.id}`)
         }
       }
     }, [selectedId, customSounds]),
