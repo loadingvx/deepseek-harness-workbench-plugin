@@ -268,6 +268,15 @@
   box-shadow: var(--dsw-shadow-lv2);
 }
 
+/* Status-bar popups must escape the bottom strip ([data-git-ide-panel=bottom],
+   overflow:hidden). While the terminal is an editor tab that strip collapses to
+   the 24px bar alone and an absolute popup is clipped away; pinning to the
+   viewport keeps the menu visible. Coordinates come from the anchor's rect
+   (statusMenuAnchorStyle) and override right/bottom via inline styles. */
+.menuFixed {
+  position: fixed;
+}
+
 .menuItem {
   display: flex;
   align-items: center;

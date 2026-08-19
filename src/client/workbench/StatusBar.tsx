@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import type { GitClient } from '../api.ts'
 import type { PluginUpdateSnapshot } from '../../shared/types.ts'
 import { redactSecrets } from '../../shared/redact.ts'
@@ -18,13 +18,68 @@ import { EDITOR_MODES, type EditorModeId } from './editor-mode.ts'
 import { IconChevron, IconFeedback, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
 import { readNearbyGit, retainNearbyGit, subscribeNearbyGit } from './nearby-git.ts'
 import { readGitLiveStatus, retainGitLive, subscribeGitLive } from './git-live.ts'
-import { fileName, showEditorStatusChrome, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
+import { fileName, showEditorStatusChrome, statusMenuAnchorStyle, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
 import { browserTabLabel, terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import { readUsageLive, retainUsageLive, subscribeUsageLive } from './usage-live.ts'
 import css from './StatusBar.module.css'
 
 function openExternal(url: string): void {
   window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+/**
+ * Status-bar popup menu, pinned to the viewport.
+ *
+ * The bar lives inside the bottom strip ([data-git-ide-panel=bottom], which is
+ * overflow:hidden). While the terminal is an editor tab that strip collapses to
+ * the bar alone, so an absolutely positioned menu (bottom: calc(100% + 4px))
+ * pops upward and is clipped out of view. `position: fixed` plus the anchor's
+ * rect puts the menu in the same place but never clipped - same technique as
+ * the file-tree context menu.
+ */
+function StatusMenu({
+  open,
+  anchor,
+  extraClass,
+  label,
+  onClose,
+  children,
+}: {
+  open: boolean
+  anchor: HTMLElement | null
+  extraClass?: string
+  label: string
+  onClose: () => void
+  children: ReactNode
+}) {
+  const [style, setStyle] = useState<CSSProperties | null>(null)
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setStyle(null)
+      return
+    }
+    if (anchor === null) return
+    setStyle(statusMenuAnchorStyle(
+      anchor.getBoundingClientRect(),
+      { width: window.innerWidth, height: window.innerHeight },
+    ))
+  }, [open, anchor])
+
+  if (!open || style === null) return null
+  return (
+    <>
+      <div className={css.menuBackdrop} onClick={onClose} />
+      <div
+        className={extraClass === undefined ? css.menu : `${css.menu} ${css.menuFixed} ${extraClass}`}
+        style={style}
+        role="menu"
+        aria-label={label}
+      >
+        {children}
+      </div>
+    </>
+  )
 }
 
 export function StatusBar({
@@ -71,6 +126,11 @@ export function StatusBar({
   const [modeMenuOpen, setModeMenuOpen] = useState(false)
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false)
   const [updateNote, setUpdateNote] = useState<string | null>(null)
+  // Anchors for the popup menus: the bar's menus are pinned to the viewport so
+  // they stay visible when the bottom strip collapses (terminal as editor tab).
+  const warnWrapRef = useRef<HTMLSpanElement>(null)
+  const modeWrapRef = useRef<HTMLSpanElement>(null)
+  const layoutWrapRef = useRef<HTMLSpanElement>(null)
   const usage = useSyncExternalStore(subscribeUsageLive, readUsageLive, () => null)
   const nearby = useSyncExternalStore(subscribeNearbyGit, readNearbyGit, readNearbyGit)
   const status = useSyncExternalStore(subscribeGitLive, readGitLiveStatus, () => null)
@@ -150,7 +210,7 @@ export function StatusBar({
           {t('status.version', { version })}
         </button>
         {plugin?.outdated && plugin.latest !== null ? (
-          <span className={css.warnWrap}>
+          <span className={css.warnWrap} ref={warnWrapRef}>
             <button
               type="button"
               className={css.warn}
@@ -173,46 +233,46 @@ export function StatusBar({
             >
               <IconChevron open />
             </button>
-            {menuOpen ? (
-              <>
-                <div className={css.menuBackdrop} onClick={() => { setMenuOpen(false) }} />
-                <div className={css.menu} role="menu" aria-label={t('status.updateMenu')}>
-                  <button
-                    type="button"
-                    className={css.menuItem}
-                    role="menuitem"
-                    title={t('status.updatePageHint', { latest: plugin.latest })}
-                    onClick={() => {
-                      setMenuOpen(false)
-                      openExternal(PLUGIN_PAGE_URL)
-                    }}
-                  >
-                    <IconNpm size={12} />
-                    {t('status.updatePage')}
-                  </button>
-                  <button
-                    type="button"
-                    className={css.menuItem}
-                    role="menuitem"
-                    disabled={workspaceId === undefined}
-                    title={workspaceId === undefined ? t('status.updateNoWorkspace') : t('status.updateRunHint')}
-                    onClick={() => {
-                      if (workspaceId === undefined) return
-                      setMenuOpen(false)
-                      onPrepareUpdate?.()
-                      window.setTimeout(() => {
-                        void client.writeTerm(workspaceId, `${plugin.command}\n`).then((result) => {
-                          setUpdateNote(result.ok ? t('status.updateSent') : (result.messageZh || t('status.updateFailed')))
-                          window.setTimeout(() => { setUpdateNote(null) }, 4000)
-                        })
-                      }, 80)
-                    }}
-                  >
-                    {t('status.updateRun', { latest: plugin.latest })}
-                  </button>
-                </div>
-              </>
-            ) : null}
+            <StatusMenu
+              open={menuOpen}
+              anchor={warnWrapRef.current}
+              label={t('status.updateMenu')}
+              onClose={() => { setMenuOpen(false) }}
+            >
+              <button
+                type="button"
+                className={css.menuItem}
+                role="menuitem"
+                title={t('status.updatePageHint', { latest: plugin.latest })}
+                onClick={() => {
+                  setMenuOpen(false)
+                  openExternal(PLUGIN_PAGE_URL)
+                }}
+              >
+                <IconNpm size={12} />
+                {t('status.updatePage')}
+              </button>
+              <button
+                type="button"
+                className={css.menuItem}
+                role="menuitem"
+                disabled={workspaceId === undefined}
+                title={workspaceId === undefined ? t('status.updateNoWorkspace') : t('status.updateRunHint')}
+                onClick={() => {
+                  if (workspaceId === undefined) return
+                  setMenuOpen(false)
+                  onPrepareUpdate?.()
+                  window.setTimeout(() => {
+                    void client.writeTerm(workspaceId, `${plugin.command}\n`).then((result) => {
+                      setUpdateNote(result.ok ? t('status.updateSent') : (result.messageZh || t('status.updateFailed')))
+                      window.setTimeout(() => { setUpdateNote(null) }, 4000)
+                    })
+                  }, 80)
+                }}
+              >
+                {t('status.updateRun', { latest: plugin.latest })}
+              </button>
+            </StatusMenu>
           </span>
         ) : null}
       </span>
@@ -226,6 +286,7 @@ export function StatusBar({
       </span>
       <LayoutMenu
         open={layoutMenuOpen}
+        anchorRef={layoutWrapRef}
         termDock={termDock}
         bottomSpan={bottomSpan}
         editorOpen={editorOpen}
@@ -241,7 +302,7 @@ export function StatusBar({
         t={t}
       />
       {showEditorStatusChrome(editorOpen) && active?.kind === 'file' && editorMode !== undefined ? (
-        <span className={css.modeWrap}>
+        <span className={css.modeWrap} ref={modeWrapRef}>
           <button
             type="button"
             className={css.mode}
@@ -255,30 +316,30 @@ export function StatusBar({
             {t(`editor.mode.${editorMode}`)}
             <IconChevron open={modeMenuOpen} />
           </button>
-          {modeMenuOpen ? (
-            <>
-              <div className={css.menuBackdrop} onClick={() => { setModeMenuOpen(false) }} />
-              <div className={css.menu} role="menu" aria-label={t('editor.modeMenu')}>
-                {EDITOR_MODES.map(mode => (
-                  <button
-                    key={mode}
-                    type="button"
-                    role="menuitem"
-                    className={css.menuItem}
-                    data-active={editorMode === mode || undefined}
-                    title={t(`editor.mode.${mode}Hint`)}
-                    onClick={() => {
-                      setModeMenuOpen(false)
-                      onEditorModeChange?.(mode)
-                    }}
-                  >
-                    <span className={css.modeName}>{t(`editor.mode.${mode}`)}</span>
-                    <span className={css.modeHint}>{t(`editor.mode.${mode}Hint`)}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : null}
+          <StatusMenu
+            open={modeMenuOpen}
+            anchor={modeWrapRef.current}
+            label={t('editor.modeMenu')}
+            onClose={() => { setModeMenuOpen(false) }}
+          >
+            {EDITOR_MODES.map(mode => (
+              <button
+                key={mode}
+                type="button"
+                role="menuitem"
+                className={css.menuItem}
+                data-active={editorMode === mode || undefined}
+                title={t(`editor.mode.${mode}Hint`)}
+                onClick={() => {
+                  setModeMenuOpen(false)
+                  onEditorModeChange?.(mode)
+                }}
+              >
+                <span className={css.modeName}>{t(`editor.mode.${mode}`)}</span>
+                <span className={css.modeHint}>{t(`editor.mode.${mode}Hint`)}</span>
+              </button>
+            ))}
+          </StatusMenu>
         </span>
       ) : null}
     </footer>
@@ -409,6 +470,7 @@ function StatusTabs({
 
 function LayoutMenu({
   open,
+  anchorRef,
   termDock,
   bottomSpan,
   editorOpen,
@@ -420,6 +482,7 @@ function LayoutMenu({
   t,
 }: {
   open: boolean
+  anchorRef: RefObject<HTMLSpanElement>
   termDock: TermDock
   bottomSpan: BottomSpan
   editorOpen: boolean
@@ -432,7 +495,7 @@ function LayoutMenu({
 }) {
   const columns = { editor: editorOpen, side: sideOpen }
   return (
-    <span className={css.layoutWrap}>
+    <span className={css.layoutWrap} ref={anchorRef}>
       <button
         type="button"
         className={css.mode}
@@ -446,10 +509,13 @@ function LayoutMenu({
         {t('layout.menu')}
         <IconChevron open={open} />
       </button>
-      {open ? (
-        <>
-          <div className={css.menuBackdrop} onClick={onClose} />
-          <div className={`${css.menu} ${css.layoutMenu}`} role="menu" aria-label={t('layout.menu')}>
+      <StatusMenu
+        open={open}
+        anchor={anchorRef.current}
+        extraClass={css.layoutMenu}
+        label={t('layout.menu')}
+        onClose={onClose}
+      >
             <div className={css.layoutSection}>{t('layout.termSection')}</div>
             {TERM_DOCKS.map(dock => (
               <button
@@ -493,9 +559,7 @@ function LayoutMenu({
                 </button>
               )
             })}
-          </div>
-        </>
-      ) : null}
+      </StatusMenu>
     </span>
   )
 }

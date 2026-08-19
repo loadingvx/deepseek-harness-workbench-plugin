@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fileName, shortPath, STATUS_BAR_H, showEditorStatusChrome, tabStripOverflow, tabStripScrollDelta } from '../src/client/workbench/status-bar.ts'
+import { fileName, shortPath, STATUS_BAR_H, showEditorStatusChrome, statusMenuAnchorStyle, tabStripOverflow, tabStripScrollDelta } from '../src/client/workbench/status-bar.ts'
 
 describe('STATUS_BAR_H', () => {
   it('matches the conversation stats line under the composer', () => {
@@ -46,6 +46,22 @@ describe('tabStripScrollDelta', () => {
   it('jumps at least one short tab', () => {
     expect(tabStripScrollDelta(40)).toBe(80)
     expect(tabStripScrollDelta(200)).toBe(120)
+  })
+})
+
+describe('statusMenuAnchorStyle', () => {
+  const viewport = { width: 1200, height: 800 }
+
+  it('pins the menu right edge to the anchor and pops it above the bar', () => {
+    // Anchor (the Layout button) sits at the bottom right, 24px status bar high.
+    const style = statusMenuAnchorStyle({ right: 1150, top: 776 }, viewport)
+    expect(style.right).toBe(50)
+    expect(style.bottom).toBe(28)
+  })
+
+  it('keeps the menu on screen when the anchor hugs the viewport edges', () => {
+    expect(statusMenuAnchorStyle({ right: 1200, top: 800 }, viewport)).toEqual({ right: 8, bottom: 8 })
+    expect(statusMenuAnchorStyle({ right: 0, top: 0 }, viewport)).toEqual({ right: 1200, bottom: 804 })
   })
 })
 

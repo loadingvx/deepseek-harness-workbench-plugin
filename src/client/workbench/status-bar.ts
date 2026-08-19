@@ -39,3 +39,24 @@ export function tabStripScrollDelta(clientWidth: number): number {
 export function showEditorStatusChrome(editorOpen: boolean): boolean {
   return editorOpen
 }
+
+/**
+ * Viewport offsets for a status-bar popup menu.
+ *
+ * The bar sits inside the bottom strip ([data-git-ide-panel=bottom], which is
+ * overflow:hidden). While the terminal is an editor tab that strip collapses to
+ * the bar alone, so an absolutely positioned menu popping upward
+ * (bottom: calc(100% + 4px)) gets clipped out of view. The menus are therefore
+ * pinned to the viewport (position: fixed) using the anchor's rect: the menu's
+ * bottom edge sits 4px above the anchor's top, its right edge aligns with the
+ * anchor's right edge — the same placement as before, but never clipped.
+ */
+export function statusMenuAnchorStyle(
+  rect: { right: number; top: number },
+  viewport: { width: number; height: number },
+): { right: number; bottom: number } {
+  return {
+    right: Math.max(8, viewport.width - rect.right),
+    bottom: Math.max(8, viewport.height - rect.top + 4),
+  }
+}

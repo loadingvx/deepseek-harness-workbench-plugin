@@ -10,6 +10,8 @@ Look for these first:
 - **Smart terminal** — a local PTY in the editor. Real shell lines (including pasted `$ ls`) run as-is. Natural language is translated by **AI command assist** (<kbd>Alt</kbd>+<kbd>I</kbd> or the ✨ button) and typed into the **current** terminal. Notes are never executed. A blacklist blocks destructive commands the assistant would otherwise type. <kbd>Alt</kbd>+<kbd>J</kbd> opens another terminal tab.
 - **AI commit messages** — in the right-dock **Source Control** tab, generate a message from staged changes; the text streams into the commit box. The template is editable.
 
+- **Notification sounds** — when a session finishes while you are away or is waiting on you (approval, plan confirmation, question), the workbench plays a chime. Pick one of 5 built-in Web Audio sounds or upload your own audio (mp3, ogg, wav, webm, m4a, flac, up to 50 MB); a loop reminder keeps replaying it every N seconds (default 10) until the item is handled. The master switch, sound picker, and loop interval live in the workbench **Settings** panel.
+
 ## Contents
 
 - [Interface](#interface)
@@ -116,7 +118,7 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 
 - Right-dock **Ultra Slash** tab (`/` icon). Chinese UI label: **插件命令**
 - Type `/` in the chat box: plugin commands sit in the **bottom** group, below a divider
-- Built-in, cannot be renamed or deleted: `/steer` (inject guidance), `/new` (blank session), `/skill` (save a project skill after the task), `/docs` (write cause and fix under `docs/` after the task)
+- Built-in, cannot be renamed or deleted: `/steer` (inject guidance), `/new` (blank session; `/new <text>` starts the new session with that first message), `/skill` (save a project skill after the task), `/docs` (write cause and fix under `docs/` after the task)
 - Custom `/name` shortcuts send a fixed `/steer` payload. Fill `review` in the panel — do not type the slash — and `/review` appears in the menu
 - **Does not interrupt** the current turn. If the model is running, the text is queued for the next model access; you do not need **Stop**
 - Stored on this machine at `~/.dsh/ultra-slash/commands.json`; every session shares the same list (at most 40 custom commands)
@@ -183,7 +185,7 @@ These four cannot be renamed or deleted.
 | Command | What it does |
 | --- | --- |
 | `/steer <guidance>` | Inject the guidance into the next model step without interrupting the turn. Example: `/steer list the files you would change, do not edit yet` |
-| `/new` | Switch to a blank session. A running turn is not stopped; switch back from the left session list |
+| `/new [text]` | Switch to a blank session; text after the command is sent as the first message of the new session. A running turn is not stopped; switch back from the left session list |
 | `/skill` | After the current task, save the solution as a skill in this project. Same “do not interrupt” rule as `/steer` |
 | `/docs` | After the current task, write the cause and the fix as markdown under `docs/`. Same rule as `/steer` |
 

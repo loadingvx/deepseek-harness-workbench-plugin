@@ -16,7 +16,7 @@ import {
   type LocaleRegistry,
   type SlashTriggerService,
 } from './slash-menu.ts'
-import { installNewSessionBridge, startNewSession } from './new-session.ts'
+import { installNewSessionBridge, newSlashMatchEnter, startNewSession } from './new-session.ts'
 import { getSlashCache, setSlashI18n } from './runtime.ts'
 
 const DIVIDER_STYLE_ID = `${PLUGIN_NAME}-divider`
@@ -150,6 +150,7 @@ export function installUltraSlashClient(ctx: UltraSlashClientContext): void {
         if (commandName === '') return undefined
         return { text: `/${commandName} ` }
       },
+      matchEnter: newSlashMatchEnter((name) => ctx.get(name), bindMenuTranslate(locale)),
     }
     const unregister = inputTriggers.registerSource(source)
     return () => {
@@ -163,8 +164,8 @@ export function installUltraSlashClient(ctx: UltraSlashClientContext): void {
   )
 
   ctx.effect(
-    () => installNewSessionBridge(inputTriggers, () => {
-      startNewSession((name) => ctx.get(name))
+    () => installNewSessionBridge(inputTriggers, (initialText) => {
+      startNewSession((name) => ctx.get(name), initialText)
     }),
     `${PLUGIN_NAME}: /new session`,
   )
