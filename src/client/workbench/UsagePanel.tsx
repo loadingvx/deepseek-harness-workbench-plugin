@@ -154,6 +154,12 @@ function useNavUsageFrame(enabled: boolean): {
 
   const beginResize = (event: ReactPointerEvent<HTMLButtonElement>): void => {
     event.preventDefault()
+    // Capture the pointer so pointermove/pointerup keep arriving even when
+    // the cursor leaves the window or moves over an iframe (BrowserView);
+    // without capture a lost pointerup strands the drag listeners forever.
+    const handle = event.currentTarget
+    const pointerId = event.pointerId
+    try { handle.setPointerCapture(pointerId) } catch { /* pointer already inactive */ }
     const startY = event.clientY
     const startH = height
     const host = rootRef.current?.parentElement
@@ -167,14 +173,17 @@ function useNavUsageFrame(enabled: boolean): {
       latest = clampNavUsageHeight(startH + (startY - next.clientY), liveSidebar, liveSettings, liveCompact)
       setDesired(latest)
     }
-    const up = (): void => {
+    const end = (): void => {
+      try { handle.releasePointerCapture(pointerId) } catch { /* already released */ }
       setDragging(false)
       writeNavUsageHeight(latest)
       window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
     }
     window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
   }
 
   const resetHeight = (): void => {

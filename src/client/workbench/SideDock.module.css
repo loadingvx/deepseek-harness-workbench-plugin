@@ -24,13 +24,6 @@
   flex: 1;
 }
 
-.tabBadgeWrap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .body {
   flex: 1;
   min-height: 0;

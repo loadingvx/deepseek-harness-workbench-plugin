@@ -60,11 +60,10 @@ import { browserElExisting } from './browser-el-client.ts'
 import { DevToolsPanel } from './DevToolsPanel.tsx'
 import { loadEditorMode, saveEditorMode, type EditorModeId } from './editor-mode.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconChat, IconDevtools, IconEditor, IconFiles, IconGit, IconGlobe, IconLayout, IconSessions, IconSlash, IconUsage } from './icons.tsx'
+import { IconChat, IconDevtools, IconEditor, IconFiles, IconGit, IconGlobe, IconLayout, IconSettings, IconUsage } from './icons.tsx'
 import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
 import { SideDock } from './SideDock.tsx'
-import { TabBadge } from './TabBadge.tsx'
 import { termIdFromTabId } from '../../shared/new-file-path.ts'
 import type { TermCleanExitAction } from './term-session.ts'
 import { createTerminalTab, nextBrowserTab, nextTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type Translate, type WorkbenchInjected } from './types.ts'
@@ -270,8 +269,7 @@ function WorkbenchInner(props: WorkbenchProps) {
 
   const workspace = useWorkspace(useSessions, useWorkspaces)
   const workspaceId = workspace?.workspaceId
-  const { attention, running: runningCount } = useAttentionCounts(useSessions, useWorkspaces)
-  const openSession = useCallback((id: string): void => { props.sessions?.open?.(id) }, [props.sessions])
+  const { attention } = useAttentionCounts(useSessions, useWorkspaces)
   const playSound = useCallback(() => {
     const acRef = { ac: null as AudioContext | null }
     try {
@@ -436,6 +434,12 @@ function WorkbenchInner(props: WorkbenchProps) {
 
   const beginResize = (which: 'chat' | 'side', event: React.PointerEvent<HTMLButtonElement>): void => {
     event.preventDefault()
+    // Capture the pointer so pointermove/pointerup keep arriving even when
+    // the cursor leaves the window or moves over an iframe (BrowserView);
+    // without capture a lost pointerup strands the drag listeners forever.
+    const handle = event.currentTarget
+    const pointerId = event.pointerId
+    try { handle.setPointerCapture(pointerId) } catch { /* pointer already inactive */ }
     const startX = event.clientX
     const startChat = chatW
     const startSide = sideW
@@ -466,17 +470,20 @@ function WorkbenchInner(props: WorkbenchProps) {
         setSideW(latestSide)
       }
     }
-    const up = (): void => {
+    const end = (): void => {
+      try { handle.releasePointerCapture(pointerId) } catch { /* already released */ }
       setDragging(null)
       document.body.style.cursor = previousCursor
       document.body.style.userSelect = previousSelect
       window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
       if (which === 'chat') writePx(CHAT_W_KEY, latestChat)
       else writePx(SIDE_W_KEY, latestSide)
     }
     window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
   }
 
   const resetChatWidth = (): void => {
@@ -499,6 +506,12 @@ function WorkbenchInner(props: WorkbenchProps) {
 
   const beginTermResize = (event: React.PointerEvent<HTMLButtonElement>): void => {
     event.preventDefault()
+    // Capture the pointer so pointermove/pointerup keep arriving even when
+    // the cursor leaves the window or moves over an iframe (BrowserView);
+    // without capture a lost pointerup strands the drag listeners forever.
+    const handle = event.currentTarget
+    const pointerId = event.pointerId
+    try { handle.setPointerCapture(pointerId) } catch { /* pointer already inactive */ }
     const hostH = host?.clientHeight ?? 0
     const startY = event.clientY
     const startH = clampTermHeight(termH, hostH, reservedAboveTerm(hostH))
@@ -513,16 +526,19 @@ function WorkbenchInner(props: WorkbenchProps) {
       latest = clampTermHeight(startH + (startY - next.clientY), liveH, reservedAboveTerm(liveH))
       setTermH(latest)
     }
-    const up = (): void => {
+    const end = (): void => {
+      try { handle.releasePointerCapture(pointerId) } catch { /* already released */ }
       setDragging(null)
       document.body.style.cursor = previousCursor
       document.body.style.userSelect = previousSelect
       window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
       writePx(TERM_H_KEY, latest)
     }
     window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
   }
 
   const resetTermHeight = (): void => {
@@ -972,9 +988,6 @@ function WorkbenchInner(props: WorkbenchProps) {
           onCollapse={() => { patchWorkbenchChrome({ sideOpen: false }) }}
           update={updateInfo}
           onDismissUpdate={() => { setUpdateHidden(true) }}
-          useSessions={useSessions}
-          useWorkspaces={useWorkspaces}
-          openSession={openSession}
           t={t}
           devtoolsDock={devtoolsDock}
           onDevtoolsDock={changeDevtoolsDock}
@@ -993,15 +1006,6 @@ function WorkbenchInner(props: WorkbenchProps) {
               <IconUsage />
             </IconButton>
           ) : null}
-          <IconButton label={t('ide.slash')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'slash' }) }}>
-            <IconSlash />
-          </IconButton>
-          <span className={railCss.tabBadgeWrap}>
-            <IconButton label={t('ide.sessions')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'sessions' }) }}>
-              <IconSessions />
-            </IconButton>
-            <TabBadge count={attention > 0 ? attention : runningCount} tone={attention > 0 ? 'attention' : 'running'} />
-          </span>
           {devtoolsOpen ? (
             <IconButton label={t('ide.devtools')} onClick={() => {
               changeDevtoolsDock('side')
@@ -1009,6 +1013,9 @@ function WorkbenchInner(props: WorkbenchProps) {
               <IconDevtools />
             </IconButton>
           ) : null}
+          <IconButton label={t('ide.settings')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'settings' }) }}>
+            <IconSettings />
+          </IconButton>
         </div>
       )}
       <UsageNavPortal

@@ -17,6 +17,8 @@ export interface SettingsSectionProps {
   t: Translate
   locale: UiLocale
   cache: CatalogCache
+  /** 嵌在外部折叠分区里时隐藏自带的大标题与引导文案（避免与分区头重复）。 */
+  embedded?: boolean
 }
 
 interface Draft {
@@ -48,7 +50,7 @@ export function SlashPanel() {
   )
 }
 
-export function SettingsSection({ t, locale, cache }: SettingsSectionProps) {
+export function SettingsSection({ t, locale, cache, embedded = false }: SettingsSectionProps) {
   const [commands, setCommands] = useState<readonly CustomSlashCommand[]>(() => cache.list())
   const [load, setLoad] = useState<'loading' | 'ready' | 'error'>('loading')
   const [loadError, setLoadError] = useState('')
@@ -139,8 +141,12 @@ export function SettingsSection({ t, locale, cache }: SettingsSectionProps) {
 
   return (
     <div className={css.section}>
-      <h2 className={css.heading}>{t('settings.title')}</h2>
-      <p className={css.intro}>{t('settings.intro')}</p>
+      {embedded ? null : (
+        <>
+          <h2 className={css.heading}>{t('settings.title')}</h2>
+          <p className={css.intro}>{t('settings.intro')}</p>
+        </>
+      )}
 
       <section className={css.block}>
         <h3 className={css.blockTitle}>{t('settings.builtinTitle')}</h3>

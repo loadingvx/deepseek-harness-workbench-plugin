@@ -520,6 +520,26 @@ export function IconSessions() {
     )
 }
 
+/** 插件设置：齿轮。 */
+export function IconSettings() {
+  return (
+    <Icon>
+      <path
+        d="M8 5.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+      />
+      <path
+        d="M8 2.8v1.4M8 11.8v1.4M2.8 8h1.4M11.8 8h1.4M4.4 4.4l1 1M10.6 10.6l1 1M11.6 4.4l-1 1M5.4 10.6l-1 1"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </Icon>
+  )
+}
+
 /** 提示音开关：铃铛。 */
 export function IconBell() {
   return (

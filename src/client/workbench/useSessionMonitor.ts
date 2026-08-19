@@ -1,9 +1,8 @@
 /**
  * 全局会话监控 · React 接线层（hook）
  *
- * - useAttentionCounts：标签角标计数（窄选择器，数字订阅，仅计数变化时重渲染）；
- * - useAckVersion：已读记认版本订阅（面板读取共享 ack）；
- * - useBeepOn：提示音开关（面板 🔔 与工作台提示音效果共享）；
+ * - useAttentionCounts：提示音注意项计数（窄选择器，数字订阅，仅计数变化时重渲染）；
+ * - useBeepOn：提示音开关（设置面板 🔔 与工作台提示音效果共享）；
  * - useLoopReminder / useReminderInterval：循环提醒开关与间隔（localStorage 持久化偏好）；
  * - useSessionBeep：有待注意项时播放提示音（从无到有播放 1 次，清空后重置；
  *   循环提醒开启时每隔 N 秒重播，直到处理完或关闭）。
@@ -60,10 +59,6 @@ export function useAttentionCounts(
   const running = useSessions((state) => countRunning(state, archived)) as number
   void ackVersion
   return { attention, running }
-}
-
-export function useAckVersion(): number {
-  return useSyncExternalStore(subscribeAck, getAckVersion, getAckVersion)
 }
 
 export function useBeepOn(): [boolean, (on: boolean) => void] {

@@ -250,11 +250,11 @@ DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作�
 | 项目 | 说明 |
 | --- | --- |
 | 包名 | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| 当前版本 | **0.1.21**（npm 标签 `latest`） |
+| 当前版本 | **0.1.22**（npm 标签 `latest`） |
 | 软件源 | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.21
++ dsh-workbench-plugin@0.1.22
 ```
 
 维护者发布 npm 请执行 `bash devops/release.sh`。该脚本使用本机已有的 `npm login` 会话；不得将账号或凭据写入仓库。
@@ -269,13 +269,13 @@ DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作�
 
 ### 步骤
 
-1. 安装插件（必须带版本号，不要省略 `@0.1.21`）：
+1. 安装插件（必须带版本号，不要省略 `@0.1.22`）：
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.21
+dsh plugin --profile web add dsh-workbench-plugin@0.1.22
 ```
 
-`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.21` 才会明确要这一版。
+`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.22` 才会明确要这一版。
 
 若指定版本后仍提示太新、装不上，在 `~/.dsh/profiles/web/pnpm-workspace.yaml` 加上下面两行，再执行一次安装命令：
 
@@ -311,7 +311,7 @@ dsh plugin --profile web add github:loadingvx/deepseek-harness-workbench-plugin
 
 ### 从 0.1.1 升级
 
-**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.21；此后版本将通过界面提示。
+**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.22；此后版本将通过界面提示。
 
 ## 工作区终端
 

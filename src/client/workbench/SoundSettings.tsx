@@ -1,11 +1,14 @@
 /**
  * 提示音设置：选择内置提示音 或 上传自定义音频文件。
+ *
+ * 列表直接平铺展示（不再用下拉浮层）：选中项高亮 + 左侧对勾，
+ * 行内提供试听按钮；自定义音频行可删除。上传区同样内联展开。
  */
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { BUILTIN_SOUNDS } from '../../shared/workbench-sounds/builtins.ts'
 import { MAX_SOUND_UPLOAD_BYTES } from '../../shared/workbench-sounds/types.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconPlay, IconVolume } from './icons.tsx'
+import { IconCheck, IconPlay, IconPlus, IconTrash } from './icons.tsx'
 import { uiLocaleFromTranslate, type Translate } from './types.ts'
 import { playBuiltinSound, playCustomSound } from './useSessionMonitor.ts'
 import css from './SoundSettings.module.css'
@@ -54,11 +57,9 @@ export function SoundSettings({ t }: SoundSettingsProps) {
     try { return localStorage.getItem(PREF_KEY) ?? 'chime-ascending' } catch { return 'chime-ascending' }
   })
   const [customSounds, setCustomSounds] = useState<CustomSound[]>([])
-  const [showDropdown, setShowDropdown] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [uploadStatus, setUploadStatus] = useState<string>('')
   const acRef = useRef<{ ac: AudioContext | null }>({ ac: null })
-  const dropdownRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -75,17 +76,6 @@ export function SoundSettings({ t }: SoundSettingsProps) {
       .catch(() => { /* ignore */ })
   }, [])
 
-  useEffect(() => {
-    if (!showDropdown) return
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowDropdown(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [showDropdown])
-
   const allSounds: SoundOption[] = [
     ...BUILTIN_SOUNDS.map(s => ({
       id: s.id,
@@ -100,11 +90,6 @@ export function SoundSettings({ t }: SoundSettingsProps) {
       desc: s.filename,
     })),
   ]
-
-  const selectedSound = allSounds.find(s => s.id === selectedId) ?? allSounds[0]
-  const pickerLabel = selectedSound !== undefined
-    ? `${selectedSound.label} — ${selectedSound.desc}`
-    : t('sessions.soundSelect')
 
   const savePref = (id: string) => {
     try { localStorage.setItem(PREF_KEY, id) } catch { /* ignore */ }
@@ -171,105 +156,80 @@ export function SoundSettings({ t }: SoundSettingsProps) {
   }
 
   return (
-    <div className={css.root}>
-      <div className={css.soundPicker} ref={dropdownRef}>
-        <IconButton
-          dense
-          label={pickerLabel}
-          active={showDropdown}
-          className={css.soundBtn}
-          onClick={() => { setShowDropdown(!showDropdown); setShowUpload(false) }}
-          title={pickerLabel}
+    <div className={css.block}>
+      <div className={css.blockHead}>
+        <span className={css.blockTitle}>{t('settings.soundLabel')}</span>
+        <button
+          type="button"
+          className={css.uploadBtn}
+          onClick={() => { setShowUpload(v => !v); setUploadStatus('') }}
         >
-          <IconVolume />
-        </IconButton>
-        {showDropdown && (
-          <div className={css.dropdown}>
-            <div className={css.dropdownHeader}>
-              <span>{t('sessions.soundSelect')}</span>
-              <button
-                type="button"
-                className={css.uploadBtn}
-                onClick={() => { setShowUpload(true); setShowDropdown(false) }}
-              >
-                + {t('sessions.soundUpload')}
-              </button>
-            </div>
-            <div className={css.soundList}>
-              {allSounds.map(sound => (
-                <div
-                  key={sound.id}
-                  className={`${css.soundItem}${sound.id === selectedId ? ` ${css.selected}` : ''}`}
-                  onClick={() => { handleSelect(sound.id) }}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={sound.id === selectedId}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      handleSelect(sound.id)
-                    }
-                  }}
-                >
-                  <div className={css.soundMain}>
-                    <span className={css.soundLabel}>{sound.label}</span>
-                    <span className={css.soundDesc}>{sound.desc}</span>
-                  </div>
-                  <div className={css.soundActions}>
-                    <IconButton
-                      dense
-                      className={css.playBtn}
-                      label={t('sessions.soundPreview')}
-                      title={t('sessions.soundPreview')}
-                      onClick={(event) => { previewSound(sound.id, event) }}
-                    >
-                      <IconPlay />
-                    </IconButton>
-                    {sound.kind === 'custom' ? (
-                      <button
-                        type="button"
-                        className={css.deleteBtn}
-                        onClick={(e) => handleDelete(sound.id, e)}
-                        title={t('sessions.soundDelete')}
-                        aria-label={t('sessions.soundDelete')}
-                      >
-                        ×
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+          <IconPlus />
+          <span>{t('sessions.soundUpload')}</span>
+        </button>
       </div>
-
-      {showUpload && (
+      <ul className={css.list} role="listbox" aria-label={t('settings.soundLabel')}>
+        {allSounds.map(sound => (
+          <li
+            key={sound.id}
+            className={css.item}
+            data-selected={sound.id === selectedId || undefined}
+            role="option"
+            aria-selected={sound.id === selectedId}
+            tabIndex={0}
+            onClick={() => { handleSelect(sound.id) }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                handleSelect(sound.id)
+              }
+            }}
+          >
+            <span className={css.checkSlot} aria-hidden>
+              {sound.id === selectedId ? <IconCheck /> : null}
+            </span>
+            <span className={css.soundMain}>
+              <span className={css.soundLabel}>{sound.label}</span>
+              <span className={css.soundDesc}>{sound.desc}</span>
+            </span>
+            <span className={css.soundActions}>
+              <IconButton
+                dense
+                className={css.playBtn}
+                label={t('sessions.soundPreview')}
+                title={t('sessions.soundPreview')}
+                onClick={(event) => { previewSound(sound.id, event) }}
+              >
+                <IconPlay />
+              </IconButton>
+              {sound.kind === 'custom' ? (
+                <button
+                  type="button"
+                  className={css.deleteBtn}
+                  onClick={(e) => handleDelete(sound.id, e)}
+                  title={t('sessions.soundDelete')}
+                  aria-label={t('sessions.soundDelete')}
+                >
+                  <IconTrash />
+                </button>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {showUpload ? (
         <div className={css.uploadPanel}>
-          <div className={css.uploadHeader}>
-            <span>{t('sessions.soundUploadPanel')}</span>
-            <button
-              type="button"
-              className={css.closeBtn}
-              onClick={() => setShowUpload(false)}
-              aria-label={t('sessions.soundClose')}
-            >
-              ×
-            </button>
-          </div>
-          <div className={css.uploadBody}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".ogg,.mp3,.wav,.webm,.m4a,.flac"
-              className={css.fileInput}
-              onChange={handleFileChange}
-            />
-            <span className={css.uploadHint}>{t('sessions.soundUploadHint')}</span>
-            {uploadStatus !== '' ? <span className={css.uploadStatus}>{uploadStatus}</span> : null}
-          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".ogg,.mp3,.wav,.webm,.m4a,.flac"
+            className={css.fileInput}
+            onChange={handleFileChange}
+          />
+          <span className={css.uploadHint}>{t('sessions.soundUploadHint')}</span>
+          {uploadStatus !== '' ? <span className={css.uploadStatus} role="status">{uploadStatus}</span> : null}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

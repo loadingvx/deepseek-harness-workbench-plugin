@@ -384,6 +384,12 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
 
   const beginResize = (event: React.PointerEvent<HTMLButtonElement>): void => {
     event.preventDefault()
+    // Capture the pointer so pointermove/pointerup keep arriving even when
+    // the cursor leaves the window or moves over an iframe (BrowserView);
+    // without capture a lost pointerup strands the drag listeners forever.
+    const handle = event.currentTarget
+    const pointerId = event.pointerId
+    try { handle.setPointerCapture(pointerId) } catch { /* pointer already inactive */ }
     const startY = event.clientY
     const startH = graphHFit
     const host = rootRef.current
@@ -397,14 +403,17 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       latest = clampGraphHeight(startH + (startY - next.clientY), liveH, liveRoom)
       setGraphH(latest)
     }
-    const up = (): void => {
+    const end = (): void => {
+      try { handle.releasePointerCapture(pointerId) } catch { /* already released */ }
       setDragging(false)
       try { localStorage.setItem(GRAPH_H_KEY, String(latest)) } catch { /* ignore */ }
       window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
     }
     window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
   }
 
   const stagedCount = status?.staged.length ?? 0
