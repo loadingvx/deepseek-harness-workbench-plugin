@@ -18,6 +18,27 @@ import {
   SIDE_DEFAULT, SIDE_MAX, SIDE_MIN, SIDE_W_KEY,
   clamp, clampLayout, readPx, writePx,
 } from './column-layout.ts'
+import {
+  clampTermHeight,
+  fileTabsOf,
+  layoutBottomSpan,
+  loadBottomSpan,
+  loadTermDock,
+  loadTermPanelOpen,
+  pickTabId,
+  reservedAboveTerm,
+  saveBottomSpan,
+  saveTermDock,
+  saveTermPanelOpen,
+  TERM_DEFAULT_H,
+  TERM_H_KEY,
+  TERM_HEADER_H,
+  termPanelVisible,
+  termTabsOf,
+  visibleTermId,
+  type BottomSpan,
+  type TermDock,
+} from './bottom-layout.ts'
 import { EditorPane } from './EditorPane.tsx'
 import { loadEditorMode, saveEditorMode, type EditorModeId } from './editor-mode.ts'
 import { IconButton } from './IconButton.tsx'
@@ -26,10 +47,12 @@ import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
 import { SideDock } from './SideDock.tsx'
 import { termIdFromTabId } from '../../shared/new-file-path.ts'
+import type { TermCleanExitAction } from './term-session.ts'
 import { createTerminalTab, nextTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type WorkbenchInjected } from './types.ts'
 import { previewKindOfPath } from '../../shared/preview-kind.ts'
-import { isTermNewTabHotkey } from '../../shared/term-assist.ts'
+import { isTermAssistHotkey, isTermNewTabHotkey } from '../../shared/term-assist.ts'
 import { StatusBar } from './StatusBar.tsx'
+import { TerminalPanel } from './TerminalPanel.tsx'
 import { UsageNavPortal } from './UsagePanel.tsx'
 import { defaultUsageDock, isNavHostReady, readUsageDock, subscribeNavHost, subscribeUsageDock, usageTabVisible } from './usage-dock.ts'
 import { STATUS_BAR_H } from './status-bar.ts'
@@ -177,7 +200,7 @@ function WorkbenchInner(props: WorkbenchProps) {
   const [fileError, setFileError] = useState<GitFail | null>(null)
   const [chatW, setChatW] = useState(() => readPx(CHAT_W_KEY, 0))
   const [sideW, setSideW] = useState(() => readPx(SIDE_W_KEY, SIDE_DEFAULT))
-  const [dragging, setDragging] = useState<null | 'chat' | 'side'>(null)
+  const [dragging, setDragging] = useState<null | 'chat' | 'side' | 'term'>(null)
   const buffersRef = useRef(buffers)
   buffersRef.current = buffers
   const tabsRef = useRef(tabs)
@@ -188,9 +211,41 @@ function WorkbenchInner(props: WorkbenchProps) {
     readBoolFlag(TERM_AI_OPEN_KEY, DEFAULT_TERM_AI_OPEN) ? [TERMINAL_TAB_ID] : []
   ))
   const [editorMode, setEditorMode] = useState<EditorModeId>(() => loadEditorMode())
+  const [termDock, setTermDock] = useState<TermDock>(() => loadTermDock())
+  const [bottomSpan, setBottomSpan] = useState<BottomSpan>(() => loadBottomSpan())
+  const [termH, setTermH] = useState(() => readPx(TERM_H_KEY, TERM_DEFAULT_H))
+  const [termPanelOpen, setTermPanelOpen] = useState(() => loadTermPanelOpen())
+  const [termPanelShown, setTermPanelShown] = useState(true)
+  const [lastFileId, setLastFileId] = useState<string | null>(null)
+  const [lastTermId, setLastTermId] = useState(TERMINAL_TAB_ID)
   const changeEditorMode = useCallback((mode: EditorModeId): void => {
     saveEditorMode(mode)
     setEditorMode(mode)
+  }, [])
+  const changeTermDock = useCallback((dock: TermDock): void => {
+    saveTermDock(dock)
+    setTermDock(dock)
+    if (dock === 'bottom') {
+      setTermPanelShown(true)
+      setTermPanelOpen(true)
+      saveTermPanelOpen(true)
+      return
+    }
+    patchWorkbenchChrome({ editorOpen: true })
+  }, [])
+  const changeBottomSpan = useCallback((span: BottomSpan): void => {
+    saveBottomSpan(span)
+    setBottomSpan(span)
+  }, [])
+  const changeTermPanelOpen = useCallback((open: boolean): void => {
+    setTermPanelOpen(open)
+    saveTermPanelOpen(open)
+    if (open) setTermPanelShown(true)
+  }, [])
+  const revealTermPanel = useCallback((): void => {
+    setTermPanelShown(true)
+    setTermPanelOpen(true)
+    saveTermPanelOpen(true)
   }, [])
   const pluginInfo = usePluginUpdate(client)
   const updateInfo = updateHidden ? null : visibleUpdate(pluginInfo)
@@ -225,6 +280,22 @@ function WorkbenchInner(props: WorkbenchProps) {
   const running = Boolean(props.useSession?.(state => state.running))
   const pending = (props.useSession?.(state => state.pending)?.length ?? 0) as number
   const split = shouldSplitWorkbench(enabled)
+  const panelOn = termPanelVisible(termDock) && termPanelShown
+  const spanNow = layoutBottomSpan(termDock, bottomSpan, { editor: editorOpen, side: sideOpen })
+  const fileTabs = fileTabsOf(tabs)
+  const termTabs = termTabsOf(tabs)
+  const editorTabs = termDock === 'bottom' ? fileTabs : tabs
+  const editorActiveId = termDock === 'bottom'
+    ? pickTabId(fileTabs, tabs.find(tab => tab.id === activeId)?.kind !== 'terminal' ? activeId : lastFileId)
+    : activeId
+  const termActiveId = visibleTermId(tabs, activeId, lastTermId)
+
+  useEffect(() => {
+    const tab = tabs.find(item => item.id === activeId)
+    if (tab === undefined) return
+    if (tab.kind === 'terminal') setLastTermId(tab.id)
+    else setLastFileId(tab.id)
+  }, [activeId, tabs])
 
   useEffect(() => {
     if (running || pending > 0) patchWorkbenchChrome({ chatOpen: true })
@@ -274,23 +345,34 @@ function WorkbenchInner(props: WorkbenchProps) {
       delete scroll.dataset.gitChat
       delete scroll.dataset.gitEditor
       delete scroll.dataset.gitSide
+      delete scroll.dataset.gitTermOpen
+      delete scroll.dataset.gitTermDock
+      delete scroll.dataset.gitBottomSpan
       scroll.style.removeProperty('--git-col-chat')
       scroll.style.removeProperty('--git-col-editor')
       scroll.style.removeProperty('--git-col-side')
       scroll.style.removeProperty('--git-status-h')
+      scroll.style.removeProperty('--git-term-h')
       return
     }
     scroll.dataset.gitIde = ''
     scroll.dataset.gitChat = chatOpen ? 'on' : 'off'
     scroll.dataset.gitEditor = editorOpen ? 'on' : 'off'
     scroll.dataset.gitSide = sideOpen ? 'on' : 'off'
+    scroll.dataset.gitTermDock = termDock
+    scroll.dataset.gitBottomSpan = spanNow
+    if (panelOn) scroll.dataset.gitTermOpen = ''
+    else delete scroll.dataset.gitTermOpen
     return () => {
       delete scroll.dataset.gitIde
       delete scroll.dataset.gitChat
       delete scroll.dataset.gitEditor
       delete scroll.dataset.gitSide
+      delete scroll.dataset.gitTermOpen
+      delete scroll.dataset.gitTermDock
+      delete scroll.dataset.gitBottomSpan
     }
-  }, [host, split, chatOpen, editorOpen, sideOpen])
+  }, [host, split, chatOpen, editorOpen, sideOpen, termDock, spanNow, panelOn])
 
   useLayoutEffect(() => {
     const scroll = host
@@ -305,12 +387,21 @@ function WorkbenchInner(props: WorkbenchProps) {
       scroll.style.setProperty('--git-col-chat', `${next.chat}px`)
       scroll.style.setProperty('--git-col-side', `${next.side}px`)
       scroll.style.setProperty('--git-status-h', `${STATUS_BAR_H}px`)
+      if (panelOn) {
+        const hostH = scroll.clientHeight
+        const nextH = termPanelOpen
+          ? clampTermHeight(termH, hostH, reservedAboveTerm(hostH))
+          : TERM_HEADER_H
+        scroll.style.setProperty('--git-term-h', `${nextH}px`)
+      } else {
+        scroll.style.removeProperty('--git-term-h')
+      }
     }
     apply()
     const observer = new ResizeObserver(apply)
     observer.observe(scroll)
     return () => { observer.disconnect() }
-  }, [host, split, chatOpen, editorOpen, sideOpen, chatW, sideW])
+  }, [host, split, chatOpen, editorOpen, sideOpen, chatW, sideW, panelOn, termH, termPanelOpen])
 
   const beginResize = (which: 'chat' | 'side', event: React.PointerEvent<HTMLButtonElement>): void => {
     event.preventDefault()
@@ -318,8 +409,10 @@ function WorkbenchInner(props: WorkbenchProps) {
     const startChat = chatW
     const startSide = sideW
     const hostW = host?.clientWidth ?? 0
+    const hostLeft = host?.getBoundingClientRect().left ?? 0
     let latestChat = startChat
     let latestSide = startSide
+    let editorLive = editorOpen
     setDragging(which)
     const previousCursor = document.body.style.cursor
     const previousSelect = document.body.style.userSelect
@@ -327,11 +420,17 @@ function WorkbenchInner(props: WorkbenchProps) {
     document.body.style.userSelect = 'none'
     const move = (next: PointerEvent): void => {
       if (which === 'chat') {
-        const maxChat = hostW - (editorOpen ? EDITOR_MIN : RAIL_W) - (sideOpen ? startSide : RAIL_W)
-        latestChat = clamp(startChat + (next.clientX - startX), CHAT_MIN, maxChat)
+        if (!editorLive && Math.abs(next.clientX - startX) > 8) {
+          editorLive = true
+          patchWorkbenchChrome({ editorOpen: true })
+        }
+        const maxChat = hostW - (editorLive ? EDITOR_MIN : RAIL_W) - (sideOpen ? startSide : RAIL_W)
+        latestChat = editorLive && !editorOpen
+          ? clamp(Math.round(next.clientX - hostLeft), CHAT_MIN, maxChat)
+          : clamp(startChat + (next.clientX - startX), CHAT_MIN, maxChat)
         setChatW(latestChat)
       } else {
-        const maxSide = Math.min(SIDE_MAX, hostW - (chatOpen ? startChat : RAIL_W) - (editorOpen ? EDITOR_MIN : RAIL_W))
+        const maxSide = Math.min(SIDE_MAX, hostW - (chatOpen ? startChat : RAIL_W) - (editorLive ? EDITOR_MIN : RAIL_W))
         latestSide = clamp(startSide - (next.clientX - startX), SIDE_MIN, maxSide)
         setSideW(latestSide)
       }
@@ -365,6 +464,39 @@ function WorkbenchInner(props: WorkbenchProps) {
     })
     setSideW(next.side)
     writePx(SIDE_W_KEY, next.side)
+  }
+
+  const beginTermResize = (event: React.PointerEvent<HTMLButtonElement>): void => {
+    event.preventDefault()
+    const hostH = host?.clientHeight ?? 0
+    const startY = event.clientY
+    const startH = clampTermHeight(termH, hostH, reservedAboveTerm(hostH))
+    let latest = startH
+    setDragging('term')
+    const previousCursor = document.body.style.cursor
+    const previousSelect = document.body.style.userSelect
+    document.body.style.cursor = 'row-resize'
+    document.body.style.userSelect = 'none'
+    const move = (next: PointerEvent): void => {
+      const liveH = host?.clientHeight ?? hostH
+      latest = clampTermHeight(startH + (startY - next.clientY), liveH, reservedAboveTerm(liveH))
+      setTermH(latest)
+    }
+    const up = (): void => {
+      setDragging(null)
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousSelect
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      writePx(TERM_H_KEY, latest)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  const resetTermHeight = (): void => {
+    setTermH(TERM_DEFAULT_H)
+    writePx(TERM_H_KEY, TERM_DEFAULT_H)
   }
 
   const openFile = useCallback(async (path: string): Promise<void> => {
@@ -486,27 +618,55 @@ function WorkbenchInner(props: WorkbenchProps) {
 
   /** Alt+J or the + menu: open a fresh, isolated terminal tab and switch to it. */
   const openNewTerminal = useCallback((): void => {
-    patchWorkbenchChrome({ editorOpen: true })
+    if (termDock === 'tab') patchWorkbenchChrome({ editorOpen: true })
+    else revealTermPanel()
     const tab = nextTerminalTab(tabsRef.current)
     setTabs(current => [...current, tab])
     setActiveId(tab.id)
     if (readBoolFlag(TERM_AI_OPEN_KEY, DEFAULT_TERM_AI_OPEN)) {
       setAiTermIds(current => current.includes(tab.id) ? current : [...current, tab.id])
     }
+  }, [revealTermPanel, termDock])
+
+  const toggleTermAi = useCallback((tabId: string, open: boolean): void => {
+    setAiTermIds(current => {
+      const has = current.includes(tabId)
+      const next = open && !has
+        ? [...current, tabId]
+        : !open && has
+          ? current.filter(id => id !== tabId)
+          : current
+      writeBoolFlag(TERM_AI_OPEN_KEY, next.length > 0)
+      return next
+    })
   }, [])
 
   useEffect(() => {
     // Global within the workbench: works whether focus is in the terminal,
-    // the tab bar, the editor, or the side panel. xterm never sees Alt+J.
+    // the tab bar, the editor, or the side panel. xterm never sees Alt+J / Alt+I.
     const onKey = (event: KeyboardEvent): void => {
-      if (!isTermNewTabHotkey(event)) return
+      if (isTermNewTabHotkey(event)) {
+        event.preventDefault()
+        event.stopPropagation()
+        openNewTerminal()
+        return
+      }
+      if (!isTermAssistHotkey(event)) return
+      const showing = termDock === 'bottom' || tabs.find(tab => tab.id === activeId)?.kind === 'terminal'
+      if (!showing) return
       event.preventDefault()
       event.stopPropagation()
-      openNewTerminal()
+      if (termDock === 'bottom' && (!termPanelOpen || !termPanelShown)) changeTermPanelOpen(true)
+      const id = visibleTermId(tabs, activeId, lastTermId)
+      setAiTermIds(current => {
+        const next = current.includes(id) ? current.filter(item => item !== id) : [...current, id]
+        writeBoolFlag(TERM_AI_OPEN_KEY, next.length > 0)
+        return next
+      })
     }
     window.addEventListener('keydown', onKey, true)
     return () => { window.removeEventListener('keydown', onKey, true) }
-  }, [openNewTerminal])
+  }, [activeId, changeTermPanelOpen, lastTermId, openNewTerminal, tabs, termDock, termPanelOpen, termPanelShown])
 
   useEffect(() => {
     fileRefs?.bindWorkspace(sessionId, workspaceId)
@@ -603,6 +763,19 @@ function WorkbenchInner(props: WorkbenchProps) {
     })
   }
 
+  const handleTermCleanExit = (tabId: string): TermCleanExitAction => {
+    if (tabId !== TERMINAL_TAB_ID) {
+      closeTab(tabId)
+      return 'close'
+    }
+    if (termDock === 'bottom') {
+      setTermPanelShown(false)
+      return 'close'
+    }
+    if (lastFileId !== null) setActiveId(lastFileId)
+    return 'hide'
+  }
+
   let panels: ReturnType<typeof createPortal> | null = null
   try {
     panels = split && host !== null ? createPortal(
@@ -619,8 +792,8 @@ function WorkbenchInner(props: WorkbenchProps) {
           client={client}
           workspaceId={workspaceId}
           workspaceTitle={workspace?.title}
-          tabs={tabs}
-          activeId={activeId}
+          tabs={editorTabs}
+          activeId={editorActiveId}
           buffers={buffers}
           onOpenFile={(path) => { void openFile(path) }}
           onActivate={setActiveId}
@@ -639,17 +812,11 @@ function WorkbenchInner(props: WorkbenchProps) {
           termSeed={termSeed}
           editorMode={editorMode}
           onNewTerminal={openNewTerminal}
+          onDockToBottom={termDock === 'tab' ? () => { changeTermDock('bottom') } : undefined}
+          terminalDocked={termDock === 'bottom'}
           aiTermIds={aiTermIds}
-          onAiModeChange={(tabId, open) => {
-            const has = aiTermIds.includes(tabId)
-            const next = open && !has
-              ? [...aiTermIds, tabId]
-              : !open && has
-                ? aiTermIds.filter(id => id !== tabId)
-                : aiTermIds
-            writeBoolFlag(TERM_AI_OPEN_KEY, next.length > 0)
-            setAiTermIds(next)
-          }}
+          onAiModeChange={toggleTermAi}
+          onTermCleanExit={handleTermCleanExit}
           onCreateFile={async (path) => {
             if (workspaceId === undefined) return { ok: false, code: 'NO_WORKSPACE', messageZh: t('editor.addFileNoWorkspace'), hintZh: '' }
             const existing = await client.readFile(workspaceId, path)
@@ -663,14 +830,6 @@ function WorkbenchInner(props: WorkbenchProps) {
             await openFile(path)
             return null
           }}
-          leadingSash={chatOpen ? (
-            <ColSash
-              label={t('ide.resizeChat')}
-              active={dragging === 'chat'}
-              onPointerDown={(event) => { beginResize('chat', event) }}
-              onReset={resetChatWidth}
-            />
-          ) : null}
           t={t}
         />
       ) : (
@@ -699,14 +858,6 @@ function WorkbenchInner(props: WorkbenchProps) {
           onRenamed={renamePath}
           onDeleted={deletePath}
           onCollapse={() => { patchWorkbenchChrome({ sideOpen: false }) }}
-          leadingSash={
-            <ColSash
-              label={t('ide.resizeSide')}
-              active={dragging === 'side'}
-              onPointerDown={(event) => { beginResize('side', event) }}
-              onReset={resetSideWidth}
-            />
-          }
           update={updateInfo}
           onDismissUpdate={() => { setUpdateHidden(true) }}
           t={t}
@@ -736,28 +887,90 @@ function WorkbenchInner(props: WorkbenchProps) {
         useProjection={props.useProjection}
         t={t}
       />
-      <StatusBar
-        client={client}
-        workspaceId={workspaceId}
-        workspacePath={workspace?.path}
-        sessionId={sessionId}
-        active={tabs.find(tab => tab.id === activeId) ?? null}
-        plugin={pluginInfo}
-        tabs={tabs}
-        aiTermIds={aiTermIds}
-        editorMode={editorMode}
-        editorOpen={editorOpen}
-        onEditorModeChange={changeEditorMode}
-        onActivate={(id) => {
-          patchWorkbenchChrome({ editorOpen: true })
-          setActiveId(id)
-        }}
-        onPrepareUpdate={() => {
-          patchWorkbenchChrome({ editorOpen: true })
-          setActiveId(TERMINAL_TAB_ID)
-        }}
-        t={t}
-      />
+      <div data-git-ide-panel="bottom">
+        {panelOn ? (
+          <TerminalPanel
+            client={client}
+            workspaceId={workspaceId}
+            tabs={termTabs}
+            activeId={termActiveId}
+            termSeed={termSeed}
+            aiTermIds={aiTermIds}
+            dragging={dragging === 'term'}
+            onActivate={(id) => {
+              setActiveId(id)
+              if (!termPanelOpen) changeTermPanelOpen(true)
+            }}
+            onClose={closeTab}
+            onNewTerminal={openNewTerminal}
+            onAiModeChange={toggleTermAi}
+            onDockTab={() => { changeTermDock('tab') }}
+            expanded={termPanelOpen}
+            onToggleExpand={() => { changeTermPanelOpen(!termPanelOpen) }}
+            onResizePointerDown={beginTermResize}
+            onResizeReset={resetTermHeight}
+            onCleanExit={handleTermCleanExit}
+            t={t}
+          />
+        ) : null}
+        <StatusBar
+          client={client}
+          workspaceId={workspaceId}
+          sessionId={sessionId}
+          active={
+            termDock === 'bottom' && (tabs.find(tab => tab.id === activeId)?.kind === 'terminal')
+              ? (fileTabs.find(tab => tab.id === lastFileId) ?? null)
+              : (tabs.find(tab => tab.id === activeId) ?? null)
+          }
+          plugin={pluginInfo}
+          tabs={tabs}
+          aiTermIds={aiTermIds}
+          editorMode={editorMode}
+          editorOpen={editorOpen}
+          sideOpen={sideOpen}
+          termDock={termDock}
+          bottomSpan={bottomSpan}
+          onEditorModeChange={changeEditorMode}
+          onTermDockChange={changeTermDock}
+          onBottomSpanChange={changeBottomSpan}
+          onActivate={(id) => {
+            const tab = tabs.find(item => item.id === id)
+            if (tab?.kind === 'terminal') {
+              if (termDock === 'bottom') changeTermPanelOpen(true)
+              else patchWorkbenchChrome({ editorOpen: true })
+            } else {
+              patchWorkbenchChrome({ editorOpen: true })
+            }
+            setActiveId(id)
+          }}
+          onPrepareUpdate={() => {
+            if (termDock === 'tab') patchWorkbenchChrome({ editorOpen: true })
+            else changeTermPanelOpen(true)
+            setActiveId(TERMINAL_TAB_ID)
+          }}
+          t={t}
+        />
+      </div>
+      {chatOpen ? (
+        <div data-git-ide-panel="sash-chat">
+          <ColSash
+            label={t('ide.resizeChat')}
+            active={dragging === 'chat'}
+            onPointerDown={(event) => { beginResize('chat', event) }}
+            onReset={resetChatWidth}
+          />
+        </div>
+      ) : null}
+      {sideOpen ? (
+        <div data-git-ide-panel="sash-side">
+          <ColSash
+            label={t('ide.resizeSide')}
+            active={dragging === 'side'}
+            onPointerDown={(event) => { beginResize('side', event) }}
+            onReset={resetSideWidth}
+          />
+        </div>
+      ) : null}
     </>,
     host,
   ) : null

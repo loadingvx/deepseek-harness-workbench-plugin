@@ -1,7 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { findForbiddenClientRequire } from '../src/shared/client-bundle-guard.ts'
+import {
+  findForbiddenClientRequire,
+  findUnexpectedHoistedRequire,
+  findUnsafeClientRequire,
+} from '../src/shared/client-bundle-guard.ts'
 
 describe('findForbiddenClientRequire', () => {
   it('rejects a hoisted require("module") that crashes DSH ModuleLoader', () => {
@@ -21,13 +25,50 @@ describe('findForbiddenClientRequire', () => {
   })
 })
 
+describe('findUnexpectedHoistedRequire', () => {
+  it('rejects mermaid\'s cytoscape peer when it is hoisted as a factory external', () => {
+    const code = [
+      'window.__ModuleLoader__.load({ id: "x", factory: (require) => {',
+      'let react = require("react");',
+      'let cytoscape$1 = require("cytoscape");',
+      '//#region src/shared/redact.ts',
+      'var Duplex = require("stream").Duplex;',
+    ].join('\n')
+    expect(findUnexpectedHoistedRequire(code)).toBe('require("cytoscape")')
+    expect(findUnsafeClientRequire(code)).toBe('require("cytoscape")')
+  })
+
+  it('allows platform seeds in the factory preamble', () => {
+    const code = [
+      'factory: (require) => {',
+      'let react = require("react");',
+      'let react_jsx_runtime = require("react/jsx-runtime");',
+      'let react_dom = require("react-dom");',
+      '//#region src/client/index.ts',
+    ].join('\n')
+    expect(findUnexpectedHoistedRequire(code)).toBeUndefined()
+  })
+
+  it('ignores in-function Node fallbacks after the first source region', () => {
+    const code = [
+      'factory: (require) => {',
+      'let react = require("react");',
+      '//#region src/foo.ts',
+      'var Duplex = require("stream").Duplex;',
+      'let leaked = require("cytoscape");',
+    ].join('\n')
+    expect(findUnexpectedHoistedRequire(code)).toBeUndefined()
+  })
+})
+
 describe('lib/client.js', () => {
   const bundle = resolve(import.meta.dirname, '../lib/client.js')
 
-  it('does not hoist require("module") after a client build', () => {
+  it('does not hoist require("module") or non-platform packages after a client build', () => {
     if (!existsSync(bundle)) return
     const code = readFileSync(bundle, 'utf8')
-    expect(findForbiddenClientRequire(code)).toBeUndefined()
+    expect(findUnsafeClientRequire(code)).toBeUndefined()
     expect(code).toContain('window.__ModuleLoader__.load')
+    expect(code).not.toContain('require("cytoscape")')
   })
 })

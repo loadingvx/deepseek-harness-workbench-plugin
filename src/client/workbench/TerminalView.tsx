@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
@@ -9,6 +10,7 @@ import type { GitFail } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
 import { IconRefresh, IconSparkle } from './icons.tsx'
 import { TermAssistBar } from './TermAssistBar.tsx'
+import { isCleanTermExit, type TermCleanExitAction } from './term-session.ts'
 import type { Translate } from './types.ts'
 import css from './TerminalView.module.css'
 
@@ -18,7 +20,7 @@ type TermEvent =
   | { type: 'exit'; code: number | null }
 
 export function TerminalView({
-  client, workspaceId, termId, injectComment, t, aiOpen = false, onAiModeChange,
+  client, workspaceId, termId, injectComment, t, aiOpen = false, onAiModeChange, chromeHost, onCleanExit,
 }: {
   client: GitClient
   workspaceId?: string
@@ -27,6 +29,10 @@ export function TerminalView({
   t: Translate
   aiOpen?: boolean
   onAiModeChange?: (open: boolean) => void
+  /** Title-bar slot. Buttons render there so the terminal has no extra cwd strip. */
+  chromeHost?: HTMLElement | null
+  /** Ctrl+D / `exit` 0: close this tab or hide the panel; do not paint an error. */
+  onCleanExit?: () => TermCleanExitAction
 }) {
   const [cwd, setCwd] = useState('')
   const [shell, setShell] = useState('')
@@ -40,6 +46,9 @@ export function TerminalView({
   const flushing = useRef(false)
   const assistInputRef = useRef<HTMLTextAreaElement | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const aiOpenRef = useRef(aiOpen)
+  const onCleanExitRef = useRef(onCleanExit)
+  onCleanExitRef.current = onCleanExit
 
   const setAiOpen = (open: boolean): void => {
     onAiModeChange?.(open)
@@ -127,12 +136,24 @@ export function TerminalView({
           return
         }
         if (payload.type === 'exit') {
+          if (isCleanTermExit(payload.code)) {
+            const action = onCleanExitRef.current?.() ?? 'hide'
+            if (action === 'close') return
+            term.reset()
+            source.close()
+            if (sourceRef.current === source) sourceRef.current = null
+            setError(null)
+            setStatus('idle')
+            connect()
+            return
+          }
           setStatus('dead')
           term.write(`\r\n\x1b[31m${t('term.exited', { code: payload.code ?? '?' })}\x1b[0m\r\n`)
         }
       }
       source.onerror = () => {
         if (source.readyState !== EventSource.CLOSED) return
+        if (sourceRef.current !== source) return
         setStatus('dead')
         setError(fail('TERM_FAILED'))
       }
@@ -200,22 +221,12 @@ export function TerminalView({
   }, [client, injectComment, status, termId, workspaceId])
 
   useEffect(() => {
-    // Only the active terminal tab is mounted, so a window-level Alt+I
-    // always targets the terminal that is currently shown — no focus gate.
-    const onKey = (event: KeyboardEvent): void => {
-      if (!isTermAssistHotkey(event)) return
-      event.preventDefault()
-      event.stopPropagation()
-      const next = !aiOpen
-      setAiOpen(next)
-      if (next) {
-        window.requestAnimationFrame(() => { assistInputRef.current?.focus() })
-      } else {
-        termRef.current?.focus()
-      }
+    const prev = aiOpenRef.current
+    aiOpenRef.current = aiOpen
+    if (aiOpen && !prev) {
+      window.requestAnimationFrame(() => { assistInputRef.current?.focus() })
     }
-    window.addEventListener('keydown', onKey, true)
-    return () => { window.removeEventListener('keydown', onKey, true) }
+    if (!aiOpen && prev) termRef.current?.focus()
   }, [aiOpen])
 
   const readTranscript = (): string => {
@@ -257,33 +268,36 @@ export function TerminalView({
     )
   }
 
+  const chrome = (
+    <div className={css.chrome}>
+      <IconButton
+        label={aiOpen ? t('term.ai.close') : t('term.ai.open')}
+        active={aiOpen}
+        onClick={() => {
+          const next = !aiOpen
+          setAiOpen(next)
+          if (next) window.requestAnimationFrame(() => { assistInputRef.current?.focus() })
+          else termRef.current?.focus()
+        }}
+      >
+        <IconSparkle />
+      </IconButton>
+      <IconButton
+        label={t('term.interrupt')}
+        disabled={status !== 'live'}
+        onClick={() => { void client.interruptTerm(workspaceId, termId) }}
+      >
+        <span className={css.ctrl}>^C</span>
+      </IconButton>
+      <IconButton label={t('term.retry')} onClick={() => { void restart() }}>
+        <IconRefresh />
+      </IconButton>
+    </div>
+  )
+
   return (
     <div ref={rootRef} className={css.root} data-ai={aiOpen || undefined}>
-      <div className={css.meta}>
-        <span className={css.cwd} title={cwd}>{cwd === '' ? t('term.connecting') : cwd}</span>
-        <IconButton
-          label={aiOpen ? t('term.ai.close') : t('term.ai.open')}
-          active={aiOpen}
-          onClick={() => {
-            const next = !aiOpen
-            setAiOpen(next)
-            if (next) window.requestAnimationFrame(() => { assistInputRef.current?.focus() })
-            else termRef.current?.focus()
-          }}
-        >
-          <IconSparkle />
-        </IconButton>
-        <IconButton
-          label={t('term.interrupt')}
-          disabled={status !== 'live'}
-          onClick={() => { void client.interruptTerm(workspaceId, termId) }}
-        >
-          <span className={css.ctrl}>^C</span>
-        </IconButton>
-        <IconButton label={t('term.retry')} onClick={() => { void restart() }}>
-          <IconRefresh />
-        </IconButton>
-      </div>
+      {chromeHost != null ? createPortal(chrome, chromeHost) : null}
       {error !== null ? (
         <div className={css.banner} role="alert">
           <div>{error.messageZh}</div>

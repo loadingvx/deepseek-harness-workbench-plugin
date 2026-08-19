@@ -18,6 +18,16 @@
   background: var(--dsw-alias-border-l1);
 }
 
+.sash[data-orientation='horizontal'] {
+  top: -2px;
+  right: 0;
+  bottom: auto;
+  left: 0;
+  width: auto;
+  height: 5px;
+  cursor: row-resize;
+}
+
 .sash:focus-visible {
   outline: 2px solid var(--dsw-alias-border-l1);
   outline-offset: -1px;

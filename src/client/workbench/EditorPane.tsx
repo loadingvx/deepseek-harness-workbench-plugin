@@ -12,6 +12,7 @@ import { isMarkdownPath } from './code-language.ts'
 import type { EditorModeId } from './editor-mode.ts'
 import { FilePreview } from './FilePreview.tsx'
 import { MarkdownPreview } from './MarkdownPreview.tsx'
+import type { TermCleanExitAction } from './term-session.ts'
 import css from './EditorPane.module.css'
 
 export interface EditorPaneProps {
@@ -36,6 +37,9 @@ export interface EditorPaneProps {
   aiTermIds?: readonly string[]
   onAiModeChange?: (tabId: string, open: boolean) => void
   editorMode: EditorModeId
+  onDockToBottom?: () => void
+  onTermCleanExit?: (tabId: string) => TermCleanExitAction
+  terminalDocked?: boolean
   t: Translate
 }
 
@@ -81,7 +85,7 @@ type MdViewMode = 'edit' | 'preview' | 'split'
 /** Center editor: explorer + tabs + text/diff, with unsaved-close confirmation. */
 export function EditorPane({
   client, workspaceId, tabs, activeId, buffers,
-  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onCreateFile, aiTermIds, onAiModeChange, editorMode, t,
+  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onCreateFile, aiTermIds, onAiModeChange, editorMode, onDockToBottom, onTermCleanExit, terminalDocked, t,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.id === activeId) ?? null
   const buffer = active?.kind === 'file' ? buffers[active.path] : undefined
@@ -99,6 +103,7 @@ export function EditorPane({
   const [diffText, setDiffText] = useState('')
   const [diffLoading, setDiffLoading] = useState(false)
   const [mdView, setMdView] = useState<Record<string, MdViewMode>>({})
+  const [termChromeHost, setTermChromeHost] = useState<HTMLSpanElement | null>(null)
 
   useEffect(() => {
     if ((active?.kind !== 'diff' && active?.kind !== 'commitDiff') || workspaceId === undefined) {
@@ -233,13 +238,15 @@ export function EditorPane({
         t={t}
         aiOpen={aiTermIds?.includes(active.id) === true}
         onAiModeChange={(open) => { onAiModeChange?.(active.id, open) }}
+        chromeHost={termChromeHost}
+        onCleanExit={onTermCleanExit === undefined ? undefined : () => onTermCleanExit(active.id)}
       />
     )
   } else if (active === null) {
     body = (
       <div className={css.empty}>
         <p className={css.emptyTitle}>{t('editor.empty')}</p>
-        <p className={css.emptyHint}>{t('editor.emptyHint')}</p>
+        <p className={css.emptyHint}>{t(terminalDocked === true ? 'editor.emptyHintDocked' : 'editor.emptyHint')}</p>
       </div>
     )
   } else if (active.kind === 'diff' || active.kind === 'commitDiff') {
@@ -470,6 +477,19 @@ export function EditorPane({
                     >
                       {t('editor.addTerminal')}
                     </button>
+                    {onDockToBottom !== undefined ? (
+                      <button
+                        type="button"
+                        className={css.menuItem}
+                        role="menuitem"
+                        onClick={() => {
+                          setAddOpen(false)
+                          onDockToBottom()
+                        }}
+                      >
+                        {t('term.dockToBottom')}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className={css.menuItem}
@@ -512,6 +532,9 @@ export function EditorPane({
                 </>
               ) : null}
             </div>
+            {active?.kind === 'terminal' ? (
+              <span className={css.termChrome} ref={setTermChromeHost} />
+            ) : null}
           </div>
         </div>
         <div className={css.body}>

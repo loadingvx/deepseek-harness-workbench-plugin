@@ -234,6 +234,20 @@ export function IconChevron({ open }: { open: boolean }) {
   )
 }
 
+/** Bottom panel: expanded shows down (fold up), collapsed shows up (open). */
+export function IconFoldY({ expanded }: { expanded: boolean }) {
+  return (
+    <Icon>
+      <path
+        d={expanded ? 'M3.5 6 8 10.5 12.5 6' : 'M3.5 10.5 8 6 12.5 10.5'}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+      />
+    </Icon>
+  )
+}
+
 export function IconBranch() {
   return (
     <Icon>
@@ -250,6 +264,15 @@ export function IconTerminal() {
     <Icon>
       <path d="M2.2 3.2h11.6v9.6H2.2z" fill="none" stroke="currentColor" strokeWidth="1.2" />
       <path d="M4.2 6.2 6.4 8 4.2 9.8M7.6 10.4h4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </Icon>
+  )
+}
+
+export function IconDockBottom() {
+  return (
+    <Icon>
+      <path d="M2 3h12v10H2z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M2 10h12v3H2z" />
     </Icon>
   )
 }

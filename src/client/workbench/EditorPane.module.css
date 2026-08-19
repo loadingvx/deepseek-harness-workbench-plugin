@@ -88,6 +88,14 @@
   background: var(--dsw-alias-bg-base);
 }
 
+.termChrome {
+  display: flex;
+  align-items: center;
+  margin-left: 4px;
+  padding-left: 4px;
+  border-left: 1px solid var(--dsw-alias-border-l2);
+}
+
 .termMark {
   display: inline-flex;
   flex: none;

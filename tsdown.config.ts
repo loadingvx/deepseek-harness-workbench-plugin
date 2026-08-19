@@ -1,34 +1,36 @@
 import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { basename, dirname, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { transform } from 'lightningcss'
 import type { UserConfig } from 'tsdown'
-import { findForbiddenClientRequire } from './src/shared/client-bundle-guard.ts'
+import { CLIENT_EXTERNALS, findUnsafeClientRequire } from './src/shared/client-bundle-guard.ts'
 
 function resolveBrowserPkg(spec: string): string {
   const resolved = import.meta.resolve(spec)
   return resolved.startsWith('file:') ? fileURLToPath(resolved) : resolved
 }
 
+/**
+ * mermaid's architecture diagrams import cytoscape. Output format is CJS, so
+ * rolldown would pick cytoscape's "require" export and hoist
+ * require("cytoscape") — DSH ModuleLoader has no such factory. Point at the
+ * ESM file by path (createRequire cannot use the "import"-only subpath).
+ */
+function resolveMermaidCytoscapeEsm(): string {
+  const mermaidPkg = fileURLToPath(new URL(import.meta.resolve('mermaid/package.json')))
+  const cytoscapeCjs = createRequire(mermaidPkg).resolve('cytoscape')
+  const esm = resolvePath(dirname(cytoscapeCjs), 'cytoscape.esm.mjs')
+  if (!existsSync(esm)) {
+    throw new Error(`找不到 mermaid 附带的 cytoscape ESM（${esm}）。请重新安装依赖后再构建。`)
+  }
+  return esm
+}
+
 const PACKAGE_ID = 'dsh-workbench-plugin'
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'
-
-const CLIENT_EXTERNALS = [
-  'react',
-  'react/jsx-runtime',
-  'react-dom',
-  'react-dom/client',
-  'react-dom/index',
-  '@deepseek-ai/cordis',
-  '@deepseek-ai/dsh-client-ui-slots',
-  '@deepseek-ai/dsh-client-web-react',
-  '@deepseek-ai/dsh-client-ui-primitives',
-  '@deepseek-ai/dsh-client-ui-attachment',
-  '@deepseek-ai/dsh-client-schema-form',
-  '@deepseek-ai/dsh-client-runtime/client',
-] as const
 
 const host: UserConfig = {
   name: PACKAGE_ID,
@@ -69,6 +71,7 @@ const client: UserConfig = {
     'node:module': resolvePath('src/client/shims/node-module.ts'),
     module: resolvePath('src/client/shims/node-module.ts'),
     fflate: resolveBrowserPkg('fflate/browser'),
+    cytoscape: resolveMermaidCytoscapeEsm(),
   },
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
@@ -80,9 +83,9 @@ const client: UserConfig = {
     generateBundle(_opts: unknown, bundle: Record<string, { type: string; code?: string }>) {
       for (const [fileName, chunk] of Object.entries(bundle)) {
         if (chunk.type !== 'chunk' || chunk.code === undefined) continue
-        const forbidden = findForbiddenClientRequire(chunk.code)
+        const forbidden = findUnsafeClientRequire(chunk.code)
         if (forbidden !== undefined) {
-          throw new Error(`${fileName} 含有 ${forbidden}。DSH 网页 ModuleLoader 不能加载 Node 内置模块，请改用浏览器构建或 src/client/shims`)
+          throw new Error(`${fileName} 含有 ${forbidden}。DSH 网页 ModuleLoader 只能加载平台白名单模块，其余依赖必须打进 client.js`)
         }
       }
     },

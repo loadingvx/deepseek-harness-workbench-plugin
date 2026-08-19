@@ -4,10 +4,20 @@ import type { GitStatusSnapshot, PluginUpdateSnapshot } from '../../shared/types
 import { redactSecrets } from '../../shared/redact.ts'
 import { formatStatusBalance } from '../../shared/usage-format.ts'
 import { PLUGIN_ISSUES_URL, PLUGIN_PAGE_URL, PLUGIN_REPO_URL } from '../../shared/version.ts'
-import { IconChevron, IconFeedback, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
+import {
+  BOTTOM_SPANS,
+  DEFAULT_BOTTOM_SPAN,
+  DEFAULT_TERM_DOCK,
+  TERM_DOCKS,
+  bottomSpanDisabledReason,
+  statusBarVisibleTabs,
+  type BottomSpan,
+  type TermDock,
+} from './bottom-layout.ts'
 import { EDITOR_MODES, type EditorModeId } from './editor-mode.ts'
+import { IconChevron, IconFeedback, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
 import { readNearbyGit, retainNearbyGit, subscribeNearbyGit } from './nearby-git.ts'
-import { fileName, shortPath, showEditorStatusChrome, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
+import { fileName, showEditorStatusChrome, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
 import { terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import { readUsageLive, retainUsageLive, subscribeUsageLive } from './usage-live.ts'
 import css from './StatusBar.module.css'
@@ -19,7 +29,6 @@ function openExternal(url: string): void {
 export function StatusBar({
   client,
   workspaceId,
-  workspacePath,
   sessionId,
   active,
   plugin,
@@ -27,23 +36,32 @@ export function StatusBar({
   aiTermIds,
   editorMode,
   editorOpen = true,
+  sideOpen = true,
+  termDock = DEFAULT_TERM_DOCK,
+  bottomSpan = DEFAULT_BOTTOM_SPAN,
   onEditorModeChange,
+  onTermDockChange,
+  onBottomSpanChange,
   onActivate,
   onPrepareUpdate,
   t,
 }: {
   client: GitClient
   workspaceId?: string
-  workspacePath?: string
   sessionId?: string
   active?: FileTab | null
   plugin: PluginUpdateSnapshot | null
   tabs?: FileTab[]
   aiTermIds?: readonly string[]
   editorMode?: EditorModeId
-  /** When the editor column is a rail, hide tabs, overflow triangles, and the mode menu. */
+  /** When the editor column is a rail, hide file tabs, overflow triangles, and the mode menu. */
   editorOpen?: boolean
+  sideOpen?: boolean
+  termDock?: TermDock
+  bottomSpan?: BottomSpan
   onEditorModeChange?: (mode: EditorModeId) => void
+  onTermDockChange?: (dock: TermDock) => void
+  onBottomSpanChange?: (span: BottomSpan) => void
   onActivate?: (id: string) => void
   onPrepareUpdate?: () => void
   t: Translate
@@ -51,6 +69,7 @@ export function StatusBar({
   const [status, setStatus] = useState<GitStatusSnapshot | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [modeMenuOpen, setModeMenuOpen] = useState(false)
+  const [layoutMenuOpen, setLayoutMenuOpen] = useState(false)
   const [updateNote, setUpdateNote] = useState<string | null>(null)
   const usage = useSyncExternalStore(subscribeUsageLive, readUsageLive, () => null)
   const nearby = useSyncExternalStore(subscribeNearbyGit, readNearbyGit, readNearbyGit)
@@ -64,14 +83,15 @@ export function StatusBar({
   }, [editorOpen])
 
   useEffect(() => {
-    if (!modeMenuOpen) return
+    if (!modeMenuOpen && !layoutMenuOpen) return
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       setModeMenuOpen(false)
+      setLayoutMenuOpen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => { window.removeEventListener('keydown', onKey) }
-  }, [modeMenuOpen])
+  }, [layoutMenuOpen, modeMenuOpen])
 
   useEffect(() => {
     if (workspaceId === undefined) {
@@ -127,8 +147,6 @@ export function StatusBar({
 
   const probe = status?.probe
   const dirty = (status?.staged.length ?? 0) + (status?.unstaged.length ?? 0) + (status?.untracked.length ?? 0)
-  const cwd = workspacePath !== undefined && workspacePath !== '' ? shortPath(workspacePath) : t('status.noWorkspace')
-  const cwdFull = workspacePath !== undefined ? redactSecrets(workspacePath) : t('status.noWorkspace')
   const version = plugin?.current ?? '—'
   const branch = probe === undefined
     ? t('status.noGit')
@@ -139,7 +157,7 @@ export function StatusBar({
         : probe.detached
           ? t('panel.detached')
           : (probe.branch ?? t('status.noGit'))
-  const openTabs = tabs ?? []
+  const openTabs = statusBarVisibleTabs(tabs ?? [], { editorOpen, termDock })
   const balanceText = formatStatusBalance(usage)
   const balanceOk = usage !== null && usage.balanceStatus === 'ok' && usage.balances[0] !== undefined
   const balanceTitle = balanceOk
@@ -153,7 +171,7 @@ export function StatusBar({
       data-editor={editorOpen ? 'on' : 'off'}
       aria-label={t('status.label')}
     >
-      {showEditorStatusChrome(editorOpen) ? (
+      {openTabs.length > 0 ? (
         <StatusTabs tabs={openTabs} activeId={active?.id} aiTermIds={aiTermIds} onActivate={onActivate} t={t} />
       ) : null}
       <span className={css.grow} />
@@ -248,7 +266,6 @@ export function StatusBar({
           </span>
         ) : null}
       </span>
-      <span className={css.item} title={cwdFull}>{t('status.cwd', { path: cwd })}</span>
       <span className={css.item} title={branch}>
         {t('status.branch', { name: branch })}
         {probe !== undefined && probe.ahead > 0 ? ` ${t('panel.ahead', { count: probe.ahead })}` : ''}
@@ -257,6 +274,22 @@ export function StatusBar({
       <span className={css.item} title={dirty > 0 ? t('status.dirtyTitle', { count: dirty }) : t('status.cleanTitle')}>
         {dirty > 0 ? t('status.dirty', { count: dirty }) : t('status.clean')}
       </span>
+      <LayoutMenu
+        open={layoutMenuOpen}
+        termDock={termDock}
+        bottomSpan={bottomSpan}
+        editorOpen={editorOpen}
+        sideOpen={sideOpen}
+        onToggle={() => {
+          setLayoutMenuOpen(open => !open)
+          setModeMenuOpen(false)
+          setMenuOpen(false)
+        }}
+        onClose={() => { setLayoutMenuOpen(false) }}
+        onTermDockChange={onTermDockChange}
+        onBottomSpanChange={onBottomSpanChange}
+        t={t}
+      />
       {showEditorStatusChrome(editorOpen) && active?.kind === 'file' && editorMode !== undefined ? (
         <span className={css.modeWrap}>
           <button
@@ -267,7 +300,7 @@ export function StatusBar({
             aria-expanded={modeMenuOpen}
             title={t('editor.modeMenu')}
             aria-label={t('editor.mode', { name: t(`editor.mode.${editorMode}`) })}
-            onClick={() => { setModeMenuOpen(open => !open) }}
+            onClick={() => { setModeMenuOpen(open => !open); setLayoutMenuOpen(false); setMenuOpen(false) }}
           >
             {t(`editor.mode.${editorMode}`)}
             <IconChevron open={modeMenuOpen} />
@@ -419,5 +452,98 @@ function StatusTabs({
         />
       ) : null}
     </div>
+  )
+}
+
+function LayoutMenu({
+  open,
+  termDock,
+  bottomSpan,
+  editorOpen,
+  sideOpen,
+  onToggle,
+  onClose,
+  onTermDockChange,
+  onBottomSpanChange,
+  t,
+}: {
+  open: boolean
+  termDock: TermDock
+  bottomSpan: BottomSpan
+  editorOpen: boolean
+  sideOpen: boolean
+  onToggle: () => void
+  onClose: () => void
+  onTermDockChange?: (dock: TermDock) => void
+  onBottomSpanChange?: (span: BottomSpan) => void
+  t: Translate
+}) {
+  const columns = { editor: editorOpen, side: sideOpen }
+  return (
+    <span className={css.layoutWrap}>
+      <button
+        type="button"
+        className={css.mode}
+        data-open={open || undefined}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={t('layout.menuTitle')}
+        aria-label={t('layout.menuTitle')}
+        onClick={onToggle}
+      >
+        {t('layout.menu')}
+        <IconChevron open={open} />
+      </button>
+      {open ? (
+        <>
+          <div className={css.menuBackdrop} onClick={onClose} />
+          <div className={`${css.menu} ${css.layoutMenu}`} role="menu" aria-label={t('layout.menu')}>
+            <div className={css.layoutSection}>{t('layout.termSection')}</div>
+            {TERM_DOCKS.map(dock => (
+              <button
+                key={dock}
+                type="button"
+                role="menuitem"
+                className={`${css.menuItem} ${css.layoutItem}`}
+                data-active={termDock === dock || undefined}
+                title={t(`layout.term.${dock}Hint`)}
+                onClick={() => {
+                  onClose()
+                  onTermDockChange?.(dock)
+                }}
+              >
+                <span className={css.layoutName}>{t(`layout.term.${dock}`)}</span>
+                <span className={css.layoutHint}>{t(`layout.term.${dock}Hint`)}</span>
+              </button>
+            ))}
+            <div className={css.layoutSection}>{t('layout.spanSection')}</div>
+            {termDock !== 'bottom' ? (
+              <div className={css.layoutNote}>{t('layout.span.tabLocked')}</div>
+            ) : BOTTOM_SPANS.map(span => {
+              const disabled = bottomSpanDisabledReason(span, columns, t, termDock)
+              return (
+                <button
+                  key={span}
+                  type="button"
+                  role="menuitem"
+                  className={`${css.menuItem} ${css.layoutItem}`}
+                  data-active={bottomSpan === span || undefined}
+                  disabled={disabled !== null}
+                  title={disabled ?? t(`layout.span.${span}Hint`)}
+                  onClick={() => {
+                    if (disabled !== null) return
+                    onClose()
+                    onBottomSpanChange?.(span)
+                  }}
+                >
+                  <span className={css.layoutName}>{t(`layout.span.${span}`)}</span>
+                  <span className={css.layoutHint}>{disabled ?? t(`layout.span.${span}Hint`)}</span>
+                </button>
+              )
+            })}
+          </div>
+        </>
+      ) : null}
+    </span>
   )
 }
