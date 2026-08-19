@@ -1,0 +1,214 @@
+.root {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.soundPicker {
+  position: relative;
+}
+
+.soundBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.soundBtn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  min-width: 260px;
+  max-width: 320px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.dropdownHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #444;
+  font-size: 12px;
+  color: #aaa;
+}
+
+.uploadBtn {
+  background: #4c8dff;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.uploadBtn:hover {
+  background: #3a7ae8;
+}
+
+.soundList {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.soundItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+  position: relative;
+}
+
+.soundItem:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.soundItem.selected {
+  background: rgba(76, 141, 255, 0.15);
+}
+
+.soundLabel {
+  font-size: 13px;
+  color: #eee;
+}
+
+.soundDesc {
+  font-size: 11px;
+  color: #888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deleteBtn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.soundItem:hover .deleteBtn {
+  opacity: 1;
+}
+
+.deleteBtn:hover {
+  background: rgba(255, 100, 100, 0.2);
+  color: #f66;
+}
+
+.dropdownFooter {
+  padding: 8px 12px;
+  border-top: 1px solid #444;
+}
+
+.previewBtn {
+  width: 100%;
+  background: #333;
+  color: #ccc;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.previewBtn:hover {
+  background: #444;
+}
+
+/* Upload panel */
+.uploadPanel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 101;
+  min-width: 280px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.uploadHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #444;
+  font-size: 12px;
+  color: #aaa;
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.closeBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.uploadBody {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fileInput {
+  font-size: 12px;
+  color: #ccc;
+}
+
+.uploadHint {
+  font-size: 11px;
+  color: #777;
+}
+
+.uploadStatus {
+  font-size: 11px;
+  color: #4c8dff;
+}

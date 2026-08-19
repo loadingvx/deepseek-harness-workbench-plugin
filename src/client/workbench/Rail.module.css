@@ -14,3 +14,10 @@
   border-left: none;
   border-right: 1px solid var(--dsw-alias-border-l1);
 }
+
+.tabBadgeWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

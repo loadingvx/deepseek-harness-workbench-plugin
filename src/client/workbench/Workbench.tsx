@@ -60,10 +60,11 @@ import { browserElExisting } from './browser-el-client.ts'
 import { DevToolsPanel } from './DevToolsPanel.tsx'
 import { loadEditorMode, saveEditorMode, type EditorModeId } from './editor-mode.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconChat, IconDevtools, IconEditor, IconFiles, IconGit, IconGlobe, IconLayout, IconSlash, IconUsage } from './icons.tsx'
+import { IconChat, IconDevtools, IconEditor, IconFiles, IconGit, IconGlobe, IconLayout, IconSessions, IconSlash, IconUsage } from './icons.tsx'
 import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
 import { SideDock } from './SideDock.tsx'
+import { TabBadge } from './TabBadge.tsx'
 import { termIdFromTabId } from '../../shared/new-file-path.ts'
 import type { TermCleanExitAction } from './term-session.ts'
 import { createTerminalTab, nextBrowserTab, nextTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type Translate, type WorkbenchInjected } from './types.ts'
@@ -78,6 +79,8 @@ import { DEFAULT_TERM_AI_OPEN, TERM_AI_OPEN_KEY, readBoolFlag, writeBoolFlag } f
 import { usePluginUpdate, visibleUpdate } from './UpdateBanner.tsx'
 import { updateTermSeed } from '../../shared/version.ts'
 import { useWorkspace } from './useWorkspace.ts'
+import { useAttentionCounts, useSessionBeep, playBuiltinSound, playCustomSound } from './useSessionMonitor.ts'
+import { BUILTIN_SOUNDS } from '../../shared/workbench-sounds/builtins.ts'
 import {
   composerSeatOf,
   composerSelection,
@@ -257,6 +260,22 @@ function WorkbenchInner(props: WorkbenchProps) {
 
   const workspace = useWorkspace(useSessions, useWorkspaces)
   const workspaceId = workspace?.workspaceId
+  const { attention, running: runningCount } = useAttentionCounts(useSessions, useWorkspaces)
+  const openSession = useCallback((id: string): void => { props.sessions?.open?.(id) }, [props.sessions])
+  const playSound = useCallback(() => {
+    const acRef = { ac: null as AudioContext | null }
+    try {
+      const soundId = localStorage.getItem('dsh-workbench-sound-id') ?? 'chime-ascending'
+      const builtin = BUILTIN_SOUNDS.find(s => s.id === soundId)
+      if (builtin) {
+        playBuiltinSound(builtin, acRef)
+      } else {
+        // Custom sound via HTTP
+        playCustomSound(`/workbench-sounds/${soundId}`)
+      }
+    } catch { /* ignore */ }
+  }, [])
+  useSessionBeep(attention, playSound)
   const inputDraft = props.useInput?.(state => state.draft) ?? ''
   const inputPhase = props.useInput?.(state => state.phase) ?? ''
   const inputDraftRev = props.useInput?.(state => state.draftRev) ?? 0
@@ -943,6 +962,9 @@ function WorkbenchInner(props: WorkbenchProps) {
           onCollapse={() => { patchWorkbenchChrome({ sideOpen: false }) }}
           update={updateInfo}
           onDismissUpdate={() => { setUpdateHidden(true) }}
+          useSessions={useSessions}
+          useWorkspaces={useWorkspaces}
+          openSession={openSession}
           t={t}
           devtoolsDock={devtoolsDock}
           onDevtoolsDock={changeDevtoolsDock}
@@ -963,6 +985,12 @@ function WorkbenchInner(props: WorkbenchProps) {
           <IconButton label={t('ide.slash')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'slash' }) }}>
             <IconSlash />
           </IconButton>
+          <span className={railCss.tabBadgeWrap}>
+            <IconButton label={t('ide.sessions')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'sessions' }) }}>
+              <IconSessions />
+            </IconButton>
+            <TabBadge count={attention > 0 ? attention : runningCount} tone={attention > 0 ? 'attention' : 'running'} />
+          </span>
           <IconButton label={t('ide.devtools')} onClick={() => {
             changeDevtoolsDock('side')
           }}>

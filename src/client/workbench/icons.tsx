@@ -498,3 +498,15 @@ export function IconNpm({ size = 16 }: { size?: number }) {
     </Icon>
   )
 }
+
+/** 全局会话监控：轨道环 + 球心 + 活跃会话点，对应悬浮球语义。 */
+export function IconSessions() {
+  return (
+    <Icon>
+      <circle cx="8" cy="8" r="5.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <ellipse cx="8" cy="8" rx="7.2" ry="2.9" fill="none" stroke="currentColor" strokeWidth="1" transform="rotate(-24 8 8)" />
+      <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+      <circle cx="12.5" cy="5" r="1.1" fill="currentColor" />
+    </Icon>
+  )
+}

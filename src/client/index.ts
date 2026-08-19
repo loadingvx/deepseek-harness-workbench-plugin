@@ -8,6 +8,7 @@ import { installUltraSlashClient } from './ultra-slash/install.ts'
 import { installFileRefClient } from './workbench/file-ref-client.ts'
 import { installBrowserElClient } from './workbench/browser-el-client.ts'
 import { Workbench } from './workbench/Workbench.tsx'
+import type { WorkbenchInjected } from './workbench/types.ts'
 import { en, NS, zh } from './locales.ts'
 
 export const inject = ['slots', 'locale', 'inputTriggers', 'sessions']
@@ -52,6 +53,24 @@ export function apply(ctx: ClientContext): void {
   const fileRefs = installFileRefClient(ctx, client)
   const browserEls = installBrowserElClient(ctx)
 
+  // 全局会话监控：跳转会话走客户端 runtime 的 sessions.open（列表数据经标准 props 的 useSessions 实时推送）。
+  // 注意：必须用 ctx.get('sessions')（reflect 全局 store 直查，与 session-orb 同款）——ctx.sessions 直接属性
+  // 访问依赖父链 fiber store（Proxy waterfall），外部安装插件（loader entry 与 runtime 并列、非其子 fiber）
+  // 下解析失败并抛 "cannot get property 'sessions' without inject"，导致点击跳转无反应。
+  const openSession = (id: string): void => {
+    const sessionsSvc = ctx.get('sessions') as { open?: (id: string) => void } | undefined
+    if (sessionsSvc === undefined || typeof sessionsSvc.open !== 'function') {
+      console.warn('[workbench] 全局会话监控：sessions 服务不可用，无法跳转会话', id)
+      return
+    }
+    sessionsSvc.open(id)
+  }
+
+  const injected: WorkbenchInjected = {
+    client,
+    sessions: { open: openSession },
+  }
+
   // Host lives in the composer overlay so a blank new-session hero still
   // mounts the workbench. The header utilities seat is hidden until the
   // first message, so it can only carry the toggle.
@@ -59,14 +78,22 @@ export function apply(ctx: ClientContext): void {
     name: 'conversation.input.overlay',
     id: 'workbench-host',
     locale: NS,
-    inject: () => ({ client, mount: 'host' as const, fileRefs, browserEls }),
+    inject: () => ({
+      ...injected,
+      mount: 'host' as const,
+      fileRefs,
+      browserEls,
+    }),
   }, Workbench))
 
   ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
     name: 'conversation.session.header.utilities',
     id: 'workbench',
     locale: NS,
-    inject: () => ({ client, mount: 'toggle' as const }),
+    inject: () => ({
+      ...injected,
+      mount: 'toggle' as const,
+    }),
   }, Workbench))
 
   ctx.slots.inject('tool.call.toolview', function* () {
