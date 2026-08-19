@@ -6,6 +6,7 @@ import { FileTree } from './FileTree.tsx'
 import { GitSidebar } from './GitSidebar.tsx'
 import { IconButton } from './IconButton.tsx'
 import type { DevtoolsDock } from './browser-dock.ts'
+import type { NetRefSnapshot } from '../../shared/browser-net-ref.ts'
 import { DevToolsPanel } from './DevToolsPanel.tsx'
 import { IconDevtools, IconFiles, IconGit, IconPanelOff, IconSettings, IconUsage } from './icons.tsx'
 import type { Translate } from './types.ts'
@@ -25,7 +26,7 @@ import css from './SideDock.module.css'
 export type { SideTab }
 
 export function SideDock({
-  client, workspaceId, workspaceTitle, workspacePath, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, t, devtoolsDock = 'side', onDevtoolsDock, showDevtoolsTab = false,
+  client, workspaceId, workspaceTitle, workspacePath, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, t, devtoolsDock = 'side', onDevtoolsDock, showDevtoolsTab = false, onAddNetToChat, onAddTextToChat,
 }: {
   client: GitClient
   workspaceId?: string
@@ -52,6 +53,9 @@ export function SideDock({
   onDevtoolsDock?: (dock: DevtoolsDock) => void
   /** After the user opens DevTools from the browser toolbar, allow the sidebar tab. */
   showDevtoolsTab?: boolean
+  /** DevTools 网络请求 → 会话胶囊 / 文本。 */
+  onAddNetToChat?: (snapshot: NetRefSnapshot) => boolean
+  onAddTextToChat?: (text: string) => boolean
 }) {
   const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
   const navReady = useSyncExternalStore(subscribeNavHost, isNavHostReady, () => false)
@@ -119,6 +123,8 @@ export function SideDock({
             dock={devtoolsDock}
             onDock={(next) => { onDevtoolsDock?.(next) }}
             t={t}
+            onAddNetToChat={onAddNetToChat}
+            onAddTextToChat={onAddTextToChat}
           />
         ) : (
           <FileTree

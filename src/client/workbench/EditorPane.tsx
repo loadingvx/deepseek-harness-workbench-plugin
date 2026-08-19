@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { GitClient } from '../api.ts'
 import type { GitFail } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
@@ -15,6 +15,7 @@ import { FilePreview } from './FilePreview.tsx'
 import { MarkdownPreview } from './MarkdownPreview.tsx'
 import type { BrowserElSnapshot } from '../../shared/browser-el.ts'
 import type { TermCleanExitAction } from './term-session.ts'
+import { ContextMenu, type ContextMenuEntry } from './ContextMenu.tsx'
 import css from './EditorPane.module.css'
 
 export interface EditorPaneProps {
@@ -52,6 +53,14 @@ export interface EditorPaneProps {
 function fileName(path: string): string {
   const parts = path.split('/')
   return parts[parts.length - 1] || path
+}
+
+function tabLabelOf(tab: FileTab, t: Translate): string {
+  if (tab.kind === 'terminal') return terminalTabLabel(tab, t)
+  if (tab.kind === 'browser') return browserTabLabel(tab, t)
+  if (tab.kind === 'diff') return `${fileName(tab.path)} · ${t('editor.diffTab')}`
+  if (tab.kind === 'commitDiff') return `${fileName(tab.path)} · ${t('editor.commitDiffTab')}`
+  return fileName(tab.path)
 }
 
 function parseDiff(text: string): Array<{ kind: 'add' | 'del' | 'hunk' | 'meta' | 'ctx'; text: string }> {
@@ -100,6 +109,7 @@ export function EditorPane({
   const [error, setError] = useState<GitFail | null>(null)
   const [pendingClose, setPendingClose] = useState<{ ids: string[]; names: string[] } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; tabId: string } | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [newFileOpen, setNewFileOpen] = useState(false)
   const [newFileDir, setNewFileDir] = useState('')
@@ -162,6 +172,14 @@ export function EditorPane({
       return
     }
     onCloseMany(ids)
+  }
+
+  const openTabMenu = (event: ReactMouseEvent, id: string): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    setMenuOpen(false)
+    setAddOpen(false)
+    setTabMenu({ x: event.clientX, y: event.clientY, tabId: id })
   }
 
   const save = async (): Promise<void> => {
@@ -361,6 +379,31 @@ export function EditorPane({
     </button>
   )
 
+  const ctxTab = tabMenu === null ? null : (tabs.find(tab => tab.id === tabMenu.tabId) ?? null)
+  const ctxIndex = tabMenu === null ? -1 : tabs.findIndex(tab => tab.id === tabMenu.tabId)
+  const ctxPinned = ctxTab?.kind === 'terminal' && ctxTab.id === TERMINAL_TAB_ID
+  const ctxOthersIds = tabMenu === null ? [] : closableIds.filter(id => id !== tabMenu.tabId)
+  const ctxLeftIds = ctxIndex > 0 ? tabs.slice(0, ctxIndex).filter(tab => tab.kind !== 'terminal').map(tab => tab.id) : []
+  const ctxRightIds = ctxIndex >= 0 && ctxIndex < tabs.length - 1
+    ? tabs.slice(ctxIndex + 1).filter(tab => tab.kind !== 'terminal').map(tab => tab.id)
+    : []
+  const tabCtxItems: ContextMenuEntry[] = tabMenu === null
+    ? []
+    : [
+        {
+          kind: 'item', id: 'close-tab',
+          label: t('editor.closeTab', { name: ctxTab === null ? '' : tabLabelOf(ctxTab, t) }),
+          disabled: ctxPinned,
+          hint: t('editor.closeTabDisabled'),
+          onClick: () => { requestClose(tabMenu.tabId) },
+        },
+        { kind: 'item', id: 'close-others', label: t('editor.closeOthers'), disabled: ctxOthersIds.length === 0, hint: t('editor.closeOthersDisabled'), onClick: () => { requestCloseMany(ctxOthersIds) } },
+        { kind: 'item', id: 'close-all', label: t('editor.closeAll'), disabled: closableIds.length === 0, hint: t('editor.closeAllDisabled'), onClick: () => { requestCloseMany(closableIds) } },
+        { kind: 'sep' },
+        { kind: 'item', id: 'close-left', label: t('editor.closeLeft'), disabled: ctxLeftIds.length === 0, hint: t('editor.closeLeftDisabled'), onClick: () => { requestCloseMany(ctxLeftIds) } },
+        { kind: 'item', id: 'close-right', label: t('editor.closeRight'), disabled: ctxRightIds.length === 0, hint: t('editor.closeRightDisabled'), onClick: () => { requestCloseMany(ctxRightIds) } },
+      ]
+
   return (
     <section className={css.root} aria-label={active?.kind === 'terminal' ? t('term.title') : active?.kind === 'browser' ? t('browser.tab') : t('editor.empty')} data-git-ide-panel="editor">
       {leadingSash}
@@ -425,15 +468,7 @@ export function EditorPane({
             {tabs.map(tab => {
               const tabDirty = tab.kind === 'file' && buffers[tab.path] !== undefined
                 && buffers[tab.path]!.draft !== buffers[tab.path]!.original
-              const tabLabel = tab.kind === 'terminal'
-                ? terminalTabLabel(tab, t)
-                : tab.kind === 'browser'
-                  ? browserTabLabel(tab, t)
-                  : tab.kind === 'diff'
-                    ? `${fileName(tab.path)} · ${t('editor.diffTab')}`
-                    : tab.kind === 'commitDiff'
-                      ? `${fileName(tab.path)} · ${t('editor.commitDiffTab')}`
-                      : fileName(tab.path)
+              const tabLabel = tabLabelOf(tab, t)
               return (
                 <div
                   key={tab.id}
@@ -445,6 +480,7 @@ export function EditorPane({
                   tabIndex={0}
                   title={tab.ignored === true ? t('tree.ignored') : undefined}
                   onClick={() => { onActivate(tab.id) }}
+                  onContextMenu={(event) => { openTabMenu(event, tab.id) }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
@@ -483,7 +519,7 @@ export function EditorPane({
                 active={addOpen}
                 aria-haspopup="menu"
                 aria-expanded={addOpen}
-                onClick={() => { setAddOpen(open => !open); setMenuOpen(false) }}
+                onClick={() => { setAddOpen(open => !open); setMenuOpen(false); setTabMenu(null) }}
               >
                 <IconPlus />
               </IconButton>
@@ -554,7 +590,7 @@ export function EditorPane({
                 active={menuOpen}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                onClick={() => { setMenuOpen(open => !open); setAddOpen(false) }}
+                onClick={() => { setMenuOpen(open => !open); setAddOpen(false); setTabMenu(null) }}
               >
                 <IconMore />
               </IconButton>
@@ -659,6 +695,15 @@ export function EditorPane({
           ) : null}
         </div>
       </div>
+      {tabMenu !== null ? (
+        <ContextMenu
+          x={tabMenu.x}
+          y={tabMenu.y}
+          items={tabCtxItems}
+          ariaLabel={t('editor.tabMenu')}
+          onClose={() => { setTabMenu(null) }}
+        />
+      ) : null}
     </section>
   )
 }

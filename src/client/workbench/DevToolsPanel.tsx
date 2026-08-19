@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { redactSecrets } from '../../shared/redact.ts'
 import {
+  buildCurlCommand,
+  NET_REF_DRAG_TYPE,
+  type CurlTarget,
+  type NetRefSnapshot,
+} from '../../shared/browser-net-ref.ts'
+import {
   formatBrowserBytes,
   formatBrowserDuration,
   type BrowserAppInfo,
@@ -27,8 +33,9 @@ import {
   subscribeBrowserSession,
   type BrowserConsoleLine,
 } from './browser-session.ts'
+import { ContextMenu, type ContextMenuEntry } from './ContextMenu.tsx'
 import { IconButton } from './IconButton.tsx'
-import { IconDockBottom, IconRefresh, IconSidePanel, IconTrash } from './icons.tsx'
+import { IconChat, IconCopy, IconDockBottom, IconRefresh, IconSidePanel, IconTrash } from './icons.tsx'
 import type { Translate } from './types.ts'
 import css from './DevToolsPanel.module.css'
 
@@ -107,18 +114,86 @@ function NetworkPane({
   activeId,
   rows,
   t,
+  onAddNetToChat,
+  onAddTextToChat,
 }: {
   hasPage: boolean
   activeId: string | null
   rows: BrowserNetEntry[]
   t: Translate
+  onAddNetToChat?: (snapshot: NetRefSnapshot) => boolean
+  onAddTextToChat?: (text: string) => boolean
 }) {
   const [filter, setFilter] = useState<NetFilter>('all')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; row: BrowserNetEntry } | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const q = query.trim().toLowerCase()
   const visible = rows.filter(row => netVisible(row, filter, q))
   const selected = visible.find(row => row.id === selectedId) ?? null
+
+  const showToast = (text: string): void => {
+    setToast(text)
+    if (toastTimer.current !== null) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => { setToast(null) }, 2200)
+  }
+
+  const copyText = async (text: string, okLabel: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      const area = document.createElement('textarea')
+      area.value = text
+      area.style.position = 'fixed'
+      area.style.opacity = '0'
+      document.body.appendChild(area)
+      area.select()
+      try { document.execCommand('copy') } catch { /* clipboard blocked */ }
+      document.body.removeChild(area)
+    }
+    showToast(okLabel)
+  }
+
+  const copyCurl = async (row: BrowserNetEntry, target: CurlTarget): Promise<void> => {
+    await copyText(
+      buildCurlCommand(row.method, row.url, target),
+      target === 'windows' ? t('browser.info.netCopyCurlWindowsDone') : t('browser.info.netCopyCurlLinuxDone'),
+    )
+  }
+
+  const openCtxMenu = (event: React.MouseEvent, row: BrowserNetEntry): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    setSelectedId(row.id)
+    setCtxMenu({ x: event.clientX, y: event.clientY, row })
+  }
+
+  const addToChat = (row: BrowserNetEntry): void => {
+    if (onAddNetToChat !== undefined) {
+      const ok = onAddNetToChat({ method: row.method, url: row.url })
+      if (!ok) showToast(t('browser.info.netAddToChatFailed'))
+      return
+    }
+    if (onAddTextToChat !== undefined) {
+      const ok = onAddTextToChat(buildCurlCommand(row.method, row.url, 'linux'))
+      if (!ok) showToast(t('browser.info.netAddToChatFailed'))
+      return
+    }
+    void copyText(row.url, t('browser.info.netCopyUrlDone'))
+  }
+
+  const ctxItems: ContextMenuEntry[] = ctxMenu === null
+    ? []
+    : [
+        { kind: 'item', id: 'curl-linux', icon: <IconCopy />, label: t('browser.info.netCopyCurlLinux'), onClick: () => { void copyCurl(ctxMenu.row, 'linux') } },
+        { kind: 'item', id: 'curl-windows', icon: <IconCopy />, label: t('browser.info.netCopyCurlWindows'), onClick: () => { void copyCurl(ctxMenu.row, 'windows') } },
+        { kind: 'sep' },
+        { kind: 'item', id: 'copy-url', icon: <IconCopy />, label: t('browser.info.netCopyUrl'), onClick: () => { void copyText(ctxMenu.row.url, t('browser.info.netCopyUrlDone')) } },
+        { kind: 'sep' },
+        { kind: 'item', id: 'to-chat', icon: <IconChat />, label: t('browser.info.netAddToChat'), onClick: () => { addToChat(ctxMenu.row) } },
+      ]
 
   if (!hasPage) return <EmptyNeedPage t={t} />
 
@@ -190,7 +265,15 @@ function NetworkPane({
                     key={row.id}
                     className={css.row}
                     data-active={selected?.id === row.id || undefined}
+                    draggable
+                    title={t('browser.info.netDragHint')}
                     onClick={() => { setSelectedId(row.id) }}
+                    onContextMenu={(event) => { openCtxMenu(event, row) }}
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData(NET_REF_DRAG_TYPE, JSON.stringify({ method: row.method, url: row.url }))
+                      event.dataTransfer.setData('text/plain', row.url)
+                      event.dataTransfer.effectAllowed = 'copy'
+                    }}
                   >
                     <td>{row.method}</td>
                     <td className={kind === 'ok' ? css.statusOk : kind === 'fail' ? css.statusFail : kind === 'warn' ? css.statusWarn : kind === 'wait' ? css.statusWait : undefined}>
@@ -235,6 +318,16 @@ function NetworkPane({
           </p>
         </div>
       ) : null}
+      {ctxMenu !== null ? (
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          items={ctxItems}
+          ariaLabel={t('browser.info.networkMenu')}
+          onClose={() => { setCtxMenu(null) }}
+        />
+      ) : null}
+      {toast !== null ? <div className={css.toast} role="status">{toast}</div> : null}
     </div>
   )
 }
@@ -473,10 +566,14 @@ export function DevToolsPanel({
   dock,
   onDock,
   t,
+  onAddNetToChat,
+  onAddTextToChat,
 }: {
   dock: DevtoolsDock
   onDock: (dock: DevtoolsDock) => void
   t: Translate
+  onAddNetToChat?: (snapshot: NetRefSnapshot) => boolean
+  onAddTextToChat?: (text: string) => boolean
 }) {
   const state = useSyncExternalStore(subscribeBrowserSession, readPreferredBrowserTab, readPreferredBrowserTab)
   const activeId = useSyncExternalStore(subscribeBrowserSession, getPreferredBrowserId, getPreferredBrowserId)
@@ -566,7 +663,14 @@ export function DevToolsPanel({
         )}
       </div>
       {pane === 'network' ? (
-        <NetworkPane hasPage={hasPage} activeId={activeId} rows={network} t={t} />
+        <NetworkPane
+          hasPage={hasPage}
+          activeId={activeId}
+          rows={network}
+          t={t}
+          onAddNetToChat={onAddNetToChat}
+          onAddTextToChat={onAddTextToChat}
+        />
       ) : pane === 'application' ? (
         <ApplicationPane hasPage={hasPage} app={state.app} t={t} />
       ) : pane === 'css' ? (

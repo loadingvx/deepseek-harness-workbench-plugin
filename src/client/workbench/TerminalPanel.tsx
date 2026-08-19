@@ -28,6 +28,7 @@ export function TerminalPanel({
   onResizeReset,
   onCleanExit,
   t,
+  onAddTermToChat,
   devtools,
   devtoolsActive = false,
   onActivateDevtools,
@@ -50,6 +51,8 @@ export function TerminalPanel({
   onResizeReset: () => void
   onCleanExit?: (tabId: string) => TermCleanExitAction
   t: Translate
+  /** 终端选中内容 / 输出 → 原生会话胶囊。 */
+  onAddTermToChat?: (text: string) => boolean
   devtools?: ReactNode
   devtoolsActive?: boolean
   onActivateDevtools?: () => void
@@ -154,6 +157,7 @@ export function TerminalPanel({
             onAiModeChange={(open) => { onAiModeChange?.(active.id, open) }}
             chromeHost={chromeHost}
             onCleanExit={onCleanExit === undefined ? undefined : () => onCleanExit(active.id)}
+            onAddTermToChat={onAddTermToChat}
           />
         ) : null}
       </div>

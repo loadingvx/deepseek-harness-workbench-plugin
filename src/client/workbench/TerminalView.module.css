@@ -2,6 +2,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
+  position: relative;
   min-width: 0;
   min-height: 0;
   width: 100%;
@@ -77,4 +78,50 @@
   color: var(--dsw-alias-state-error-primary);
   font-size: 12px;
   line-height: 18px;
+}
+
+/* Floating "添加到chat" button pinned to the selection's bottom-left.
+   Neutral design-system look (border + base fill, like the git page's
+   dialogCancel / IconButton family) instead of a loud accent pill. */
+.selChatBtn {
+  position: absolute;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 24px;
+  cursor: pointer;
+  box-shadow: var(--dsw-shadow-lv2);
+  white-space: nowrap;
+}
+
+.selChatBtn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.copyFlash {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 20;
+  max-width: min(320px, calc(100% - 24px));
+  padding: 5px 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: var(--dsw-shadow-lv2);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

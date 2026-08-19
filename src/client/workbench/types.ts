@@ -3,6 +3,8 @@ import type { GitFail } from '../../shared/types.ts'
 import type { WorkbenchMount } from './auto-open.ts'
 import type { FileRefApi } from './file-ref-client.ts'
 import type { BrowserElApi } from './browser-el-client.ts'
+import type { NetRefApi } from './net-ref-client.ts'
+import type { TermRefApi } from './term-ref-client.ts'
 
 export type Translate = (key: string, vars?: Record<string, string | number>) => string
 
@@ -26,6 +28,10 @@ export interface WorkbenchInjected {
   fileRefs?: FileRefApi
   /** Official composer chips for inspected browser elements. Host mount only. */
   browserEls?: BrowserElApi
+  /** Official composer chips for DevTools network requests + plain-text chat insertion. Host mount only. */
+  netRefs?: NetRefApi
+  /** Official composer chips for terminal selections / recent output. Host mount only. */
+  termRefs?: TermRefApi
 }
 
 export const TERMINAL_TAB_ID = 'terminal:main'

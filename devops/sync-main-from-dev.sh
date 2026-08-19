@@ -175,7 +175,7 @@ if git diff --cached --quiet; then
 fi
 
 if [ -z "$COMMIT_MSG" ]; then
-  COMMIT_MSG="chore: 将 $DEV_BRANCH 的最新版本同步到 $MAIN_BRANCH"
+  COMMIT_MSG="chore: sync $DEV_BRANCH compiled lib and docs to $MAIN_BRANCH"
 fi
 
 echo ""

@@ -7,11 +7,13 @@ import { GitToolRow } from './GitToolRow.tsx'
 import { installUltraSlashClient } from './ultra-slash/install.ts'
 import { installFileRefClient } from './workbench/file-ref-client.ts'
 import { installBrowserElClient } from './workbench/browser-el-client.ts'
+import { installNetRefClient } from './workbench/net-ref-client.ts'
+import { installTermRefClient } from './workbench/term-ref-client.ts'
 import { Workbench } from './workbench/Workbench.tsx'
 import type { WorkbenchInjected } from './workbench/types.ts'
 import { en, NS, zh } from './locales.ts'
 
-export const inject = ['slots', 'locale', 'inputTriggers']
+export const inject = ['slots', 'locale', 'inputTriggers', 'sessions']
 
 function registerWorkbenchLocale(locale: {
   dicts?: Map<string, Map<string, Record<string, string>>>
@@ -52,6 +54,8 @@ export function apply(ctx: ClientContext): void {
   installUltraSlashClient(ctx)
   const fileRefs = installFileRefClient(ctx, client)
   const browserEls = installBrowserElClient(ctx)
+  const netRefs = installNetRefClient(ctx)
+  const termRefs = installTermRefClient(ctx)
 
   const injected: WorkbenchInjected = {
     client,
@@ -69,6 +73,8 @@ export function apply(ctx: ClientContext): void {
       mount: 'host' as const,
       fileRefs,
       browserEls,
+      netRefs,
+      termRefs,
     }),
   }, Workbench))
 

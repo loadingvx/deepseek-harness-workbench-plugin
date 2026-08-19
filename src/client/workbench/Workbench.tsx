@@ -88,6 +88,14 @@ import {
   readDragKind,
   readDragPath,
 } from './file-ref-client.ts'
+import {
+  dragCarriesNetRef,
+  netRefExisting,
+  readDragNetRef,
+} from './net-ref-client.ts'
+import type { NetRefApi } from './net-ref-client.ts'
+import { termRefExisting } from './term-ref-client.ts'
+import type { NetRefSnapshot } from '../../shared/browser-net-ref.ts'
 import css from './Workbench.module.css'
 
 export type WorkbenchProps =
@@ -183,7 +191,7 @@ function WorkbenchToggle({ t }: Pick<WorkbenchProps, 't'>) {
 }
 
 function WorkbenchInner(props: WorkbenchProps) {
-  const { client, t, useSessions, useWorkspaces, sessionId, fileRefs, browserEls } = props
+  const { client, t, useSessions, useWorkspaces, sessionId, fileRefs, browserEls, netRefs, termRefs } = props
   const chrome = useSyncExternalStore(subscribeWorkbenchChrome, getWorkbenchChrome, defaultWorkbenchChrome)
   const { enabled, chatOpen, editorOpen, sideOpen, sideTab } = chrome
   const usageDock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
@@ -290,6 +298,8 @@ function WorkbenchInner(props: WorkbenchProps) {
   }
   fileRefs?.rememberOccurrences(sessionId, fileRefDropRef.current.existing)
   browserEls?.rememberOccurrences(sessionId, browserElExisting(inputOccurrences))
+  netRefs?.rememberOccurrences(sessionId, netRefExisting(inputOccurrences))
+  termRefs?.rememberOccurrences(sessionId, termRefExisting(inputOccurrences))
   const running = Boolean(props.useSession?.(state => state.running))
   const pending = (props.useSession?.(state => state.pending)?.length ?? 0) as number
   const split = shouldSplitWorkbench(enabled)
@@ -714,6 +724,59 @@ function WorkbenchInner(props: WorkbenchProps) {
     }, t)
   }, [browserEls, inputOccurrences, t])
 
+  /** DevTools 网络请求 → 官方胶囊。右键菜单与拖拽 drop 共用。 */
+  const sendNetToChat = useCallback((snapshot: NetRefSnapshot): boolean => {
+    if (netRefs === undefined) return false
+    const live = fileRefDropRef.current
+    if (live.sessionId === undefined) return false
+    const seat = document.querySelector<HTMLElement>('[data-composer-seat]')
+    const range = seat !== null
+      ? composerSelection(seat, live.draftLength)
+      : { start: live.draftLength, end: live.draftLength }
+    return netRefs.insertChip({
+      sessionId: live.sessionId,
+      snapshot,
+      span: { start: range.start, end: range.end, draftRev: live.draftRev },
+      existing: netRefExisting(inputOccurrences),
+      phase: live.phase,
+    }, t)
+  }, [netRefs, inputOccurrences, t])
+
+  /** 终端选中内容 / 最近输出 → 官方胶囊（与文件、网络请求同一机制）。 */
+  const sendTermToChat = useCallback((text: string): boolean => {
+    if (termRefs === undefined) return false
+    const live = fileRefDropRef.current
+    if (live.sessionId === undefined) return false
+    const seat = document.querySelector<HTMLElement>('[data-composer-seat]')
+    const range = seat !== null
+      ? composerSelection(seat, live.draftLength)
+      : { start: live.draftLength, end: live.draftLength }
+    return termRefs.insertChip({
+      sessionId: live.sessionId,
+      snapshot: { text },
+      span: { start: range.start, end: range.end, draftRev: live.draftRev },
+      existing: termRefExisting(inputOccurrences),
+      phase: live.phase,
+    }, t)
+  }, [termRefs, inputOccurrences, t])
+
+  /** 通用纯文本 → 官方输入框（DevTools 无胶囊通道时的兜底）。 */
+  const sendTextToChat = useCallback((text: string): boolean => {
+    if (netRefs === undefined) return false
+    const live = fileRefDropRef.current
+    if (live.sessionId === undefined) return false
+    const seat = document.querySelector<HTMLElement>('[data-composer-seat]')
+    const range = seat !== null
+      ? composerSelection(seat, live.draftLength)
+      : { start: live.draftLength, end: live.draftLength }
+    return netRefs.insertText({
+      sessionId: live.sessionId,
+      text,
+      span: { start: range.start, end: range.end, draftRev: live.draftRev },
+      phase: live.phase,
+    }, t)
+  }, [netRefs, inputOccurrences, t])
+
   const renameBrowserTitle = useCallback((tabId: string, title: string, url: string): void => {
     const host = (() => {
       try {
@@ -774,16 +837,19 @@ function WorkbenchInner(props: WorkbenchProps) {
   }, [fileRefs, sessionId, workspaceId])
 
   /**
-   * Drag a file-tree node onto the composer: mint an official InputBar chip
-   * (U+FFFC + occurrence) via insert-reference. Do not write a path string.
+   * Drag a file-tree node or a DevTools network row onto the composer:
+   * mint an official InputBar chip (U+FFFC + occurrence) via
+   * insert-reference. Do not write a path string.
    */
   useEffect(() => {
-    if (fileRefs === undefined) return
+    if (fileRefs === undefined && netRefs === undefined) return
     const clearMark = (seat: HTMLElement): void => {
       seat.removeAttribute('data-dsh-drop-target')
     }
+    const carries = (dt: DataTransfer | null): boolean =>
+      dragCarriesFileRef(dt) || dragCarriesNetRef(dt)
     const onDragOver = (event: DragEvent): void => {
-      if (!dragCarriesFileRef(event.dataTransfer)) return
+      if (!carries(event.dataTransfer)) return
       const seat = composerSeatOf(event.target)
       if (seat === null) return
       event.preventDefault()
@@ -795,23 +861,38 @@ function WorkbenchInner(props: WorkbenchProps) {
       if (seat !== null) clearMark(seat)
     }
     const onDrop = (event: DragEvent): void => {
-      const rel = readDragPath(event.dataTransfer)
       const seat = composerSeatOf(event.target)
-      if (rel === null || seat === null) return
+      if (seat === null) return
       event.preventDefault()
       event.stopPropagation()
       clearMark(seat)
       const live = fileRefDropRef.current
       if (live.sessionId === undefined) return
       const range = composerSelection(seat, live.draftLength)
-      const ok = fileRefs.insertChip({
-        sessionId: live.sessionId,
-        kind: readDragKind(event.dataTransfer),
-        relPath: rel,
-        span: { start: range.start, end: range.end, draftRev: live.draftRev },
-        existing: live.existing,
-        phase: live.phase,
-      }, t)
+      const span = { start: range.start, end: range.end, draftRev: live.draftRev }
+      let ok = false
+      const rel = readDragPath(event.dataTransfer)
+      if (rel !== null && fileRefs !== undefined) {
+        ok = fileRefs.insertChip({
+          sessionId: live.sessionId,
+          kind: readDragKind(event.dataTransfer),
+          relPath: rel,
+          span,
+          existing: live.existing,
+          phase: live.phase,
+        }, t)
+      } else {
+        const net = readDragNetRef(event.dataTransfer)
+        if (net !== null && netRefs !== undefined) {
+          ok = netRefs.insertChip({
+            sessionId: live.sessionId,
+            snapshot: net,
+            span,
+            existing: netRefExisting(inputOccurrences),
+            phase: live.phase,
+          }, t)
+        }
+      }
       if (ok) seat.querySelector('textarea')?.focus()
     }
     window.addEventListener('dragover', onDragOver, true)
@@ -822,7 +903,7 @@ function WorkbenchInner(props: WorkbenchProps) {
       window.removeEventListener('dragleave', onDragLeave, true)
       window.removeEventListener('drop', onDrop, true)
     }
-  }, [fileRefs, t])
+  }, [fileRefs, netRefs, t, inputOccurrences])
 
   const closeTab = (id: string): void => {
     closeTabs([id])
@@ -978,6 +1059,8 @@ function WorkbenchInner(props: WorkbenchProps) {
           devtoolsDock={devtoolsDock}
           onDevtoolsDock={changeDevtoolsDock}
           showDevtoolsTab={devtoolsOpen}
+          onAddNetToChat={sendNetToChat}
+          onAddTextToChat={sendTextToChat}
         />
       ) : (
         <div className={railCss.rail} data-git-ide-panel="rail-side">
@@ -1039,8 +1122,15 @@ function WorkbenchInner(props: WorkbenchProps) {
             onResizeReset={resetTermHeight}
             onCleanExit={handleTermCleanExit}
             t={t}
+            onAddTermToChat={sendTermToChat}
             devtools={(
-              <DevToolsPanel dock="bottom" onDock={changeDevtoolsDock} t={t} />
+              <DevToolsPanel
+                dock="bottom"
+                onDock={changeDevtoolsDock}
+                t={t}
+                onAddNetToChat={sendNetToChat}
+                onAddTextToChat={sendTextToChat}
+              />
             )}
             devtoolsActive={bottomTool === 'devtools'}
             onActivateDevtools={devtoolsOpen ? () => { changeDevtoolsDock('bottom') } : undefined}

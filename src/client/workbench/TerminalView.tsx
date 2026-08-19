@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
@@ -7,8 +7,9 @@ import type { GitClient } from '../api.ts'
 import { fail } from '../../shared/errors.ts'
 import { isTermAssistHotkey, isTermNewTabHotkey } from '../../shared/term-assist.ts'
 import type { GitFail } from '../../shared/types.ts'
+import { ContextMenu, type ContextMenuEntry } from './ContextMenu.tsx'
 import { IconButton } from './IconButton.tsx'
-import { IconRefresh, IconSparkle } from './icons.tsx'
+import { IconChat, IconCopy, IconRefresh, IconSparkle } from './icons.tsx'
 import { TermAssistBar } from './TermAssistBar.tsx'
 import { isCleanTermExit, type TermCleanExitAction } from './term-session.ts'
 import type { Translate } from './types.ts'
@@ -20,7 +21,7 @@ type TermEvent =
   | { type: 'exit'; code: number | null }
 
 export function TerminalView({
-  client, workspaceId, termId, injectComment, t, aiOpen = false, onAiModeChange, chromeHost, onCleanExit,
+  client, workspaceId, termId, injectComment, t, aiOpen = false, onAiModeChange, chromeHost, onCleanExit, onAddTermToChat,
 }: {
   client: GitClient
   workspaceId?: string
@@ -33,6 +34,8 @@ export function TerminalView({
   chromeHost?: HTMLElement | null
   /** Ctrl+D / `exit` 0: close this tab or hide the panel; do not paint an error. */
   onCleanExit?: () => TermCleanExitAction
+  /** 终端选中内容 / 最近输出 → 原生会话胶囊。 */
+  onAddTermToChat?: (text: string) => boolean
 }) {
   const [cwd, setCwd] = useState('')
   const [shell, setShell] = useState('')
@@ -46,9 +49,39 @@ export function TerminalView({
   const flushing = useRef(false)
   const assistInputRef = useRef<HTMLTextAreaElement | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const selBtnRef = useRef<HTMLButtonElement | null>(null)
+  const placeSelRef = useRef<() => void>(() => {})
   const aiOpenRef = useRef(aiOpen)
   const onCleanExitRef = useRef(onCleanExit)
+  const onAddTermToChatRef = useRef(onAddTermToChat)
   onCleanExitRef.current = onCleanExit
+  onAddTermToChatRef.current = onAddTermToChat
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null)
+  const [selection, setSelection] = useState<{ text: string; startRow: number; endRow: number; startCol: number; endCol: number } | null>(null)
+  const [copiedFlash, setCopiedFlash] = useState<string | null>(null)
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flash = useCallback((label: string): void => {
+    setCopiedFlash(label)
+    if (flashTimer.current !== null) clearTimeout(flashTimer.current)
+    flashTimer.current = setTimeout(() => { setCopiedFlash(null) }, 1600)
+  }, [])
+
+  const copyText = useCallback(async (text: string, okLabel: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      const area = document.createElement('textarea')
+      area.value = text
+      area.style.position = 'fixed'
+      area.style.opacity = '0'
+      document.body.appendChild(area)
+      area.select()
+      try { document.execCommand('copy') } catch { /* clipboard blocked */ }
+      document.body.removeChild(area)
+    }
+    flash(okLabel)
+  }, [flash])
 
   const setAiOpen = (open: boolean): void => {
     onAiModeChange?.(open)
@@ -80,6 +113,9 @@ export function TerminalView({
       },
       scrollback: 5000,
       allowProposedApi: false,
+      // Right-click selects the word under the cursor so the context menu
+      // can copy / send it to chat immediately.
+      rightClickSelectsWord: true,
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
@@ -180,6 +216,24 @@ export function TerminalView({
     const onResize = term.onResize(({ cols, rows }) => {
       void client.resizeTerm(workspaceId, cols, rows, termId)
     })
+    const onSelChange = term.onSelectionChange(() => {
+      const text = term.getSelection()
+      const pos = term.getSelectionPosition()
+      if (text === '' || pos === undefined) {
+        setSelection(null)
+        return
+      }
+      setSelection({
+        text,
+        startRow: pos.start.y,
+        endRow: pos.end.y,
+        startCol: pos.start.x,
+        endCol: pos.end.x,
+      })
+      placeSelRef.current()
+    })
+    const onScroll = term.onScroll(() => { placeSelRef.current() })
+    const onRender = term.onRender(() => { placeSelRef.current() })
     const host = hostRef.current
     const observer = new ResizeObserver(() => { applyFit() })
     observer.observe(host)
@@ -195,6 +249,9 @@ export function TerminalView({
       observer.disconnect()
       onData.dispose()
       onResize.dispose()
+      onSelChange.dispose()
+      onScroll.dispose()
+      onRender.dispose()
       sourceRef.current?.close()
       sourceRef.current = null
       writeQueue.current = []
@@ -259,6 +316,141 @@ export function TerminalView({
     termRef.current?.focus()
   }
 
+  /**
+   * Floating "添加到chat" button pinned to the bottom-left of the selection.
+   * Measures the rendered row element so xterm's internal padding never matters.
+   */
+  const placeSelectionButton = useCallback((): void => {
+    const btn = selBtnRef.current
+    const term = termRef.current
+    const root = rootRef.current
+    if (btn === null || term === null || root === null || hostRef.current === null) return
+    const screen = hostRef.current.querySelector('.xterm-screen')
+    if (!(screen instanceof HTMLElement)) {
+      btn.style.display = 'none'
+      return
+    }
+    const pos = term.getSelectionPosition()
+    if (pos === undefined) {
+      btn.style.display = 'none'
+      return
+    }
+    const cellW = screen.clientWidth / Math.max(1, term.cols)
+    const rootRect = root.getBoundingClientRect()
+    const viewportRow = pos.end.y - term.buffer.active.viewportY
+    const leftCol = pos.start.y === pos.end.y ? pos.start.x : 1
+    const rowsEl = screen.querySelector('.xterm-rows')
+    const rowEl = rowsEl instanceof HTMLElement ? rowsEl.children[viewportRow] : undefined
+    let left = 0
+    let top = 0
+    if (rowEl instanceof HTMLElement) {
+      const rowRect = rowEl.getBoundingClientRect()
+      left = rowRect.left - rootRect.left + (leftCol - 1) * cellW
+      top = rowRect.bottom - rootRect.top
+    } else {
+      const screenRect = screen.getBoundingClientRect()
+      const cellH = screen.clientHeight / Math.max(1, term.rows)
+      left = screenRect.left - rootRect.left + (leftCol - 1) * cellW
+      top = screenRect.top - rootRect.top + viewportRow * cellH + cellH
+    }
+    btn.style.display = 'flex'
+    btn.style.left = `${Math.max(4, left)}px`
+    btn.style.top = `${Math.max(4, top + 4)}px`
+  }, [])
+  placeSelRef.current = placeSelectionButton
+
+  useEffect(() => {
+    if (selection === null) return
+    placeSelRef.current()
+  }, [selection])
+
+  useEffect(() => () => {
+    if (flashTimer.current !== null) clearTimeout(flashTimer.current)
+  }, [])
+
+  /**
+   * Read the selection straight off xterm (not the React state): clicking the
+   * floating button may blur the terminal and clear the selection first, so
+   * the state snapshot can already be null while xterm still holds the text.
+   */
+  const currentSelectionText = (): string => {
+    const term = termRef.current
+    if (term !== null && term.hasSelection()) {
+      const live = term.getSelection()
+      if (live !== '') return live
+    }
+    return selection?.text ?? ''
+  }
+
+  const addSelectionToChat = (): void => {
+    const text = currentSelectionText()
+    if (text === '') return
+    const ok = onAddTermToChatRef.current?.(text)
+    if (ok) flash(t('term.menu.addedToChat'))
+    termRef.current?.clearSelection()
+    setSelection(null)
+  }
+
+  const addOutputToChat = (): void => {
+    const text = readTranscript()
+    if (text === '') return
+    const ok = onAddTermToChatRef.current?.(text)
+    if (ok) flash(t('term.menu.addedToChat'))
+  }
+
+  const ctxItems: ContextMenuEntry[] = [
+    {
+      kind: 'item',
+      id: 'copy-sel',
+      icon: <IconCopy />,
+      label: t('term.menu.copySel'),
+      disabled: selection === null,
+      onClick: () => { if (selection !== null) void copyText(selection.text, t('term.menu.copied')) },
+    },
+    {
+      kind: 'item',
+      id: 'sel-to-chat',
+      icon: <IconChat />,
+      label: t('term.menu.addSelToChat'),
+      disabled: selection === null,
+      onClick: addSelectionToChat,
+    },
+    { kind: 'sep' },
+    {
+      kind: 'item',
+      id: 'copy-output',
+      icon: <IconCopy />,
+      label: t('term.menu.copyOutput'),
+      onClick: () => {
+        const text = readTranscript()
+        if (text !== '') void copyText(text, t('term.menu.copied'))
+      },
+    },
+    {
+      kind: 'item',
+      id: 'output-to-chat',
+      icon: <IconChat />,
+      label: t('term.menu.addOutputToChat'),
+      onClick: addOutputToChat,
+    },
+    { kind: 'sep' },
+    {
+      kind: 'item',
+      id: 'interrupt',
+      icon: <span className={css.ctrl}>^C</span>,
+      label: t('term.interrupt'),
+      disabled: status !== 'live',
+      onClick: () => { if (workspaceId !== undefined) void client.interruptTerm(workspaceId, termId) },
+    },
+    {
+      kind: 'item',
+      id: 'restart',
+      icon: <IconRefresh />,
+      label: t('term.retry'),
+      onClick: () => { void restart() },
+    },
+  ]
+
   if (workspaceId === undefined) {
     return (
       <div className={css.empty}>
@@ -313,7 +505,38 @@ export function TerminalView({
         ref={hostRef}
         className={css.term}
         onClick={() => { termRef.current?.focus() }}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          setCtxMenu({ x: event.clientX, y: event.clientY })
+        }}
       />
+      <button
+        ref={selBtnRef}
+        type="button"
+        className={css.selChatBtn}
+        style={{ display: 'none' }}
+        title={t('term.menu.addSelToChat')}
+        // Keep focus in xterm: stealing focus blurs the terminal and clears
+        // the selection before click fires, which made the button dead.
+        onMouseDown={(event) => { event.preventDefault() }}
+        onClick={() => { addSelectionToChat() }}
+      >
+        <IconChat />
+        <span>{t('term.menu.addToChat')}</span>
+      </button>
+      {ctxMenu !== null ? (
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          items={ctxItems}
+          ariaLabel={t('term.menu')}
+          onClose={() => { setCtxMenu(null) }}
+        />
+      ) : null}
+      {copiedFlash !== null ? (
+        <div className={css.copyFlash} role="status">{copiedFlash}</div>
+      ) : null}
       {aiOpen ? (
         <TermAssistBar
           client={client}
