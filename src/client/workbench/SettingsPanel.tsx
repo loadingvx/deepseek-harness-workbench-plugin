@@ -6,7 +6,8 @@
  *
  * 布局仿照 Git 侧栏 CHANGES / GRAPH 的折叠分区（sectionHead + 可折叠 paneBody）：
  * ① 声音与提醒 —— 提示音总闸、铃声选择、循环提醒与间隔；
- * ② 插件命令 —— 复用 SlashPanel 的 SettingsSection（内置 / 自定义斜杠命令管理）。
+ * ② 插件命令 —— 复用 SlashPanel 的 SettingsSection（内置 / 自定义斜杠命令管理）；
+ * ③ 会话渲染增强 —— 会话中 SVG 标签回答的渲染开关。
  */
 import { useRef, useState, useSyncExternalStore } from 'react'
 import {
@@ -15,6 +16,8 @@ import {
 } from './reminder-settings.ts'
 import type { Translate } from './types.ts'
 import { useBeepOn, useLoopReminder, useReminderInterval } from './useSessionMonitor.ts'
+import { useSvgRenderOn } from './svg-render-settings.ts'
+import { SVG_RENDER_EXAMPLE } from './svg-tail.ts'
 import { IconChevron } from './icons.tsx'
 import { SoundSettings } from './SoundSettings.tsx'
 import { SettingsSection } from '../ultra-slash/SlashPanel.tsx'
@@ -22,9 +25,11 @@ import { getSlashCache, getSlashI18n, subscribeSlashI18n } from '../ultra-slash/
 import {
   DEFAULT_SETTINGS_COMMANDS_OPEN,
   DEFAULT_SETTINGS_SOUND_OPEN,
+  DEFAULT_SETTINGS_SVG_RENDER_OPEN,
   readBoolFlag,
   SETTINGS_COMMANDS_OPEN_KEY,
   SETTINGS_SOUND_OPEN_KEY,
+  SETTINGS_SVG_RENDER_OPEN_KEY,
   writeBoolFlag,
 } from './ui-flags.ts'
 import css from './SettingsPanel.module.css'
@@ -56,6 +61,7 @@ export function SettingsPanel({ t }: { t: Translate }) {
   const [beepOn, setBeepOn] = useBeepOn()
   const [loopOn, setLoopOn] = useLoopReminder()
   const [intervalSec, setIntervalSec] = useReminderInterval()
+  const [svgRenderOn, setSvgRenderOn] = useSvgRenderOn()
   // 循环提醒生效 = 提示音总闸开启 且 循环提醒子开关开启（提示音关闭时联动失效，UI 与行为一致）
   const loopActive = beepOn && loopOn
   // 间隔输入草稿：键入过程中不写偏好，失焦 / Enter 才提交，非法输入回退
@@ -80,6 +86,7 @@ export function SettingsPanel({ t }: { t: Translate }) {
 
   const [soundOpen, setSoundOpen] = useState(() => readBoolFlag(SETTINGS_SOUND_OPEN_KEY, DEFAULT_SETTINGS_SOUND_OPEN))
   const [commandsOpen, setCommandsOpen] = useState(() => readBoolFlag(SETTINGS_COMMANDS_OPEN_KEY, DEFAULT_SETTINGS_COMMANDS_OPEN))
+  const [svgRenderOpen, setSvgRenderOpen] = useState(() => readBoolFlag(SETTINGS_SVG_RENDER_OPEN_KEY, DEFAULT_SETTINGS_SVG_RENDER_OPEN))
   const toggleSound = (): void => {
     setSoundOpen((open) => {
       writeBoolFlag(SETTINGS_SOUND_OPEN_KEY, !open)
@@ -89,6 +96,12 @@ export function SettingsPanel({ t }: { t: Translate }) {
   const toggleCommands = (): void => {
     setCommandsOpen((open) => {
       writeBoolFlag(SETTINGS_COMMANDS_OPEN_KEY, !open)
+      return !open
+    })
+  }
+  const toggleSvgRender = (): void => {
+    setSvgRenderOpen((open) => {
+      writeBoolFlag(SETTINGS_SVG_RENDER_OPEN_KEY, !open)
       return !open
     })
   }
@@ -174,6 +187,32 @@ export function SettingsPanel({ t }: { t: Translate }) {
             <div className={css.paneBody}>
               {/* embedded：隐藏 SettingsSection 自带标题，避免与分区头重复 */}
               <SettingsSection embedded t={slashI18n.t} locale={slashI18n.locale} cache={getSlashCache()} />
+            </div>
+          ) : null}
+        </section>
+
+        <section className={css.pane} data-open={svgRenderOpen || undefined}>
+          <div className={css.sectionHead}>
+            <button type="button" className={css.sectionToggle} aria-expanded={svgRenderOpen} onClick={toggleSvgRender}>
+              <IconChevron open={svgRenderOpen} />
+              <span className={css.sectionTitle}>{t('settings.section.svgRender')}</span>
+            </button>
+          </div>
+          {svgRenderOpen ? (
+            <div className={css.paneBody}>
+              <div className={css.settingRow}>
+                <span className={css.settingLabel}>{t('settings.svgRenderLabel')}</span>
+                <SettingsSwitch
+                  on={svgRenderOn}
+                  label={svgRenderOn ? t('settings.svgRenderOff') : t('settings.svgRenderOn')}
+                  title={svgRenderOn ? t('settings.svgRenderOnHint') : t('settings.svgRenderOffHint')}
+                  onToggle={setSvgRenderOn}
+                />
+              </div>
+              <div className={css.svgRenderTip}>
+                <span className={css.svgRenderTipText}>{t('settings.svgRenderTip')}</span>
+                <code className={css.svgRenderTipCode}>{SVG_RENDER_EXAMPLE}</code>
+              </div>
             </div>
           ) : null}
         </section>

@@ -13,6 +13,9 @@ import { installEditorRefClient } from './workbench/editor-ref-client.ts'
 import { Workbench } from './workbench/Workbench.tsx'
 import type { WorkbenchInjected } from './workbench/types.ts'
 import { en, NS, zh } from './locales.ts'
+import { selectSvgTailGated } from './workbench/svg-render-settings.ts'
+import { svgRenderEn, svgRenderZh } from './workbench/svg-render-locales.ts'
+import { SvgTailView } from './workbench/SvgTailView.tsx'
 
 export const inject = ['slots', 'locale', 'inputTriggers', 'sessions']
 
@@ -20,18 +23,22 @@ function registerWorkbenchLocale(locale: {
   dicts?: Map<string, Map<string, Record<string, string>>>
   register: (ns: string, dicts: unknown) => unknown
 }): () => void {
+  // SVG 渲染翻译外移到独立模块（svg-render-locales.ts），注册时运行时合并进
+  // workbench 命名空间，避免逐行插入 locales.ts（缩小上游合并冲突面）。
+  const fullZh = { ...zh, ...svgRenderZh }
+  const fullEn = { ...en, ...svgRenderEn }
   const table = locale.dicts?.get(NS)
   if (table !== undefined && (table.has('zh') || table.has('en'))) {
     const zhDict = table.get('zh')
     const enDict = table.get('en')
-    if (zhDict !== undefined) Object.assign(zhDict, zh)
-    else table.set('zh', { ...zh })
-    if (enDict !== undefined) Object.assign(enDict, en)
-    else table.set('en', { ...en })
+    if (zhDict !== undefined) Object.assign(zhDict, fullZh)
+    else table.set('zh', { ...fullZh })
+    if (enDict !== undefined) Object.assign(enDict, fullEn)
+    else table.set('en', { ...fullEn })
     return () => {}
   }
   try {
-    return locale.register(NS, { zh, en })
+    return locale.register(NS, { zh: fullZh, en: fullEn })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     if (!/already has locale/.test(message)) throw error
@@ -39,8 +46,8 @@ function registerWorkbenchLocale(locale: {
     if (again === undefined) throw error
     const zhDict = again.get('zh')
     const enDict = again.get('en')
-    if (zhDict !== undefined) Object.assign(zhDict, zh)
-    if (enDict !== undefined) Object.assign(enDict, en)
+    if (zhDict !== undefined) Object.assign(zhDict, fullZh)
+    if (enDict !== undefined) Object.assign(enDict, fullEn)
     return () => {}
   }
 }
@@ -100,4 +107,13 @@ export function apply(ctx: ClientContext): void {
       }, GitToolRow)
     }
   })
+
+  // 会话渲染增强：回答尾部渲染标准 SVG（conversation.chat.turnTail 扩展点）。
+  // select 内部按设置开关门控：关闭时返回 null（不匹配、不渲染），与无 SVG 时不渲染的行为一致。
+  ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
+    name: 'conversation.chat.turnTail',
+    id: 'workbench-svg-tail',
+    locale: NS,
+    select: selectSvgTailGated,
+  }, SvgTailView))
 }
