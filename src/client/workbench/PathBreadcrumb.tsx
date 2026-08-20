@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { GitClient } from '../api.ts'
 import type { FsDirEntry, GitFail } from '../../shared/types.ts'
 import { FileKindIcon } from './file-icons.tsx'
-import { browserTabLabel, terminalTabLabel, type FileTab, type Translate } from './types.ts'
+import { browserTabLabel, controlPlaneTabLabel, terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import { breadcrumbParts } from './breadcrumb-path.ts'
 import css from './PathBreadcrumb.module.css'
 
@@ -65,7 +65,7 @@ export function PathBreadcrumb({
           <button
             type="button"
             className={css.crumb}
-            data-current={parts.length === 0 && active?.kind !== 'terminal' && active?.kind !== 'browser' ? true : undefined}
+            data-current={parts.length === 0 && active?.kind !== 'terminal' && active?.kind !== 'browser' && active?.kind !== 'controlPlane' ? true : undefined}
             data-active={openPath === '' || undefined}
             title={t('editor.breadcrumbFolder', { name: rootLabel })}
             disabled={workspaceId === undefined}
@@ -74,6 +74,12 @@ export function PathBreadcrumb({
             {rootLabel}
           </button>
         </li>
+        {active?.kind === 'controlPlane' ? (
+          <li className={css.item}>
+            <span className={css.sep} aria-hidden>/</span>
+            <span className={css.crumb} data-current>{controlPlaneTabLabel(t)}</span>
+          </li>
+        ) : null}
         {active?.kind === 'terminal' ? (
           <li className={css.item}>
             <span className={css.sep} aria-hidden>/</span>

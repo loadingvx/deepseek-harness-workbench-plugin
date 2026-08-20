@@ -3,16 +3,17 @@ import type { GitClient } from '../api.ts'
 import type { GitFail } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
 import { joinWorkspaceFile, suggestNewFileDir, termIdFromTabId } from '../../shared/new-file-path.ts'
-import { IconChat, IconClose, IconDiff, IconEditor, IconEye, IconGlobe, IconMore, IconPanelOff, IconPlus, IconSave, IconSplit, IconTerminal } from './icons.tsx'
+import { IconChat, IconClose, IconDiff, IconEditor, IconEye, IconGlobe, IconLayout, IconMore, IconPanelOff, IconPlus, IconSave, IconSplit, IconTerminal } from './icons.tsx'
 import { PathBreadcrumb } from './PathBreadcrumb.tsx'
 import { TerminalView } from './TerminalView.tsx'
 import { BrowserView } from './BrowserView.tsx'
-import { TERMINAL_TAB_ID, browserTabLabel, terminalTabLabel, type FileBuffer, type FileTab, type Translate } from './types.ts'
+import { TERMINAL_TAB_ID, browserTabLabel, controlPlaneTabLabel, terminalTabLabel, type FileBuffer, type FileTab, type Translate } from './types.ts'
 import { CodeEditor } from './CodeEditor.tsx'
 import { isMarkdownPath } from './code-language.ts'
 import type { EditorModeId } from './editor-mode.ts'
 import { FilePreview } from './FilePreview.tsx'
 import { MarkdownPreview } from './MarkdownPreview.tsx'
+import { ControlPlanePanel } from './ControlPlanePanel.tsx'
 import type { BrowserElSnapshot } from '../../shared/browser-el.ts'
 import type { EditorRefSnapshot } from '../../shared/editor-ref.ts'
 import type { EditorVimOps } from './types.ts'
@@ -24,6 +25,7 @@ import css from './EditorPane.module.css'
 export interface EditorPaneProps {
   client: GitClient
   workspaceId?: string
+  sessionId?: string
   tabs: FileTab[]
   activeId: string | null
   buffers: Record<string, FileBuffer>
@@ -61,6 +63,7 @@ function fileName(path: string): string {
 }
 
 function tabLabelOf(tab: FileTab, t: Translate): string {
+  if (tab.kind === 'controlPlane') return controlPlaneTabLabel(t)
   if (tab.kind === 'terminal') return terminalTabLabel(tab, t)
   if (tab.kind === 'browser') return browserTabLabel(tab, t)
   if (tab.kind === 'diff') return `${fileName(tab.path)} · ${t('editor.diffTab')}`
@@ -104,7 +107,7 @@ type MdViewMode = 'edit' | 'preview' | 'split'
 
 /** Center editor: explorer + tabs + text/diff, with unsaved-close confirmation. */
 export function EditorPane({
-  client, workspaceId, tabs, activeId, buffers,
+  client, workspaceId, sessionId, tabs, activeId, buffers,
   onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onNewBrowser, onOpenDevtools, onPickBrowserEl, onBrowserTitle, onCreateFile, aiTermIds, onAiModeChange, editorMode, onDockToBottom, onTermCleanExit, terminalDocked, onAddEditorToChat, t,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.id === activeId) ?? null
@@ -256,16 +259,20 @@ export function EditorPane({
   }
 
   const activeIndex = activeId === null ? -1 : tabs.findIndex(tab => tab.id === activeId)
-  const closableIds = tabs.filter(tab => tab.kind !== 'terminal').map(tab => tab.id)
+  const isPinnedTab = (tab: FileTab): boolean => (
+    tab.kind === 'controlPlane'
+    || (tab.kind === 'terminal' && tab.id === TERMINAL_TAB_ID)
+  )
+  const closableIds = tabs.filter(tab => !isPinnedTab(tab)).map(tab => tab.id)
   const closeAllIds = closableIds
   const closeOthersIds = activeIndex >= 0
     ? closableIds.filter(id => id !== activeId)
     : closableIds
   const closeLeftIds = activeIndex > 0
-    ? tabs.slice(0, activeIndex).filter(tab => tab.kind !== 'terminal').map(tab => tab.id)
+    ? tabs.slice(0, activeIndex).filter(tab => !isPinnedTab(tab)).map(tab => tab.id)
     : []
   const closeRightIds = activeIndex >= 0 && activeIndex < tabs.length - 1
-    ? tabs.slice(activeIndex + 1).filter(tab => tab.kind !== 'terminal').map(tab => tab.id)
+    ? tabs.slice(activeIndex + 1).filter(tab => !isPinnedTab(tab)).map(tab => tab.id)
     : []
 
   /** Open a split; the second pane shows another open file tab (or the same
@@ -378,7 +385,15 @@ export function EditorPane({
   }, [addOpen, menuOpen, newFileBusy, newFileOpen])
 
   let body: ReactNode
-  if (active?.kind === 'terminal') {
+  if (active?.kind === 'controlPlane') {
+    body = (
+      <ControlPlanePanel
+        client={client}
+        sessionId={sessionId}
+        t={t}
+      />
+    )
+  } else if (active?.kind === 'terminal') {
     body = (
       <TerminalView
         client={client}
@@ -553,11 +568,11 @@ export function EditorPane({
 
   const ctxTab = tabMenu === null ? null : (tabs.find(tab => tab.id === tabMenu.tabId) ?? null)
   const ctxIndex = tabMenu === null ? -1 : tabs.findIndex(tab => tab.id === tabMenu.tabId)
-  const ctxPinned = ctxTab?.kind === 'terminal' && ctxTab.id === TERMINAL_TAB_ID
+  const ctxPinned = ctxTab !== null && isPinnedTab(ctxTab)
   const ctxOthersIds = tabMenu === null ? [] : closableIds.filter(id => id !== tabMenu.tabId)
-  const ctxLeftIds = ctxIndex > 0 ? tabs.slice(0, ctxIndex).filter(tab => tab.kind !== 'terminal').map(tab => tab.id) : []
+  const ctxLeftIds = ctxIndex > 0 ? tabs.slice(0, ctxIndex).filter(tab => !isPinnedTab(tab)).map(tab => tab.id) : []
   const ctxRightIds = ctxIndex >= 0 && ctxIndex < tabs.length - 1
-    ? tabs.slice(ctxIndex + 1).filter(tab => tab.kind !== 'terminal').map(tab => tab.id)
+    ? tabs.slice(ctxIndex + 1).filter(tab => !isPinnedTab(tab)).map(tab => tab.id)
     : []
   const tabCtxItems: ContextMenuEntry[] = tabMenu === null
     ? []
@@ -583,7 +598,7 @@ export function EditorPane({
       ]
 
   return (
-    <section className={css.root} aria-label={active?.kind === 'terminal' ? t('term.title') : active?.kind === 'browser' ? t('browser.tab') : t('editor.empty')} data-git-ide-panel="editor">
+    <section className={css.root} aria-label={active?.kind === 'controlPlane' ? t('controlPlane.tab') : active?.kind === 'terminal' ? t('term.title') : active?.kind === 'browser' ? t('browser.tab') : t('editor.empty')} data-git-ide-panel="editor">
       {leadingSash}
       <div className={css.main}>
         <div className={css.crumbRow}>
@@ -699,8 +714,10 @@ export function EditorPane({
                     <span className={css.termMark} title={t('term.pinned')}><IconTerminal /></span>
                   ) : tab.kind === 'browser' ? (
                     <span className={css.termMark} title={t('browser.tab')}><IconGlobe /></span>
+                  ) : tab.kind === 'controlPlane' ? (
+                    <span className={css.termMark} title={t('controlPlane.tab')}><IconLayout /></span>
                   ) : null}
-                  {tab.kind === 'terminal' && tab.id === TERMINAL_TAB_ID ? null : (
+                  {isPinnedTab(tab) ? null : (
                     <IconButton
                       label={t('editor.close')}
                       onClick={(event) => { event.stopPropagation(); requestClose(tab.id) }}

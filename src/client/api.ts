@@ -7,6 +7,7 @@ import type {
   GitFail, GitFetchResult, GitFileChange, GitIdentity, GitInitInput, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
   GitStatusSnapshot, GitSwitchResult, NearbyGitSnapshot, PluginUpdateSnapshot, ProviderUsageSnapshot,
 } from '../shared/types.ts'
+import type { ControlPlaneKnobPatch, ControlPlaneKnobs, ControlPlaneSnapshot } from '../shared/control-plane.ts'
 import type { PullMode, PushMode } from '../shared/git-sync-prefs.ts'
 import { isCurrentRepoId } from '../shared/git-nearby.ts'
 
@@ -172,6 +173,11 @@ export interface GitClient {
   closeTerm(workspaceId: string, termId?: string): Promise<GitResult<{ ok: true }>>
   pluginUpdate(): Promise<GitResult<PluginUpdateSnapshot>>
   usage(sessionId?: string): Promise<GitResult<ProviderUsageSnapshot>>
+  controlPlane(sessionId?: string): Promise<GitResult<ControlPlaneSnapshot>>
+  patchControlPlaneKnobs(
+    sessionId: string,
+    patch: ControlPlaneKnobPatch,
+  ): Promise<GitResult<{ knobs: ControlPlaneKnobs; snapshot: ControlPlaneSnapshot }>>
   assistTerm(
     workspaceId: string,
     text: string,
@@ -313,6 +319,16 @@ export function createGitClient(): GitClient {
         : ''
       return request(`/git/usage${suffix}`)
     },
+    controlPlane: (sessionId) => {
+      const suffix = sessionId !== undefined && sessionId !== ''
+        ? `?sessionId=${encodeURIComponent(sessionId)}`
+        : ''
+      return request(`/git/control-plane${suffix}`)
+    },
+    patchControlPlaneKnobs: (sessionId, patch) => request('/git/control-plane/knobs', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, ...patch }),
+    }),
     assistTerm: (workspaceId, text, options) => readLlmNdjsonStream(
       '/git/term/assist/stream',
       {
