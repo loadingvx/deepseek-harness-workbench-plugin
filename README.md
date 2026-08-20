@@ -8,6 +8,7 @@ Look for these first:
 - **Usage** — official API balance, this-machine observed spend, this-session tokens and context. Pin it above the left **Settings** button so you can see spend while chatting.
 - **Ultra Slash** — slash commands that inject guidance **without stopping the current turn**. Manage them in the right dock; send them from the bottom group of the chat `/` menu.
 - **Smart terminal** — a local PTY in the editor. Real shell lines (including pasted `$ ls`) run as-is. Natural language is translated by **AI command assist** (<kbd>Alt</kbd>+<kbd>I</kbd> or the ✨ button) and typed into the **current** terminal. Notes are never executed. A blacklist blocks destructive commands the assistant would otherwise type. <kbd>Alt</kbd>+<kbd>J</kbd> opens another terminal tab.
+- **Add to chat** — hand the model anything without copying and pasting. Drag a file from the tree (or a DevTools network request) into the chat box; right-click terminal output to add the selection or recent output (with its pwd/shell context); or tap the **point-and-pick** button in the embedded browser and click a page element. Each lands as a reference chip in the input and rides along with your next message.
 - **AI commit messages** — in the right-dock **Source Control** tab, generate a message from staged changes; the text streams into the commit box. The template is editable.
 
 - **Notification sounds** — when a session finishes while you are away or is waiting on you (approval, plan confirmation, question), the workbench plays a chime. Pick one of 5 built-in Web Audio sounds or upload your own audio (mp3, ogg, wav, webm, m4a, flac, up to 50 MB); a loop reminder keeps replaying it every N seconds (default 10) until the item is handled. The master switch, sound picker, and loop interval live in the workbench **Settings** panel.
@@ -71,6 +72,9 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 - Path breadcrumbs
 - Syntax highlighting: JavaScript, TypeScript, JSX, TSX, JSON, HTML, CSS, Markdown, Python, XML, YAML; other files stay plain text
 - Keymaps: Plain / Emacs / Vim from the status bar; the choice persists; **Emacs is the default** so typing is insertion, not Vim normal mode
+- Vim mode: visual selections render properly (`v` / `V` / `<C-v>`); `:w` saves, `:q` closes the tab, `:qa` closes all, `:x` / `:wq` save and close, `:vs` / `:sp` split left-right / top-bottom, `:only` unsplits; append `!` to force (skip unsaved-change confirmation)
+- Editor split: `:vs` / `:sp` splits only the editor body into two file views — the toolbar and tab bar stay single, nothing is duplicated; the split pane's tab is underlined, clicking a tab switches the focused pane's file; drag the sash to resize, `:only` or the "Unsplit" toolbar button merges back
+- Editor → chat: a floating "Add to chat" button appears on selection; the toolbar and the tab right-click menu can add the whole file — the same official composer chip as terminal / network refs, with the file path as context
 - Markdown: edit, preview, or split; GFM; http(s) and workspace-relative images; [Mermaid](https://mermaid.js.org/) 11 fenced blocks; workspace file links open in the editor; unsafe links are blocked
 - Git working-tree diffs and commit diffs open as editor tabs
 - Image preview: png, jpg, jpeg, gif, webp, avif, bmp, ico
@@ -191,6 +195,17 @@ These four cannot be renamed or deleted.
 
 If `/steer` is sent with empty text, the UI tells you to write the guidance first and shows a usage example. Nothing is injected.
 
+### Default prompts
+
+The **Default prompts** section of the panel lets you set a default text for `/new`, `/skill`, and `/docs` each (`/steer` stays manual and cannot be configured). Leaving a field empty uses the built-in text:
+
+- The `/new` default is sent as the **first message of the new session**; `/new <text>` still uses what you type.
+- The `/skill` and `/docs` defaults are injected into the next model step; text you append after the command is added after the default (e.g. `/skill also log the pitfalls`).
+
+Defaults are saved on this machine in the same `commands.json` as the custom commands and shared by every session; they survive a page refresh.
+
+Typing `/new`, `/skill`, `/docs`, or a custom command name highlights the name in the composer with the reference style (the same as DSH built-in commands and skill names), whether or not the session is running.
+
 ### Custom commands
 
 Give a short name to a `/steer` payload you use often. For example, fill `review` and a fixed paragraph; afterwards `/review` in chat sends that paragraph.
@@ -253,11 +268,11 @@ Rules the panel enforces (you will see a Chinese or English reason under the fie
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.24** (npm tag `latest`) |
+| Version | **0.1.25** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.24
++ dsh-workbench-plugin@0.1.25
 ```
 
 Maintainers publish npm with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -272,13 +287,13 @@ The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbenc
 
 ### Procedure
 
-1. Install the plugin (pin the version; do not omit `@0.1.24`):
+1. Install the plugin (pin the version; do not omit `@0.1.25`):
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.24
+dsh plugin --profile web add dsh-workbench-plugin@0.1.25
 ```
 
-`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.24` requests that release explicitly.
+`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.25` requests that release explicitly.
 
 If a pinned install is still refused as too new, add this to `~/.dsh/profiles/web/pnpm-workspace.yaml` and run the command again:
 
@@ -314,7 +329,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.24 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.25 manually using the command above. Later releases will prompt in the UI.
 
 ## Workspace terminal
 

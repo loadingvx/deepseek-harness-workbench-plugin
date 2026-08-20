@@ -99,7 +99,42 @@ Host 端 `/new` 只回执（ack），真正的会话切换在 client 端做—�
 - **命令执行后要做客户端 UI 动作**（切会话、开面板等）：host 只回执；client 侧要么用 bridge（裸命令路径）要么用插件 source 的 claim.submit（带参数路径）。
 - **host 端想拿带参文本**：`invocation.rawInput` 就是 token 后的原文（`/steer`、别名命令都用它）。
 
-## 5. 验证
+## 5. 内置命令默认内容 + text-ref 渲染（本次改动）
 
-- `pnpm test`：vitest 全量（68 个文件，577 通过 / 1 跳过）。
-- `pnpm run build`（或 `bash devops/build.sh`）：tsdown 产出 `lib/index.js` 与 `lib/client.js`；**推 GitHub 前必须把这两份与源码一起提交**（市场 `github:...` 装的是仓库内容，不编译）。
+### 5.1 text-ref 渲染：插件 source 的 lexicon 钩子
+
+DSH 输入框的 text-ref 装饰（/name、@name 高亮）由 lexicon 驱动：每个 trigger source 可选实现 lexicon?(session)（同步返回名字列表，undefined = 尚未就绪）与 subscribeLexicon?(session, listener)（失效通知）。ui-input-trigger 的 controller 在会话 scope 出生、source 加入、或任意 source 通知时重新汇总 lexicon；ui-conversation 的 InputBar 订阅该 store，扫描 draft 里命中的 token 并画 mark。
+
+插件此前没有实现 lexicon，所以 /new、/skill、/docs、自定义命令名在输入框里不会高亮；是否渲染完全取决于 DSH 其他 source 的 warm 状态（skill 目录 RPC、subagent 运行中子会话），从而出现「会话停止时渲染、执行时缺失」这类随状态漂移的现象。
+
+修复：install.ts 给插件 / source 加：
+
+- lexicon: () => pluginLexicon(cache.list().map(c => c.name)) —— 内置名（steer/new/skill/docs）+ 自定义名，来自持久化 catalog（getSlashCache()），与会话状态无关，永远可用。
+- subscribeLexicon: (_session, listener) => cache.subscribe(listener) —— catalog 刷新/保存后让 controller 重 poll。
+
+pluginLexicon（slash-menu.ts）＝ pluginSlashNameSet 的数组形态，测试直接覆盖。这样插件命令名在任何会话状态下都渲染 text-ref，和 DSH 内置命令、skill 名一致。
+
+### 5.2 默认内容（default prompts）模型
+
+- catalog.ts：CONFIGURABLE_DEFAULT_NAMES = ['new','skill','docs']（steer 不可配置）、BuiltinDefaults、normalizeDefaults（trim、去空、限长 8000）。
+- host/ultra-slash/store.ts：commands.json 增加可选 defaults 字段；loadUltraSlashStore 一次读出 commands + defaults；saveCustomCommands(path, commands, defaults) 一起持久化（旧文件无 defaults 字段兼容）。
+- host/ultra-slash/register.ts：
+  - registerBuiltinCommands(ctx, readDefaults)：/skill、/docs 的 handler 在调用时读 readDefaults()[name]，配置了就用配置，否则回退 locale payload；追加输入仍走 composeAliasText（默认 + 换行 + 追加）。
+  - createCommandHub 持有 defaults() / saveDefaults(raw)；saveCustom 持久化时带上内存中的 defaults，避免互相覆盖。
+  - applyUltraSlash（apply.ts）先建 hub 再注册内置命令：applyCommands(host, () => hub.defaults())。
+- host/ultra-slash/http.ts：GET /ultra-slash/commands 返回 { commands, defaults }；PUT 接受 { commands?, defaults? }。
+- client/ultra-slash/catalog-api.ts：CatalogApiResult 携带 defaults；缓存 defaults() / save(commands, defaults)。
+
+### 5.3 /new 的默认第一句话
+
+- new-session.ts：newClaim(get, t, readDefault) 的 submit 逻辑改为「有输入用输入，没有用 readDefault()，再没有才开空白会话」；newSlashMatchSpace / newSlashMatchEnter 增加第三个参数 readDefault（默认 () => ''，旧调用不变）。
+- install.ts：桥接回调（裸 /new 与菜单点选）同样在输入为空时套用 cache.defaults().new。
+
+### 5.4 配置面板
+
+SlashPanel.tsx 内置命令区下方新增「默认内容」区：三条（new/skill/docs）各一个 textarea + 一个「保存默认内容」按钮；defaultsDraft 随 cache 变化同步；保存走 cache.save(cache.list(), defaultsDraft)（命令列表不丢）。同时把面板间距、卡片内边距、输入框高度整体收紧凑。
+
+## 6. 验证
+
+- pnpm test：vitest 全量（73 个文件，621 通过 / 1 跳过）。
+- pnpm run build（或 bash devops/build.sh）：tsdown 产出 lib/index.js 与 lib/client.js；推 GitHub 前必须把这两份与源码一起提交（市场 github:... 装的是仓库内容，不编译）。
