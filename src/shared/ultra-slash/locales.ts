@@ -85,7 +85,7 @@ export const zh = {
   'settings.retry': '重新加载',
   'settings.loading': '正在加载自定义命令…',
   'settings.maxReached': '已经有 {max} 条自定义命令。先删掉不用的，才能再添加。',
-  'settings.rowKindSteer': '基础',
+  'settings.rowKindSteer': '核心',
   'settings.rowKindAlias': '快捷',
   'settings.rowKindSession': '会话',
   'settings.rowKindCustom': '自定义',
@@ -100,6 +100,7 @@ export const zh = {
   'defaults.placeholderNew': '例如：先总结当前工作区的改动',
   'defaults.placeholder': '例如：完成任务后，把关键步骤记录下来',
   'defaults.fallback': '未设置：使用内置文案',
+  'defaults.steerManual': '/steer 直接手动输入，没有可预设的默认内容',
 } satisfies Record<string, string>
 
 /** Dictionary key union. */
@@ -191,6 +192,7 @@ export const en = {
   'defaults.placeholderNew': 'Example: first summarize the current workspace changes',
   'defaults.placeholder': 'Example: after the task, record the key steps',
   'defaults.fallback': 'Not set: uses the built-in text',
+  'defaults.steerManual': '/steer is manual input — there is no default to configure',
 } satisfies Record<UltraSlashKey, string>
 
 export const DICTS: Record<UiLocale, Record<UltraSlashKey, string>> = { zh, en }

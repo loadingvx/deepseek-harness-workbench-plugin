@@ -237,6 +237,18 @@
   min-width: 0;
 }
 
+/* Merged builtin row: tag chip sits next to the command name. */
+.defaultsHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.defaultsHead .kind {
+  flex: none;
+}
+
 .defaultsLabel {
   font-size: 12px;
   font-weight: 600;

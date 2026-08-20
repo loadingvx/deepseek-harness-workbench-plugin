@@ -45,6 +45,12 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  /* Sections keep their natural height: with the default flex-shrink:1 and
+     min-height:0, an overflowing pane would shrink below its content, letting
+     that content paint over the section below (the commands fold bar covered
+     the sounds/reminders rows). flex:none + the scrollable .body guarantee the
+     two sections never overlap. */
+  flex: none;
 }
 
 /* 分区头：与 Git 侧栏 sectionHead 相同的 28px 折叠行 */

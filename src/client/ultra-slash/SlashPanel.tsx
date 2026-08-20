@@ -6,6 +6,8 @@ import {
   normalizeCommandName,
   validateCustomCommand,
   type BuiltinDefaults,
+  type BuiltinSlashCommand,
+  type ConfigurableDefaultName,
   type CustomSlashCommand,
 } from '../../shared/ultra-slash/catalog.ts'
 import { formatCatalogIssue, type UiLocale } from '../../shared/ultra-slash/locales.ts'
@@ -33,6 +35,34 @@ const EMPTY: Draft = { name: '', description: '', steerText: '' }
 
 function slash(name: string): string {
   return `/${name}`
+}
+
+function kindTagKey(kind: BuiltinSlashCommand['kind']): string {
+  return kind === 'steer'
+    ? 'settings.rowKindSteer'
+    : kind === 'session'
+      ? 'settings.rowKindSession'
+      : 'settings.rowKindAlias'
+}
+
+function configurableName(name: string): ConfigurableDefaultName | null {
+  return (CONFIGURABLE_DEFAULT_NAMES as readonly string[]).includes(name)
+    ? name as ConfigurableDefaultName
+    : null
+}
+
+function defaultLabelKey(name: ConfigurableDefaultName): string {
+  return name === 'new' ? 'defaults.labelNew' : name === 'skill' ? 'defaults.labelSkill' : 'defaults.labelDocs'
+}
+
+/** Shipped default prompt text per configurable builtin (localized). */
+export function builtinPayloadDefaults(t: Translate): BuiltinDefaults {
+  const out: BuiltinDefaults = {}
+  for (const name of CONFIGURABLE_DEFAULT_NAMES) {
+    const command = BUILTIN_SLASH_COMMANDS.find(c => c.name === name)
+    if (command?.payloadKey !== undefined) out[name] = t(command.payloadKey)
+  }
+  return out
 }
 
 function takenNames(commands: readonly CustomSlashCommand[], except?: string): Set<string> {
@@ -67,9 +97,11 @@ export function SettingsSection({ t, locale, cache, embedded = false }: Settings
   useEffect(() => {
     return cache.subscribe(() => {
       setCommands(cache.list())
-      setDefaultsDraft(cache.defaults())
+      // Keep the shipped payload visible: cached (persisted) values override,
+      // anything unset falls back to the built-in default text.
+      setDefaultsDraft({ ...builtinPayloadDefaults(t), ...cache.defaults() })
     })
-  }, [cache])
+  }, [cache, t])
 
   useEffect(() => {
     let live = true
@@ -112,7 +144,12 @@ export function SettingsSection({ t, locale, cache, embedded = false }: Settings
   }
 
   // ---- builtin default prompts (persisted with the custom list) ----
-  const [defaultsDraft, setDefaultsDraft] = useState<BuiltinDefaults>(() => cache.defaults())
+  // Prefilled with the shipped default text so the user sees exactly what will
+  // be injected; their own persisted values override when present.
+  const [defaultsDraft, setDefaultsDraft] = useState<BuiltinDefaults>(() => ({
+    ...builtinPayloadDefaults(t),
+    ...cache.defaults(),
+  }))
   const [defaultsBusy, setDefaultsBusy] = useState(false)
   const [defaultsNotice, setDefaultsNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
 
@@ -169,58 +206,49 @@ export function SettingsSection({ t, locale, cache, embedded = false }: Settings
         </>
       )}
 
+      {/* 内置命令的默认内容：每个基本命令一行，标签 + 说明 + guidance 设置（只保留设置区）。 */}
       <section className={css.block}>
         <h3 className={css.blockTitle}>{t('settings.builtinTitle')}</h3>
-        <p className={css.blockHint}>{t('settings.builtinHint')}</p>
-        <ul className={css.list}>
-          {BUILTIN_SLASH_COMMANDS.map((command) => (
-            <li key={command.name} className={css.card}>
-              <div className={css.cardHead}>
-                <div className={css.grow}>
-                  <div className={css.slash}>{slash(command.name)}</div>
-                  <p className={css.desc}>{t(command.descriptionKey)}</p>
-                </div>
-                <span className={css.kind}>
-                  {t(command.kind === 'steer'
-                    ? 'settings.rowKindSteer'
-                    : command.kind === 'session'
-                      ? 'settings.rowKindSession'
-                      : 'settings.rowKindAlias')}
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className={css.block}>
-        <h3 className={css.blockTitle}>{t('defaults.title')}</h3>
         <p className={css.blockHint}>{t('defaults.hint')}</p>
         <div className={css.defaultsList}>
-          {CONFIGURABLE_DEFAULT_NAMES.map((name) => (
-            <div key={name} className={css.defaultsRow}>
-              <label className={css.defaultsLabel} htmlFor={'default-' + name}>
-                {slash(name)} · {t(name === 'new' ? 'defaults.labelNew' : name === 'skill' ? 'defaults.labelSkill' : 'defaults.labelDocs')}
-              </label>
-              <textarea
-                id={'default-' + name}
-                className={css.defaultsTextarea}
-                value={defaultsDraft[name] ?? ''}
-                disabled={defaultsBusy}
-                placeholder={name === 'new' ? t('defaults.placeholderNew') : t('defaults.placeholder')}
-                onChange={(event) => {
-                  const next = { ...defaultsDraft }
-                  const text = event.target.value
-                  if (text.trim().length === 0) delete next[name]
-                  else next[name] = text
-                  setDefaultsDraft(next)
-                }}
-              />
-              {(defaultsDraft[name] ?? '') === '' ? (
-                <p className={css.hint}>{t('defaults.fallback')}</p>
-              ) : null}
-            </div>
-          ))}
+          {BUILTIN_SLASH_COMMANDS.map((command) => {
+            const defaultName = configurableName(command.name)
+            return (
+              <div key={command.name} className={css.defaultsRow}>
+                <div className={css.defaultsHead}>
+                  <span className={css.slash}>{slash(command.name)}</span>
+                  <span className={css.kind}>{t(kindTagKey(command.kind))}</span>
+                </div>
+                <p className={css.desc}>{t(command.descriptionKey)}</p>
+                {defaultName !== null ? (
+                  <>
+                    <label className={css.defaultsLabel} htmlFor={'default-' + defaultName}>
+                      {t(defaultLabelKey(defaultName))}
+                    </label>
+                    <textarea
+                      id={'default-' + defaultName}
+                      className={css.defaultsTextarea}
+                      value={defaultsDraft[defaultName] ?? ''}
+                      disabled={defaultsBusy}
+                      placeholder={defaultName === 'new' ? t('defaults.placeholderNew') : t('defaults.placeholder')}
+                      onChange={(event) => {
+                        const next = { ...defaultsDraft }
+                        const text = event.target.value
+                        if (text.trim().length === 0) delete next[defaultName]
+                        else next[defaultName] = text
+                        setDefaultsDraft(next)
+                      }}
+                    />
+                    {(defaultsDraft[defaultName] ?? '') === '' ? (
+                      <p className={css.hint}>{t('defaults.fallback')}</p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className={css.hint}>{t('defaults.steerManual')}</p>
+                )}
+              </div>
+            )
+          })}
         </div>
         <div className={css.actions}>
           <button
