@@ -1,9 +1,9 @@
-import { useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { GitClient } from '../api.ts'
 import type { GitFail } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
 import { joinWorkspaceFile, suggestNewFileDir, termIdFromTabId } from '../../shared/new-file-path.ts'
-import { IconClose, IconDiff, IconEditor, IconEye, IconGlobe, IconMore, IconPanelOff, IconPlus, IconSave, IconSplit, IconTerminal } from './icons.tsx'
+import { IconChat, IconClose, IconDiff, IconEditor, IconEye, IconGlobe, IconMore, IconPanelOff, IconPlus, IconSave, IconSplit, IconTerminal } from './icons.tsx'
 import { PathBreadcrumb } from './PathBreadcrumb.tsx'
 import { TerminalView } from './TerminalView.tsx'
 import { BrowserView } from './BrowserView.tsx'
@@ -14,8 +14,11 @@ import type { EditorModeId } from './editor-mode.ts'
 import { FilePreview } from './FilePreview.tsx'
 import { MarkdownPreview } from './MarkdownPreview.tsx'
 import type { BrowserElSnapshot } from '../../shared/browser-el.ts'
+import type { EditorRefSnapshot } from '../../shared/editor-ref.ts'
+import type { EditorVimOps } from './types.ts'
 import type { TermCleanExitAction } from './term-session.ts'
 import { ContextMenu, type ContextMenuEntry } from './ContextMenu.tsx'
+import { ColSash, RowSash } from './ColSash.tsx'
 import css from './EditorPane.module.css'
 
 export interface EditorPaneProps {
@@ -47,6 +50,8 @@ export interface EditorPaneProps {
   onDockToBottom?: () => void
   onTermCleanExit?: (tabId: string) => TermCleanExitAction
   terminalDocked?: boolean
+  /** Editor selection / whole file → official composer chip. */
+  onAddEditorToChat?: (snapshot: EditorRefSnapshot) => boolean
   t: Translate
 }
 
@@ -100,7 +105,7 @@ type MdViewMode = 'edit' | 'preview' | 'split'
 /** Center editor: explorer + tabs + text/diff, with unsaved-close confirmation. */
 export function EditorPane({
   client, workspaceId, tabs, activeId, buffers,
-  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onNewBrowser, onOpenDevtools, onPickBrowserEl, onBrowserTitle, onCreateFile, aiTermIds, onAiModeChange, editorMode, onDockToBottom, onTermCleanExit, terminalDocked, t,
+  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onNewBrowser, onOpenDevtools, onPickBrowserEl, onBrowserTitle, onCreateFile, aiTermIds, onAiModeChange, editorMode, onDockToBottom, onTermCleanExit, terminalDocked, onAddEditorToChat, t,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.id === activeId) ?? null
   const buffer = active?.kind === 'file' ? buffers[active.path] : undefined
@@ -120,6 +125,13 @@ export function EditorPane({
   const [diffLoading, setDiffLoading] = useState(false)
   const [mdView, setMdView] = useState<Record<string, MdViewMode>>({})
   const [termChromeHost, setTermChromeHost] = useState<HTMLSpanElement | null>(null)
+  // Split panes: only the editor body is split — the chrome (crumb row, tab
+  // bar, actions) stays single. splitId is the tab shown in the second pane.
+  const [editorSplit, setEditorSplit] = useState<'none' | 'v' | 'h'>('none')
+  const [splitId, setSplitId] = useState<string | null>(null)
+  const [splitFrac, setSplitFrac] = useState(0.5)
+  const [splitFocus, setSplitFocus] = useState<'a' | 'b'>('a')
+  const splitHostRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if ((active?.kind !== 'diff' && active?.kind !== 'commitDiff') || workspaceId === undefined) {
@@ -182,17 +194,34 @@ export function EditorPane({
     setTabMenu({ x: event.clientX, y: event.clientY, tabId: id })
   }
 
-  const save = async (): Promise<void> => {
-    if (workspaceId === undefined || active?.kind !== 'file' || buffer === undefined || !dirty || saving) return
+  /** Save one tab's buffer; resolves true only when the write succeeded. */
+  const saveTab = async (id: string): Promise<boolean> => {
+    const tab = tabs.find(item => item.id === id)
+    if (workspaceId === undefined || tab?.kind !== 'file') return false
+    const current = buffers[tab.path]
+    if (current === undefined || current.draft === current.original || saving) return false
     setSaving(true)
-    const result = await client.writeFile(workspaceId, active.path, buffer.draft)
+    const result = await client.writeFile(workspaceId, tab.path, current.draft)
     setSaving(false)
     if (!result.ok) {
       setError(result)
-      return
+      return false
     }
     setError(null)
-    onSaved(active.path, buffer.draft)
+    onSaved(tab.path, current.draft)
+    return true
+  }
+
+  /** Save the active tab (toolbar / Mod-s on the primary pane). */
+  const save = (): Promise<boolean> => active?.id !== undefined
+    ? saveTab(active.id)
+    : Promise.resolve(false)
+
+  /** Selected text / whole file of one tab → official composer chip. */
+  const addEditorToChat = (tabId: string | null, text: string, kind: 'selection' | 'file'): boolean => {
+    const tab = tabId === null ? undefined : tabs.find(item => item.id === tabId)
+    if (onAddEditorToChat === undefined || tab?.kind !== 'file') return false
+    return onAddEditorToChat({ text, path: tab.path, kind })
   }
 
   const markdownOpen = active?.kind === 'file' && buffer !== undefined && isMarkdownPath(active.path)
@@ -238,6 +267,103 @@ export function EditorPane({
   const closeRightIds = activeIndex >= 0 && activeIndex < tabs.length - 1
     ? tabs.slice(activeIndex + 1).filter(tab => tab.kind !== 'terminal').map(tab => tab.id)
     : []
+
+  /** Open a split; the second pane shows another open file tab (or the same
+   *  file when that's all there is), like opening one more editor tab. */
+  const openSplit = (dir: 'v' | 'h'): void => {
+    setEditorSplit(dir)
+    setSplitId((current) => {
+      if (current !== null && tabs.some(tab => tab.id === current)) return current
+      const files = tabs.filter(tab => tab.kind === 'file')
+      const other = files.find(tab => tab.id !== activeId) ?? files[0]
+      return other?.id ?? null
+    })
+  }
+
+  const closeSplit = (): void => {
+    setEditorSplit('none')
+    setSplitId(null)
+    setSplitFocus('a')
+  }
+
+  // Keep the split pane on a live tab; close the split when no tab is left.
+  useEffect(() => {
+    if (editorSplit === 'none') return
+    if (splitId !== null && tabs.some(tab => tab.id === splitId)) return
+    const files = tabs.filter(tab => tab.kind === 'file')
+    const other = files.find(tab => tab.id !== activeId) ?? files[0]
+    if (other !== undefined) setSplitId(other.id)
+    else closeSplit()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorSplit, splitId, tabs, activeId])
+
+  const beginSplitResize = (event: React.PointerEvent<HTMLButtonElement>): void => {
+    event.preventDefault()
+    const handle = event.currentTarget
+    const pointerId = event.pointerId
+    try { handle.setPointerCapture(pointerId) } catch { /* pointer already inactive */ }
+    const startX = event.clientX
+    const startY = event.clientY
+    const startFrac = splitFrac
+    const axis = editorSplit === 'v' ? 'x' : 'y'
+    const rect = splitHostRef.current?.getBoundingClientRect()
+    const size = (axis === 'x' ? rect?.width : rect?.height) ?? 1
+    const previousCursor = document.body.style.cursor
+    const previousSelect = document.body.style.userSelect
+    document.body.style.cursor = editorSplit === 'v' ? 'col-resize' : 'row-resize'
+    document.body.style.userSelect = 'none'
+    const move = (next: PointerEvent): void => {
+      const delta = axis === 'x' ? next.clientX - startX : next.clientY - startY
+      setSplitFrac(Math.min(0.85, Math.max(0.15, startFrac + delta / size)))
+    }
+    const end = (): void => {
+      try { handle.releasePointerCapture(pointerId) } catch { /* already released */ }
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', end)
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousSelect
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+  }
+
+  /** Vim window ex-commands scoped to one tab (primary = activeId, split = splitId). */
+  const vimOpsFor = (id: string | null): EditorVimOps => {
+    const tab = id === null ? undefined : tabs.find(item => item.id === id)
+    const tabDirty = tab?.kind === 'file' && buffers[tab.path] !== undefined
+      && buffers[tab.path]!.draft !== buffers[tab.path]!.original
+    return {
+      save: () => id === null ? Promise.resolve(false) : saveTab(id),
+      close: (force) => {
+        if (id === null) return
+        if (force) onClose(id)
+        else requestClose(id)
+      },
+      closeAll: (force) => {
+        if (force) onCloseMany(closableIds)
+        else requestCloseMany(closableIds)
+      },
+      writeQuit: (force) => {
+        void (async () => {
+          // :x / :wq closes even a clean file — only a failed save blocks it.
+          if (id === null) return
+          if (tabDirty) {
+            const ok = await saveTab(id)
+            if (!ok) return
+          }
+          if (force) onClose(id)
+          else requestClose(id)
+        })()
+      },
+      vsplit: () => { openSplit('v') },
+      hsplit: () => { openSplit('h') },
+      only: () => { closeSplit() },
+    }
+  }
+
+  const vimOps = vimOpsFor(active?.id ?? null)
+  const splitTab = splitId === null ? undefined : tabs.find(tab => tab.id === splitId)
+  const splitVimOps = vimOpsFor(splitId)
 
   useEffect(() => {
     if (!menuOpen && !addOpen && !newFileOpen) return
@@ -324,20 +450,26 @@ export function EditorPane({
   } else if (buffer === undefined) {
     body = <p className={css.hint}>{t('panel.loading')}</p>
   } else {
-    const editor = (
+    /** One CodeMirror editor bound to one tab's buffer and vim ops. */
+    const editorOf = (tab: FileTab, buf: FileBuffer, ops: EditorVimOps): ReactNode => (
       <CodeEditor
-        path={active.path}
-        value={buffer.draft}
-        label={fileName(active.path)}
+        path={tab.path}
+        value={buf.draft}
+        label={fileName(tab.path)}
         mode={editorMode}
-        onChange={(next) => { onDraft(active.path, next) }}
-        onSave={() => { void save() }}
+        t={t}
+        onChange={(next) => { onDraft(tab.path, next) }}
+        onSave={() => { void saveTab(tab.id) }}
+        onAddToChat={onAddEditorToChat === undefined
+          ? undefined
+          : (text, kind) => addEditorToChat(tab.id, text, kind)}
+        vimOps={ops}
       />
     )
-    if (!markdownOpen) {
-      body = editor
-    } else {
-      body = (
+    const primaryEditor = (() => {
+      const editor = editorOf(active, buffer, vimOps)
+      if (!markdownOpen) return editor
+      return (
         <div className={css.mdShell} data-mode={mdMode}>
           {mdMode !== 'preview' ? <div className={css.mdEdit}>{editor}</div> : null}
           {mdMode !== 'edit' ? (
@@ -349,6 +481,46 @@ export function EditorPane({
               workspaceId={workspaceId}
             />
           ) : null}
+        </div>
+      )
+    })()
+    if (editorSplit === 'none' || splitTab === undefined) {
+      body = primaryEditor
+    } else {
+      const splitBuffer = buffers[splitTab.path]
+      body = (
+        <div
+          ref={splitHostRef}
+          className={css.editorSplit}
+          data-split={editorSplit}
+          style={{
+            ['--git-editor-split-a' as string]: `${Math.round(splitFrac * 100)}%`,
+            ['--git-editor-split-b' as string]: `${Math.round((1 - splitFrac) * 100)}%`,
+          }}
+        >
+          <div className={css.splitPane} style={{ flexBasis: 'var(--git-editor-split-a)' }} onFocusCapture={() => { setSplitFocus('a') }}>
+            {primaryEditor}
+          </div>
+          <div className={css.splitSashSlot}>
+            {editorSplit === 'v' ? (
+              <ColSash
+                label={t('editor.splitResize')}
+                onPointerDown={beginSplitResize}
+                onReset={() => { setSplitFrac(0.5) }}
+              />
+            ) : (
+              <RowSash
+                label={t('editor.splitResize')}
+                onPointerDown={beginSplitResize}
+                onReset={() => { setSplitFrac(0.5) }}
+              />
+            )}
+          </div>
+          <div className={css.splitPane} style={{ flexBasis: 'var(--git-editor-split-b)' }} onFocusCapture={() => { setSplitFocus('b') }}>
+            {splitBuffer === undefined
+              ? <p className={css.hint}>{t('panel.loading')}</p>
+              : editorOf(splitTab, splitBuffer, splitVimOps)}
+          </div>
         </div>
       )
     }
@@ -397,6 +569,12 @@ export function EditorPane({
           hint: t('editor.closeTabDisabled'),
           onClick: () => { requestClose(tabMenu.tabId) },
         },
+        ...(ctxTab?.kind === 'file' && onAddEditorToChat !== undefined && buffers[ctxTab.path] !== undefined
+          ? [
+              { kind: 'item' as const, id: 'add-to-chat', icon: <IconChat />, label: t('editor.menu.addFileToChat'), onClick: () => { onAddEditorToChat({ text: buffers[ctxTab.path]!.draft, path: ctxTab.path, kind: 'file' as const }) } },
+              { kind: 'sep' as const },
+            ]
+          : []),
         { kind: 'item', id: 'close-others', label: t('editor.closeOthers'), disabled: ctxOthersIds.length === 0, hint: t('editor.closeOthersDisabled'), onClick: () => { requestCloseMany(ctxOthersIds) } },
         { kind: 'item', id: 'close-all', label: t('editor.closeAll'), disabled: closableIds.length === 0, hint: t('editor.closeAllDisabled'), onClick: () => { requestCloseMany(closableIds) } },
         { kind: 'sep' },
@@ -443,6 +621,15 @@ export function EditorPane({
                 </IconButton>
               </span>
             ) : null}
+            {active?.kind === 'file' && onAddEditorToChat !== undefined ? (
+              <IconButton
+                label={t('editor.menu.addFileToChat')}
+                disabled={buffer === undefined}
+                onClick={() => { if (buffer !== undefined && active !== null) addEditorToChat(active.id, buffer.draft, 'file') }}
+              >
+                <IconChat />
+              </IconButton>
+            ) : null}
             {active?.kind === 'file' ? (
               <IconButton
                 label={saveReason ?? (dirty ? t('editor.save') : t('editor.saved'))}
@@ -454,6 +641,11 @@ export function EditorPane({
             ) : active?.kind === 'diff' || active?.kind === 'commitDiff' ? (
               <IconButton label={t('editor.fileTab')} onClick={() => { onOpenFile(active.path) }}>
                 <IconDiff />
+              </IconButton>
+            ) : null}
+            {editorSplit !== 'none' ? (
+              <IconButton label={t('editor.unsplit')} onClick={closeSplit}>
+                <IconSplit />
               </IconButton>
             ) : null}
             {onCollapse !== undefined ? (
@@ -469,22 +661,35 @@ export function EditorPane({
               const tabDirty = tab.kind === 'file' && buffers[tab.path] !== undefined
                 && buffers[tab.path]!.draft !== buffers[tab.path]!.original
               const tabLabel = tabLabelOf(tab, t)
+              // Split mode keeps one tab strip: the focused pane's tab is the
+              // highlighted one; clicking a tab routes to the focused pane.
+              const tabActiveId = editorSplit !== 'none' && splitFocus === 'b' ? splitId : activeId
+              const activateTab = (): void => {
+                if (editorSplit !== 'none' && splitFocus === 'b') {
+                  // The second pane is a plain file view — no terminals etc.
+                  if (tab.kind === 'file') setSplitId(tab.id)
+                  return
+                }
+                onActivate(tab.id)
+                setSplitFocus('a')
+              }
               return (
                 <div
                   key={tab.id}
                   className={css.tab}
-                  data-active={tab.id === activeId || undefined}
+                  data-active={tab.id === tabActiveId || undefined}
+                  data-split-tab={editorSplit !== 'none' && tab.id === splitId ? '' : undefined}
                   data-ignored={tab.ignored === true || undefined}
                   role="tab"
-                  aria-selected={tab.id === activeId || undefined}
+                  aria-selected={tab.id === tabActiveId || undefined}
                   tabIndex={0}
                   title={tab.ignored === true ? t('tree.ignored') : undefined}
-                  onClick={() => { onActivate(tab.id) }}
+                  onClick={activateTab}
                   onContextMenu={(event) => { openTabMenu(event, tab.id) }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
-                      onActivate(tab.id)
+                      activateTab()
                     }
                   }}
                 >

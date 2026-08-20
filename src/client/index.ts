@@ -9,6 +9,7 @@ import { installFileRefClient } from './workbench/file-ref-client.ts'
 import { installBrowserElClient } from './workbench/browser-el-client.ts'
 import { installNetRefClient } from './workbench/net-ref-client.ts'
 import { installTermRefClient } from './workbench/term-ref-client.ts'
+import { installEditorRefClient } from './workbench/editor-ref-client.ts'
 import { Workbench } from './workbench/Workbench.tsx'
 import type { WorkbenchInjected } from './workbench/types.ts'
 import { en, NS, zh } from './locales.ts'
@@ -56,6 +57,7 @@ export function apply(ctx: ClientContext): void {
   const browserEls = installBrowserElClient(ctx)
   const netRefs = installNetRefClient(ctx)
   const termRefs = installTermRefClient(ctx)
+  const editorRefs = installEditorRefClient(ctx)
 
   const injected: WorkbenchInjected = {
     client,
@@ -75,6 +77,7 @@ export function apply(ctx: ClientContext): void {
       browserEls,
       netRefs,
       termRefs,
+      editorRefs,
     }),
   }, Workbench))
 

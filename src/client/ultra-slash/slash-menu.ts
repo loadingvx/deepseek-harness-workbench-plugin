@@ -125,6 +125,11 @@ export function pluginSlashNameSet(customNames: readonly string[] = []): Set<str
   return names
 }
 
+/** Plugin command names for the text-ref lexicon (builtin + custom, stable across session states). */
+export function pluginLexicon(customNames: readonly string[] = []): string[] {
+  return [...pluginSlashNameSet(customNames)]
+}
+
 /** Structural slice of one `/` source on `ctx.inputTriggers`. */
 export interface SlashSource {
   readonly trigger: '/' | '@'
@@ -138,6 +143,14 @@ export interface SlashSource {
   matchSpace?: (session: unknown, token: string) => unknown
   matchEnter?: (session: unknown, line: string, signal: AbortSignal) => Promise<unknown>
   warm?: (session: unknown) => void
+  /**
+   * Hot plain-text-reference name roll (the DSH text-ref decoration): plugin
+   * command names highlight in the composer textarea in every session state.
+   * Undefined = not warm yet (the cache is synchronous once loaded).
+   */
+  lexicon?: (session: unknown) => readonly string[] | undefined
+  /** Invalidation channel for the lexicon roll (the catalog cache change feed). */
+  subscribeLexicon?: (session: unknown, listener: () => void) => () => void
 }
 
 export interface SlashTriggerService {

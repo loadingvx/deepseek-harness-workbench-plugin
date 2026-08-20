@@ -15,6 +15,13 @@ export const MAX_COMMAND_NAME_LENGTH = 32
 export const MAX_DESCRIPTION_LENGTH = 80
 export const MAX_STEER_TEXT_LENGTH = 8000
 
+/** Builtin commands whose default prompt the user may configure (everything except the steer primitive). */
+export const CONFIGURABLE_DEFAULT_NAMES = ['new', 'skill', 'docs'] as const
+export type ConfigurableDefaultName = (typeof CONFIGURABLE_DEFAULT_NAMES)[number]
+
+/** User-configured default prompt per configurable builtin ('' = fall back to the shipped payload). */
+export type BuiltinDefaults = Partial<Record<ConfigurableDefaultName, string>>
+
 /** One builtin row shown in the ultra-slash group. */
 export interface BuiltinSlashCommand {
   readonly name: string
@@ -194,4 +201,22 @@ export function composeAliasText(template: string, rawInput: string): string {
   const extra = rawInput.trim()
   if (extra.length === 0) return template
   return `${template}\n${extra}`
+}
+
+/**
+ * Normalize a raw defaults object: keep only the configurable names, trim,
+ * and cap each value at {@link MAX_STEER_TEXT_LENGTH}. Empty strings are
+ * dropped so the shipped payload (or a blank session for /new) stays the fallback.
+ */
+export function normalizeDefaults(raw: Record<string, unknown> | null | undefined): BuiltinDefaults {
+  if (raw === null || raw === undefined) return {}
+  const out: BuiltinDefaults = {}
+  for (const name of CONFIGURABLE_DEFAULT_NAMES) {
+    const value = raw[name]
+    if (typeof value !== 'string') continue
+    const text = value.trim().slice(0, MAX_STEER_TEXT_LENGTH)
+    if (text.length === 0) continue
+    out[name] = text
+  }
+  return out
 }

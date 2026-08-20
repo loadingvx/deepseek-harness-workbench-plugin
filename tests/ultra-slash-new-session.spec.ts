@@ -88,6 +88,47 @@ describe('startNewSession', () => {
   })
 })
 
+describe('configured default first message', () => {
+  it('sends the configured default when the trailing text is empty', async () => {
+    let current: string | undefined
+    const listeners = new Set<() => void>()
+    const prompt = vi.fn(async () => ({ ok: true }))
+    const sessions = {
+      list: {
+        getSnapshot: () => ({ current }),
+        subscribe: (fn: () => void) => {
+          listeners.add(fn)
+          return () => { listeners.delete(fn) }
+        },
+      },
+      binding: (id: string) => (id === 's2' ? { session: { prompt } } : undefined),
+    }
+    const startSession = vi.fn(() => {
+      current = 's2'
+      for (const fn of listeners) fn()
+    })
+    const get = (name: string) => name === 'workspaces' ? { startSession } : name === 'sessions' ? sessions : undefined
+    const matchEnter = newSlashMatchEnter(get, zhT, () => '  默认第一句话  ')
+    const outcome = await matchEnter({}, '/new', new AbortController().signal)
+    const claim = (outcome as { claim: { submit: (args: string) => Promise<{ kind: string; text?: string }> } }).claim
+    const result = await claim.submit('')
+    expect(result.kind).toBe('success')
+    await vi.waitFor(() => expect(prompt).toHaveBeenCalledTimes(1))
+    expect(prompt).toHaveBeenCalledWith([{ type: 'text', text: '默认第一句话' }], 'queue')
+  })
+
+  it('prefers the typed text over the configured default', async () => {
+    const startSession = vi.fn()
+    const get = (name: string) => name === 'workspaces' ? { startSession } : undefined
+    const matchSpace = newSlashMatchSpace(get, zhT, () => '默认第一句话')
+    const claim = (matchSpace({}, '/new') as { claim: { submit: (args: string) => Promise<{ kind: string; text?: string }> } }).claim
+    const result = await claim.submit('帮我写README')
+    expect(result.text).toContain('帮我写README')
+    expect(result.text).not.toContain('默认第一句话')
+    expect(startSession).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('newSlashMatchEnter', () => {
   it('claims /new with trailing text and starts the session on submit', async () => {
     const startSession = vi.fn()

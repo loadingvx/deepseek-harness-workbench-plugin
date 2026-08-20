@@ -89,6 +89,17 @@ export const zh = {
   'settings.rowKindAlias': '快捷',
   'settings.rowKindSession': '会话',
   'settings.rowKindCustom': '自定义',
+  'defaults.title': '默认内容',
+  'defaults.hint': '给内置命令设置默认文字。/steer 固定为手动输入，不能设置。/new 的默认文字会作为新会话的第一句话发出；/skill 和 /docs 的默认文字会注入模型下一步，使用时在命令后追加的文字会接在后面。留空则使用内置文案。',
+  'defaults.save': '保存默认内容',
+  'defaults.saving': '正在保存…',
+  'defaults.saved': '默认内容已保存。',
+  'defaults.labelNew': '新会话的第一句话',
+  'defaults.labelSkill': 'skill 注入内容',
+  'defaults.labelDocs': 'docs 注入内容',
+  'defaults.placeholderNew': '例如：先总结当前工作区的改动',
+  'defaults.placeholder': '例如：完成任务后，把关键步骤记录下来',
+  'defaults.fallback': '未设置：使用内置文案',
 } satisfies Record<string, string>
 
 /** Dictionary key union. */
@@ -169,6 +180,17 @@ export const en = {
   'settings.rowKindAlias': 'Shortcut',
   'settings.rowKindSession': 'Session',
   'settings.rowKindCustom': 'Custom',
+  'defaults.title': 'Default prompts',
+  'defaults.hint': 'Set the default prompt for each built-in command. /steer stays manual and cannot be configured. The /new default is sent as the first message of the new session; the /skill and /docs defaults are injected into the next model step, and any text you type after the command is appended. Leave empty to use the built-in text.',
+  'defaults.save': 'Save defaults',
+  'defaults.saving': 'Saving…',
+  'defaults.saved': 'Defaults saved.',
+  'defaults.labelNew': 'First message of a new session',
+  'defaults.labelSkill': 'skill guidance',
+  'defaults.labelDocs': 'docs guidance',
+  'defaults.placeholderNew': 'Example: first summarize the current workspace changes',
+  'defaults.placeholder': 'Example: after the task, record the key steps',
+  'defaults.fallback': 'Not set: uses the built-in text',
 } satisfies Record<UltraSlashKey, string>
 
 export const DICTS: Record<UiLocale, Record<UltraSlashKey, string>> = { zh, en }

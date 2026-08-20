@@ -95,7 +95,9 @@ import {
 } from './net-ref-client.ts'
 import type { NetRefApi } from './net-ref-client.ts'
 import { termRefExisting } from './term-ref-client.ts'
+import { editorRefExisting } from './editor-ref-client.ts'
 import type { NetRefSnapshot } from '../../shared/browser-net-ref.ts'
+import type { EditorRefSnapshot } from '../../shared/editor-ref.ts'
 import css from './Workbench.module.css'
 
 export type WorkbenchProps =
@@ -191,7 +193,7 @@ function WorkbenchToggle({ t }: Pick<WorkbenchProps, 't'>) {
 }
 
 function WorkbenchInner(props: WorkbenchProps) {
-  const { client, t, useSessions, useWorkspaces, sessionId, fileRefs, browserEls, netRefs, termRefs } = props
+  const { client, t, useSessions, useWorkspaces, sessionId, fileRefs, browserEls, netRefs, termRefs, editorRefs } = props
   const chrome = useSyncExternalStore(subscribeWorkbenchChrome, getWorkbenchChrome, defaultWorkbenchChrome)
   const { enabled, chatOpen, editorOpen, sideOpen, sideTab } = chrome
   const usageDock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
@@ -760,6 +762,24 @@ function WorkbenchInner(props: WorkbenchProps) {
     }, t)
   }, [termRefs, inputOccurrences, t])
 
+  /** 编辑器选中内容 / 整个文件 → 官方胶囊（与终端、网络请求同一机制），附文件路径上下文。 */
+  const sendEditorToChat = useCallback((snapshot: EditorRefSnapshot): boolean => {
+    if (editorRefs === undefined) return false
+    const live = fileRefDropRef.current
+    if (live.sessionId === undefined) return false
+    const seat = document.querySelector<HTMLElement>('[data-composer-seat]')
+    const range = seat !== null
+      ? composerSelection(seat, live.draftLength)
+      : { start: live.draftLength, end: live.draftLength }
+    return editorRefs.insertChip({
+      sessionId: live.sessionId,
+      snapshot,
+      span: { start: range.start, end: range.end, draftRev: live.draftRev },
+      existing: editorRefExisting(inputOccurrences),
+      phase: live.phase,
+    }, t)
+  }, [editorRefs, inputOccurrences, t])
+
   /** 通用纯文本 → 官方输入框（DevTools 无胶囊通道时的兜底）。 */
   const sendTextToChat = useCallback((text: string): boolean => {
     if (netRefs === undefined) return false
@@ -1006,6 +1026,7 @@ function WorkbenchInner(props: WorkbenchProps) {
           aiTermIds={aiTermIds}
           onAiModeChange={toggleTermAi}
           onTermCleanExit={handleTermCleanExit}
+          onAddEditorToChat={sendEditorToChat}
           onCreateFile={async (path) => {
             if (workspaceId === undefined) return { ok: false, code: 'NO_WORKSPACE', messageZh: t('editor.addFileNoWorkspace'), hintZh: '' }
             const existing = await client.readFile(workspaceId, path)

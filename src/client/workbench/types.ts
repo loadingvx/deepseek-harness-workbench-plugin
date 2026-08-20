@@ -5,8 +5,27 @@ import type { FileRefApi } from './file-ref-client.ts'
 import type { BrowserElApi } from './browser-el-client.ts'
 import type { NetRefApi } from './net-ref-client.ts'
 import type { TermRefApi } from './term-ref-client.ts'
+import type { EditorRefApi } from './editor-ref-client.ts'
 
 export type Translate = (key: string, vars?: Record<string, string | number>) => string
+
+/** Vim window ex-command targets (:w/:q/:qa/:x/:wq/:vs/:sp/:only) for one editor view. */
+export interface EditorVimOps {
+  /** :w — persist the buffer; resolves true when the save succeeded. */
+  save(): Promise<boolean> | boolean
+  /** :q / :q! — close the focused tab; force skips the dirty confirmation. */
+  close(force: boolean): void
+  /** :qa / :qa! — close all closable tabs; force skips confirmations. */
+  closeAll(force: boolean): void
+  /** :x / :wq — save, then close; close is skipped when the save fails. */
+  writeQuit(force: boolean): void
+  /** :vs — vertical split of the editor area. */
+  vsplit(): void
+  /** :sp — horizontal split of the editor area. */
+  hsplit(): void
+  /** :only — close the other split pane, keep this one. */
+  only(): void
+}
 
 /** Infer UI language from the host-bound workbench translator. */
 export function uiLocaleFromTranslate(t: Translate): 'zh' | 'en' {
@@ -32,6 +51,8 @@ export interface WorkbenchInjected {
   netRefs?: NetRefApi
   /** Official composer chips for terminal selections / recent output. Host mount only. */
   termRefs?: TermRefApi
+  /** Official composer chips for editor selections / whole files. Host mount only. */
+  editorRefs?: EditorRefApi
 }
 
 export const TERMINAL_TAB_ID = 'terminal:main'

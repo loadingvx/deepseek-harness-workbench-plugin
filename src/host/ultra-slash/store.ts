@@ -2,7 +2,9 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
+  normalizeDefaults,
   validateCustomList,
+  type BuiltinDefaults,
   type CustomSlashCommand,
 } from '../../shared/ultra-slash/catalog.ts'
 
@@ -13,6 +15,7 @@ export const STORE_FILE_NAME = 'commands.json'
 export interface CustomCommandStoreFile {
   readonly version: number
   readonly commands: readonly CustomSlashCommand[]
+  readonly defaults?: Readonly<BuiltinDefaults>
 }
 
 export function resolveDshHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -43,7 +46,7 @@ function isCommandShape(value: unknown): value is { name: string; description?: 
     && (row.description === undefined || typeof row.description === 'string')
 }
 
-function parseStoreFile(raw: string): CustomSlashCommand[] {
+function parseStoreFile(raw: string): { commands: CustomSlashCommand[]; defaults: BuiltinDefaults } {
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
@@ -53,7 +56,7 @@ function parseStoreFile(raw: string): CustomSlashCommand[] {
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new StoreError('corrupt', 'commands.json must be an object')
   }
-  const body = parsed as { version?: unknown; commands?: unknown }
+  const body = parsed as { version?: unknown; commands?: unknown; defaults?: unknown }
   if (!Array.isArray(body.commands)) {
     throw new StoreError('corrupt', 'commands.json is missing a commands array')
   }
@@ -63,37 +66,59 @@ function parseStoreFile(raw: string): CustomSlashCommand[] {
   }
   const validated = validateCustomList(rows)
   if (!validated.ok) {
-    throw new StoreError('corrupt', `commands.json failed validation: ${validated.issue.code}`)
+    throw new StoreError('corrupt', 'commands.json failed validation: ' + validated.issue.code)
   }
-  return validated.commands
+  const defaults = normalizeDefaults(
+    typeof body.defaults === 'object' && body.defaults !== null && !Array.isArray(body.defaults)
+      ? body.defaults as Record<string, unknown>
+      : undefined,
+  )
+  return { commands: validated.commands, defaults }
 }
 
 /** Missing file → empty list. Corrupt file throws so a save cannot wipe it. */
 export async function loadCustomCommands(path: string): Promise<CustomSlashCommand[]> {
+  return (await loadUltraSlashStore(path)).commands
+}
+
+/** Missing file → empty defaults. Corrupt file throws so a save cannot wipe it. */
+export async function loadBuiltinDefaults(path: string): Promise<BuiltinDefaults> {
+  return (await loadUltraSlashStore(path)).defaults
+}
+
+/** Parse the whole store file (custom commands + configured builtin defaults). */
+export async function loadUltraSlashStore(
+  path: string,
+): Promise<{ commands: CustomSlashCommand[]; defaults: BuiltinDefaults }> {
   let raw: string
   try {
     raw = await readFile(path, 'utf8')
   } catch (error: unknown) {
-    if (isNotFound(error)) return []
-    throw new StoreError('io', `could not read ${path}`, { cause: error })
+    if (isNotFound(error)) return { commands: [], defaults: {} }
+    throw new StoreError('io', 'could not read ' + path, { cause: error })
   }
-  if (raw.trim().length === 0) return []
+  if (raw.trim().length === 0) return { commands: [], defaults: {} }
   return parseStoreFile(raw)
 }
 
 export async function saveCustomCommands(
   path: string,
   commands: readonly CustomSlashCommand[],
+  defaults: Readonly<BuiltinDefaults> = {},
 ): Promise<void> {
-  const body: CustomCommandStoreFile = { version: STORE_VERSION, commands }
-  const json = `${JSON.stringify(body, null, 2)}\n`
-  const tmp = `${path}.${process.pid}.tmp`
+  const body: CustomCommandStoreFile = {
+    version: STORE_VERSION,
+    commands,
+    ...(Object.keys(defaults).length > 0 ? { defaults } : {}),
+  }
+  const json = JSON.stringify(body, null, 2) + '\n'
+  const tmp = path + '.' + process.pid + '.tmp'
   try {
     await mkdir(dirname(path), { recursive: true })
     await writeFile(tmp, json, 'utf8')
     await rename(tmp, path)
   } catch (error: unknown) {
-    throw new StoreError('io', `could not write ${path}`, { cause: error })
+    throw new StoreError('io', 'could not write ' + path, { cause: error })
   }
 }
 

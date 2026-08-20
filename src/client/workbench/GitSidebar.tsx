@@ -25,6 +25,7 @@ import {
   retainGitLive,
   subscribeGitLive,
 } from './git-live.ts'
+import { headChangedOf, headKeyOf, type HeadKey } from './git-head.ts'
 import { parentNeedsAsk } from '../../shared/git-nearby.ts'
 import { readDocumentColorScheme } from './surface-scheme.ts'
 import type { Translate } from './types.ts'
@@ -197,6 +198,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const [remoteSyncing, setRemoteSyncing] = useState(false)
   const [remoteHint, setRemoteHint] = useState<GitFail | null>(null)
   const busyLock = useRef(false)
+  const headSeenRef = useRef<HeadKey>(null)
   const remoteLock = useRef(false)
   const hasRemoteRef = useRef(false)
   const [loading, setLoading] = useState(false)
@@ -271,6 +273,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
         setBranches([])
         setLog([])
         hasRemoteRef.current = false
+        headSeenRef.current = null
         return empty
       }
       setStatus(null)
@@ -285,6 +288,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       setBranches([])
       setLog([])
       hasRemoteRef.current = false
+      headSeenRef.current = null
       return statusResult.value
     }
     const [branchResult, logResult] = await Promise.all([
@@ -295,6 +299,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     setError(null)
     setStatus(statusResult.value)
     hasRemoteRef.current = statusResult.value.probe.remote !== undefined
+    headSeenRef.current = headKeyOf(statusResult.value.probe)
     setBranches(branchResult.ok ? branchResult.value : [])
     setLog(logResult.ok ? logResult.value : [])
     return statusResult.value
@@ -327,9 +332,21 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   useEffect(() => retainGitLive(client, workspaceId, repoId), [client, workspaceId, repoId])
 
   useEffect(() => {
-    if (busyLock.current || polledStatus === null) return
+    if (polledStatus === null) {
+      headSeenRef.current = null
+      return
+    }
+    if (busyLock.current) return
+    const head = headKeyOf(polledStatus.probe)
+    const headChanged = headChangedOf(headSeenRef.current, head)
+    headSeenRef.current = head
     setStatus(polledStatus)
     hasRemoteRef.current = polledStatus.probe.remote !== undefined
+    if (headChanged) {
+      // 分支 / HEAD 变动（模型 git_branch 工具、终端或外部操作）：
+      // 重新拉取 branches 与 log，让 GRAPH 与顶部下拉框重新对齐。
+      void refresh()
+    }
   }, [polledStatus])
 
   useLayoutEffect(() => {

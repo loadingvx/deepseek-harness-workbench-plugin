@@ -6,11 +6,19 @@ import {
   composeAliasText,
   MAX_CUSTOM_COMMANDS,
   normalizeCommandName,
+  normalizeDefaults,
   validateCustomCommand,
   validateCustomList,
 } from '../src/shared/ultra-slash/catalog.ts'
 import { formatCatalogIssue } from '../src/shared/ultra-slash/locales.ts'
-import { customCommandStorePath, loadCustomCommands, saveCustomCommands, StoreError } from '../src/host/ultra-slash/store.ts'
+import {
+  customCommandStorePath,
+  loadBuiltinDefaults,
+  loadCustomCommands,
+  loadUltraSlashStore,
+  saveCustomCommands,
+  StoreError,
+} from '../src/host/ultra-slash/store.ts'
 
 describe('normalizeCommandName', () => {
   it('strips a leading slash and lowercases', () => {
@@ -78,6 +86,25 @@ describe('validateCustomList', () => {
   })
 })
 
+describe('normalizeDefaults', () => {
+  it('keeps only configurable names, trims, and drops empties', () => {
+    expect(normalizeDefaults({ new: '  第一句话  ', skill: '   ', docs: '写文档', steer: 'x', unknown: 'y' }))
+      .toEqual({ new: '第一句话', docs: '写文档' })
+  })
+
+  it('treats missing and non-object input as empty', () => {
+    expect(normalizeDefaults(undefined)).toEqual({})
+    expect(normalizeDefaults(null as unknown as Record<string, unknown>)).toEqual({})
+    expect(normalizeDefaults({ new: 42 })).toEqual({})
+  })
+
+  it('caps each value at the steer text limit', () => {
+    const long = '字'.repeat(10000)
+    const out = normalizeDefaults({ skill: long })
+    expect(out.skill?.length).toBe(8000)
+  })
+})
+
 describe('composeAliasText', () => {
   it('keeps the template when the suffix is empty', () => {
     expect(composeAliasText('固定内容', '  ')).toBe('固定内容')
@@ -112,5 +139,37 @@ describe('custom command store', () => {
     expect(customCommandStorePath({ DSH_HOME: '/tmp/dsh-home' })).toBe(
       '/tmp/dsh-home/ultra-slash/commands.json',
     )
+  })
+
+  it('round-trips builtin defaults together with the custom list', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ultra-slash-defaults-'))
+    const path = join(dir, 'commands.json')
+    await saveCustomCommands(path, [{ name: 'review', steerText: '只看 diff' }], { new: '先总结改动', docs: '写 md' })
+    expect(await loadBuiltinDefaults(path)).toEqual({ new: '先总结改动', docs: '写 md' })
+    const whole = await loadUltraSlashStore(path)
+    expect(whole.commands).toEqual([{ name: 'review', description: '只看 diff', steerText: '只看 diff' }])
+    expect(whole.defaults).toEqual({ new: '先总结改动', docs: '写 md' })
+  })
+
+  it('omits the defaults field when there is nothing configured', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ultra-slash-defaults-'))
+    const path = join(dir, 'commands.json')
+    await saveCustomCommands(path, [])
+    const raw = await readFile(path, 'utf8')
+    expect(raw).not.toContain('"defaults"')
+    expect(await loadBuiltinDefaults(path)).toEqual({})
+  })
+
+  it('normalizes a corrupt defaults section without wiping the commands', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ultra-slash-defaults-'))
+    const path = join(dir, 'commands.json')
+    await writeFile(
+      path,
+      JSON.stringify({ version: 1, commands: [{ name: 'review', steerText: 'x' }], defaults: { new: 5, skill: 'ok' } }),
+      'utf8',
+    )
+    const whole = await loadUltraSlashStore(path)
+    expect(whole.commands.map((row) => row.name)).toEqual(['review'])
+    expect(whole.defaults).toEqual({ skill: 'ok' })
   })
 })

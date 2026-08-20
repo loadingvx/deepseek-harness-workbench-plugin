@@ -12,6 +12,7 @@ import {
   PLUGIN_SLASH_NAMES,
   PLUGIN_SLASH_ORDER,
   PLUGIN_SLASH_SOURCE,
+  pluginLexicon,
   pluginSlashCandidates,
   type LocaleRegistry,
   type SlashTriggerService,
@@ -129,6 +130,7 @@ export function installUltraSlashClient(ctx: UltraSlashClientContext): void {
 
   ctx.effect(() => {
     const t = bindMenuTranslate(locale)
+    const readNewDefault = (): string => cache.defaults().new ?? ''
     const source = {
       trigger: '/' as const,
       name: PLUGIN_SLASH_SOURCE,
@@ -150,8 +152,13 @@ export function installUltraSlashClient(ctx: UltraSlashClientContext): void {
         if (commandName === '') return undefined
         return { text: `/${commandName} ` }
       },
-      matchSpace: newSlashMatchSpace((name) => ctx.get(name), bindMenuTranslate(locale)),
-      matchEnter: newSlashMatchEnter((name) => ctx.get(name), bindMenuTranslate(locale)),
+      matchSpace: newSlashMatchSpace((name) => ctx.get(name), t, readNewDefault),
+      matchEnter: newSlashMatchEnter((name) => ctx.get(name), t, readNewDefault),
+      // The text-ref lexicon: the plugin's command names highlight in the
+      // composer textarea in every session state (the roll is derived from
+      // the persisted catalog, never from the session's running state).
+      lexicon: () => pluginLexicon(cache.list().map((command) => command.name)),
+      subscribeLexicon: (_session: unknown, listener: () => void) => cache.subscribe(listener),
     }
     const unregister = inputTriggers.registerSource(source)
     return () => {
@@ -166,7 +173,8 @@ export function installUltraSlashClient(ctx: UltraSlashClientContext): void {
 
   ctx.effect(
     () => installNewSessionBridge(inputTriggers, (initialText) => {
-      startNewSession((name) => ctx.get(name), initialText)
+      const text = initialText.trim().length > 0 ? initialText : cache.defaults().new ?? ''
+      startNewSession((name) => ctx.get(name), text)
     }),
     `${PLUGIN_NAME}: /new session`,
   )

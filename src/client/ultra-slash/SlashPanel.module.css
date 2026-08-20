@@ -10,13 +10,13 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   box-sizing: border-box;
-  padding: 12px 12px 20px;
+  padding: 8px 10px 14px;
 }
 
 .section {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   width: 100%;
   max-width: 100%;
   color: var(--dsw-alias-label-primary, #1f2328);
@@ -39,7 +39,7 @@
 .block {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .blockTitle {
@@ -61,17 +61,17 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .card {
   border: 1px solid var(--dsw-alias-border-l2, #e5e7eb);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--dsw-alias-bg-layer-3, #f7f8fa);
-  padding: 10px 12px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -159,8 +159,8 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-top: 4px;
+  gap: 10px;
+  padding-top: 2px;
 }
 
 .field {
@@ -214,9 +214,54 @@
 }
 
 .textarea {
-  min-height: 72px;
+  min-height: 64px;
   resize: vertical;
   line-height: 1.5;
+}
+
+/* Builtin default-prompt editors: one compact row per command. */
+.defaultsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.defaultsRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--dsw-alias-border-l2, #e5e7eb);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-3, #f7f8fa);
+  padding: 8px 10px;
+  min-width: 0;
+}
+
+.defaultsLabel {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.defaultsTextarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l2, #e5e7eb);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1, #fff);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 6px 8px;
+  min-height: 44px;
+  resize: vertical;
+}
+
+.defaultsTextarea:focus {
+  outline: 2px solid var(--dsw-alias-brand-primary, #4f6ef7);
+  outline-offset: 1px;
 }
 
 .input:focus,

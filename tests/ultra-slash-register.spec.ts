@@ -88,6 +88,35 @@ describe('applyCommands', () => {
   })
 })
 
+describe('builtin default prompts', () => {
+  it('uses the configured skill default instead of the shipped payload', () => {
+    const registered: SteerCommandDefinition[] = []
+    applyCommands(mockCtx(registered), () => ({ skill: '自定义 skill 文案' }))
+    const skill = registered.find((row) => row.name === SKILL_COMMAND_NAME)
+    const { invocation: call, steer } = invocation('')
+    skill?.handler(call)
+    expect(vi.mocked(steer).mock.calls[0]?.[0].content[0]?.text).toBe('自定义 skill 文案')
+  })
+
+  it('appends extra text after a configured docs default', () => {
+    const registered: SteerCommandDefinition[] = []
+    applyCommands(mockCtx(registered), () => ({ docs: '自定义 docs 文案' }))
+    const docs = registered.find((row) => row.name === 'docs')
+    const { invocation: call, steer } = invocation(' 重点写复现步骤 ')
+    docs?.handler(call)
+    expect(vi.mocked(steer).mock.calls[0]?.[0].content[0]?.text).toBe('自定义 docs 文案' + String.fromCharCode(10) + '重点写复现步骤')
+  })
+
+  it('falls back to the shipped payload when a default is empty', () => {
+    const registered: SteerCommandDefinition[] = []
+    applyCommands(mockCtx(registered), () => ({ skill: '' }))
+    const skill = registered.find((row) => row.name === SKILL_COMMAND_NAME)
+    const { invocation: call, steer } = invocation('')
+    skill?.handler(call)
+    expect(vi.mocked(steer).mock.calls[0]?.[0].content[0]?.text).toBe(translate('zh', 'skill.payload'))
+  })
+})
+
 describe('custom command hub', () => {
   it('registers, replaces, and persists aliases', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'ultra-slash-hub-'))
@@ -115,6 +144,39 @@ describe('custom command hub', () => {
     const loaded = await loadHubFromDisk(hub2, path)
     expect(loaded.ok).toBe(true)
     expect(hub2.listCustom().map((row) => row.name)).toEqual(['note'])
+  })
+
+  it('persists and reloads builtin defaults without touching custom commands', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ultra-slash-hub-'))
+    const path = join(dir, 'commands.json')
+    const registered: SteerCommandDefinition[] = []
+    const ctx = mockCtx(registered)
+    const hub = createCommandHub(ctx, path)
+    const saved = await hub.saveDefaults({ new: '先总结改动', skill: ' 存成 skill ' })
+    expect(saved.ok).toBe(true)
+    if (saved.ok) expect(saved.defaults).toEqual({ new: '先总结改动', skill: '存成 skill' })
+    expect(hub.defaults()).toEqual({ new: '先总结改动', skill: '存成 skill' })
+
+    const reloaded = mockCtx()
+    const hub2 = createCommandHub(reloaded, path)
+    const loaded = await loadHubFromDisk(hub2, path)
+    expect(loaded.ok).toBe(true)
+    expect(hub2.defaults()).toEqual({ new: '先总结改动', skill: '存成 skill' })
+  })
+
+  it('keeps defaults when custom commands are saved', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ultra-slash-hub-'))
+    const path = join(dir, 'commands.json')
+    const registered: SteerCommandDefinition[] = []
+    const ctx = mockCtx(registered)
+    const hub = createCommandHub(ctx, path)
+    await hub.saveDefaults({ docs: '写文档' })
+    await hub.saveCustom([{ name: 'review', steerText: '只看 diff' }])
+    const reloaded = mockCtx()
+    const hub2 = createCommandHub(reloaded, path)
+    await loadHubFromDisk(hub2, path)
+    expect(hub2.defaults()).toEqual({ docs: '写文档' })
+    expect(hub2.listCustom().map((row) => row.name)).toEqual(['review'])
   })
 
   it('rejects a reserved name without touching live commands', async () => {

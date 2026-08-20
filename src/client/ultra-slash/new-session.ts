@@ -133,22 +133,26 @@ function previewText(text: string): string {
 /**
  * The `/new` command claim: token `/new ` + the ghost hint shown while the
  * args are blank (`<第一句话，可空>`), and the submit transaction that starts
- * the session and, when text is present, sends it as the first message.
+ * the session and sends the first message. The first message is the typed
+ * trailing text when present, otherwise the configured `/new` default prompt
+ * (empty = blank session).
  */
 function newClaim(
   get: (name: string) => unknown,
   t: (key: string, vars?: Record<string, string | number>) => string,
+  readDefault: () => string,
 ): { token: string; hint: string; submit: (args: string) => Promise<NewSessionSubmitOutcome> } {
   return {
     token: `/${NEW_COMMAND_NAME} `,
     hint: t('new.hint'),
     submit: async (args): Promise<NewSessionSubmitOutcome> => {
       const trimmed = args.trim()
-      if (!startNewSession(get, trimmed)) {
+      const text = trimmed.length > 0 ? trimmed : readDefault().trim()
+      if (!startNewSession(get, text)) {
         return { kind: 'error', text: t('new.unavailable') }
       }
-      if (trimmed.length === 0) return { kind: 'success', text: t('new.ok') }
-      return { kind: 'success', text: t('new.started', { quoted: previewText(trimmed) }) }
+      if (text.length === 0) return { kind: 'success', text: t('new.ok') }
+      return { kind: 'success', text: t('new.started', { quoted: previewText(text) }) }
     },
   }
 }
@@ -162,10 +166,11 @@ function newClaim(
 export function newSlashMatchSpace(
   get: (name: string) => unknown,
   t: (key: string, vars?: Record<string, string | number>) => string,
+  readDefault: () => string = () => '',
 ): NonNullable<SlashSource['matchSpace']> {
   return (_session, token) => {
     if (token !== `/${NEW_COMMAND_NAME}`) return undefined
-    return { claim: newClaim(get, t) }
+    return { claim: newClaim(get, t, readDefault) }
   }
 }
 
@@ -178,11 +183,12 @@ export function newSlashMatchSpace(
 export function newSlashMatchEnter(
   get: (name: string) => unknown,
   t: (key: string, vars?: Record<string, string | number>) => string,
+  readDefault: () => string = () => '',
 ): NonNullable<SlashSource['matchEnter']> {
   return async (_session, line, signal) => {
     if (signal.aborted) return undefined
     if (leadingCommandName(line) !== NEW_COMMAND_NAME) return undefined
-    return { claim: newClaim(get, t) }
+    return { claim: newClaim(get, t, readDefault) }
   }
 }
 

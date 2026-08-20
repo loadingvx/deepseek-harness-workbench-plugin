@@ -1,12 +1,14 @@
 /**
- * Host command registrations: builtins plus the user-defined `/steer` aliases
- * persisted under `$DSH_HOME/ultra-slash/commands.json`.
+ * Host command registrations: builtins plus the user-defined /steer aliases
+ * persisted under $DSH_HOME/ultra-slash/commands.json.
  */
 
 import {
   BUILTIN_SLASH_COMMANDS,
   composeAliasText,
+  normalizeDefaults,
   validateCustomList,
+  type BuiltinDefaults,
   type CustomSlashCommand,
 } from '../../shared/ultra-slash/catalog.ts'
 import {
@@ -25,7 +27,7 @@ import {
 import type { SteerCommandDefinition, SteerCommandResult, SteerInvocation } from '../../shared/ultra-slash/types.ts'
 import {
   customCommandStorePath,
-  loadCustomCommands,
+  loadUltraSlashStore,
   saveCustomCommands,
   StoreError,
 } from './store.ts'
@@ -34,9 +36,15 @@ export type SaveCustomResult =
   | { readonly ok: true; readonly commands: readonly CustomSlashCommand[] }
   | { readonly ok: false; readonly message: string }
 
+export type SaveDefaultsResult =
+  | { readonly ok: true; readonly defaults: BuiltinDefaults }
+  | { readonly ok: false; readonly message: string }
+
 export interface CommandHub {
   listCustom(): readonly CustomSlashCommand[]
+  defaults(): BuiltinDefaults
   saveCustom(rows: readonly { name: string; description?: string; steerText: string }[]): Promise<SaveCustomResult>
+  saveDefaults(raw: Record<string, unknown> | undefined): Promise<SaveDefaultsResult>
   loadError(): string | undefined
   setLoadError(message: string | undefined): void
 }
@@ -118,8 +126,17 @@ function registerCustomRow(
   })
 }
 
-/** Register shipped commands. `/new` only acknowledges; the client switches the session. */
-export function registerBuiltinCommands(ctx: HubContext): () => void {
+/**
+ * Register shipped commands. /new only acknowledges; the client switches the
+ * session. /skill and /docs read their default prompt from readDefaults at
+ * invocation time (the persisted per-command default, falling back to the
+ * shipped locale payload) and append any extra text the user typed after the
+ * command token.
+ */
+export function registerBuiltinCommands(
+  ctx: HubContext,
+  readDefaults: () => BuiltinDefaults = () => ({}),
+): () => void {
   const undo: Array<() => void> = []
   for (const command of BUILTIN_SLASH_COMMANDS) {
     if (command.kind === 'steer') {
@@ -144,11 +161,18 @@ export function registerBuiltinCommands(ctx: HubContext): () => void {
     }
     const payloadKey = command.payloadKey
     if (payloadKey === undefined) continue
+    const name = command.name
     undo.push(registerBuiltinOne(ctx, {
-      name: command.name,
+      name,
       description: translate('en', command.descriptionKey),
       input: { hint: translate('en', 'alias.hint') },
-      handler: aliasHandler(ctx, () => translate(localeOf(ctx), payloadKey)),
+      handler: aliasHandler(ctx, () => {
+        const locale = localeOf(ctx)
+        const configured = readDefaults()[name as keyof BuiltinDefaults]
+        return configured !== undefined && configured.length > 0
+          ? configured
+          : translate(locale, payloadKey)
+      }),
     }))
   }
   return () => {
@@ -157,11 +181,12 @@ export function registerBuiltinCommands(ctx: HubContext): () => void {
 }
 
 /**
- * Load persisted custom commands, keep them registered, and replace the set
- * when the settings page saves.
+ * Load persisted custom commands and builtin defaults, keep them registered,
+ * and replace the set when the settings page saves.
  */
 export function createCommandHub(ctx: HubContext, storePath = customCommandStorePath()): CommandHub {
   let custom: CustomSlashCommand[] = []
+  let builtinDefaults: BuiltinDefaults = {}
   let disposers: Array<() => void> = []
 
   const replaceLive = (next: CustomSlashCommand[]): void => {
@@ -188,6 +213,17 @@ export function createCommandHub(ctx: HubContext, storePath = customCommandStore
 
   let queue: Promise<unknown> = Promise.resolve()
 
+  const persist = async (): Promise<void> => {
+    await saveCustomCommands(storePath, custom, builtinDefaults)
+  }
+
+  const persistError = (locale: UiLocale, error: unknown): string => {
+    const storeError = error instanceof StoreError
+      ? error
+      : new StoreError('io', 'write failed', { cause: error })
+    return storeMessage(locale, storeError, storePath)
+  }
+
   const saveCustomUnlocked = async (
     rows: readonly { name: string; description?: string; steerText: string }[],
   ): Promise<SaveCustomResult> => {
@@ -206,21 +242,35 @@ export function createCommandHub(ctx: HubContext, storePath = customCommandStore
       }
     }
     try {
-      await saveCustomCommands(storePath, validated.commands)
+      await persist()
     } catch (error: unknown) {
       replaceLive(previous)
-      const storeError = error instanceof StoreError
-        ? error
-        : new StoreError('io', 'write failed', { cause: error })
-      return { ok: false, message: storeMessage(locale, storeError, storePath) }
+      return { ok: false, message: persistError(locale, error) }
     }
     return { ok: true, commands: validated.commands }
+  }
+
+  const saveDefaultsUnlocked = async (
+    raw: Record<string, unknown> | undefined,
+  ): Promise<SaveDefaultsResult> => {
+    const locale = localeOf(ctx)
+    const next = normalizeDefaults(raw)
+    const previous = builtinDefaults
+    builtinDefaults = next
+    try {
+      await persist()
+    } catch (error: unknown) {
+      builtinDefaults = previous
+      return { ok: false, message: persistError(locale, error) }
+    }
+    return { ok: true, defaults: next }
   }
 
   let bootError: string | undefined
 
   const hub: CommandHub = {
     listCustom: () => custom,
+    defaults: () => builtinDefaults,
     loadError: () => bootError,
     setLoadError(message) {
       bootError = message
@@ -234,6 +284,15 @@ export function createCommandHub(ctx: HubContext, storePath = customCommandStore
       queue = done.then(() => undefined, () => undefined)
       return done
     },
+    saveDefaults(raw) {
+      const done = queue.then(async () => {
+        const result = await saveDefaultsUnlocked(raw)
+        if (result.ok) bootError = undefined
+        return result
+      })
+      queue = done.then(() => undefined, () => undefined)
+      return done
+    },
   }
 
   return hub
@@ -241,10 +300,18 @@ export function createCommandHub(ctx: HubContext, storePath = customCommandStore
 
 export async function loadHubFromDisk(hub: CommandHub, storePath = customCommandStorePath()): Promise<SaveCustomResult> {
   try {
-    const commands = await loadCustomCommands(storePath)
-    const result = await hub.saveCustom(commands)
-    if (!result.ok) hub.setLoadError(result.message)
-    return result
+    const { commands, defaults } = await loadUltraSlashStore(storePath)
+    const customResult = await hub.saveCustom(commands)
+    if (!customResult.ok) {
+      hub.setLoadError(customResult.message)
+      return customResult
+    }
+    const defaultsResult = await hub.saveDefaults(defaults)
+    if (!defaultsResult.ok) {
+      hub.setLoadError(defaultsResult.message)
+      return customResult
+    }
+    return customResult
   } catch (error: unknown) {
     const locale = 'zh'
     const message = error instanceof StoreError
@@ -258,6 +325,6 @@ export async function loadHubFromDisk(hub: CommandHub, storePath = customCommand
 }
 
 /** Register shipped commands. Tests can call this without touching the store. */
-export function applyCommands(ctx: HubContext): void {
-  registerBuiltinCommands(ctx)
+export function applyCommands(ctx: HubContext, readDefaults: () => BuiltinDefaults = () => ({})): void {
+  registerBuiltinCommands(ctx, readDefaults)
 }

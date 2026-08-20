@@ -1,9 +1,11 @@
 import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react'
 import {
   BUILTIN_SLASH_COMMANDS,
+  CONFIGURABLE_DEFAULT_NAMES,
   MAX_CUSTOM_COMMANDS,
   normalizeCommandName,
   validateCustomCommand,
+  type BuiltinDefaults,
   type CustomSlashCommand,
 } from '../../shared/ultra-slash/catalog.ts'
 import { formatCatalogIssue, type UiLocale } from '../../shared/ultra-slash/locales.ts'
@@ -65,6 +67,7 @@ export function SettingsSection({ t, locale, cache, embedded = false }: Settings
   useEffect(() => {
     return cache.subscribe(() => {
       setCommands(cache.list())
+      setDefaultsDraft(cache.defaults())
     })
   }, [cache])
 
@@ -96,7 +99,7 @@ export function SettingsSection({ t, locale, cache, embedded = false }: Settings
   const saveList = async (next: CustomSlashCommand[], okText: string): Promise<boolean> => {
     setBusy(true)
     setNotice(null)
-    const result = await cache.save(next)
+    const result = await cache.save(next, cache.defaults())
     setBusy(false)
     if (!result.ok) {
       setNotice({ kind: 'error', text: result.message })
@@ -106,6 +109,24 @@ export function SettingsSection({ t, locale, cache, embedded = false }: Settings
     setConfirmDelete(null)
     setWarning('')
     return true
+  }
+
+  // ---- builtin default prompts (persisted with the custom list) ----
+  const [defaultsDraft, setDefaultsDraft] = useState<BuiltinDefaults>(() => cache.defaults())
+  const [defaultsBusy, setDefaultsBusy] = useState(false)
+  const [defaultsNotice, setDefaultsNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+
+  const onSaveDefaults = async (): Promise<void> => {
+    if (defaultsBusy) return
+    setDefaultsBusy(true)
+    setDefaultsNotice(null)
+    const result = await cache.save(cache.list(), defaultsDraft)
+    setDefaultsBusy(false)
+    if (!result.ok) {
+      setDefaultsNotice({ kind: 'error', text: result.message })
+      return
+    }
+    setDefaultsNotice({ kind: 'ok', text: t('defaults.saved') })
   }
 
   const onAdd = async (): Promise<void> => {
@@ -170,6 +191,50 @@ export function SettingsSection({ t, locale, cache, embedded = false }: Settings
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className={css.block}>
+        <h3 className={css.blockTitle}>{t('defaults.title')}</h3>
+        <p className={css.blockHint}>{t('defaults.hint')}</p>
+        <div className={css.defaultsList}>
+          {CONFIGURABLE_DEFAULT_NAMES.map((name) => (
+            <div key={name} className={css.defaultsRow}>
+              <label className={css.defaultsLabel} htmlFor={'default-' + name}>
+                {slash(name)} · {t(name === 'new' ? 'defaults.labelNew' : name === 'skill' ? 'defaults.labelSkill' : 'defaults.labelDocs')}
+              </label>
+              <textarea
+                id={'default-' + name}
+                className={css.defaultsTextarea}
+                value={defaultsDraft[name] ?? ''}
+                disabled={defaultsBusy}
+                placeholder={name === 'new' ? t('defaults.placeholderNew') : t('defaults.placeholder')}
+                onChange={(event) => {
+                  const next = { ...defaultsDraft }
+                  const text = event.target.value
+                  if (text.trim().length === 0) delete next[name]
+                  else next[name] = text
+                  setDefaultsDraft(next)
+                }}
+              />
+              {(defaultsDraft[name] ?? '') === '' ? (
+                <p className={css.hint}>{t('defaults.fallback')}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        <div className={css.actions}>
+          <button
+            type="button"
+            className={css.btn + ' ' + css.primary}
+            disabled={defaultsBusy}
+            onClick={() => { void onSaveDefaults() }}
+          >
+            {defaultsBusy ? t('defaults.saving') : t('defaults.save')}
+          </button>
+          {defaultsNotice !== null ? (
+            <p className={defaultsNotice.kind === 'ok' ? css.ok : css.error} role="status">{defaultsNotice.text}</p>
+          ) : null}
+        </div>
       </section>
 
       <section className={css.block}>

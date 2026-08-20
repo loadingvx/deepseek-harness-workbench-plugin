@@ -12,6 +12,7 @@ import {
   PLUGIN_SLASH_NAMES,
   PLUGIN_SLASH_ORDER,
   PLUGIN_SLASH_SOURCE,
+  pluginLexicon,
   pluginSlashCandidates,
   SLASH_MENU_TITLE_EN,
   SLASH_MENU_TITLE_ZH,
@@ -50,6 +51,12 @@ describe('plugin slash catalog', () => {
     })
     expect(PLUGIN_SLASH_NAMES.has('steer')).toBe(true)
     expect(PLUGIN_SLASH_NAMES.has('new')).toBe(true)
+  })
+
+  it('derives the text-ref lexicon from builtin plus custom names', () => {
+    expect(pluginLexicon()).toEqual(['steer', 'new', 'skill', 'docs'])
+    expect(pluginLexicon(['review', 'note'])).toEqual(['steer', 'new', 'skill', 'docs', 'review', 'note'])
+    expect(pluginLexicon(['steer'])).toEqual(['steer', 'new', 'skill', 'docs'])
   })
 
   it('keeps catalog order when the query is empty', () => {

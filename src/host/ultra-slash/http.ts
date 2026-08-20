@@ -1,5 +1,5 @@
 /**
- * JSON API for the settings page. Lives under `/ultra-slash` so it does not
+ * JSON API for the settings page. Lives under /ultra-slash so it does not
  * collide with DSH or other plugins.
  */
 
@@ -10,6 +10,7 @@ export const HTTP_PREFIX = '/ultra-slash'
 
 interface JsonBody {
   commands?: unknown
+  defaults?: unknown
 }
 
 function send(res: ServerResponse, status: number, body: unknown): void {
@@ -65,13 +66,18 @@ function asCommandRows(value: unknown): Array<{ name: string; description?: stri
   return rows
 }
 
+function asDefaults(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  return value as Record<string, unknown>
+}
+
 export async function handleUltraSlashRequest(
   req: IncomingMessage,
   res: ServerResponse,
   hub: CommandHub,
 ): Promise<void> {
   const host = req.headers.host ?? '127.0.0.1'
-  const url = new URL(req.url ?? HTTP_PREFIX, `http://${host}`)
+  const url = new URL(req.url ?? HTTP_PREFIX, 'http://' + host)
   const route = url.pathname.replace(/\/+$/, '') || HTTP_PREFIX
   const method = (req.method ?? 'GET').toUpperCase()
 
@@ -82,28 +88,53 @@ export async function handleUltraSlashRequest(
   }
 
   try {
-    if (method === 'GET' && route === `${HTTP_PREFIX}/commands`) {
+    if (method === 'GET' && route === HTTP_PREFIX + '/commands') {
       send(res, 200, {
         ok: true,
         value: {
           commands: hub.listCustom(),
+          defaults: hub.defaults(),
           ...(hub.loadError() === undefined ? {} : { warning: hub.loadError() }),
         },
       })
       return
     }
-    if (method === 'PUT' && route === `${HTTP_PREFIX}/commands`) {
+    if (method === 'PUT' && route === HTTP_PREFIX + '/commands') {
       const body = await readJson(req)
-      const rows = asCommandRows(body.commands)
-      if (rows === undefined) {
-        send(res, 400, {
-          ok: false,
-          message: '请求格式不对。需要 { "commands": [ { "name", "steerText", "description?" } ] }。',
-        })
-        return
+      if (body.commands !== undefined) {
+        const rows = asCommandRows(body.commands)
+        if (rows === undefined) {
+          send(res, 400, {
+            ok: false,
+            message: '请求格式不对。需要 { "commands": [ { "name", "steerText", "description?" } ] }。',
+          })
+          return
+        }
+        const result = await hub.saveCustom(rows)
+        if (!result.ok) {
+          send(res, 400, result)
+          return
+        }
       }
-      const result = await hub.saveCustom(rows)
-      send(res, result.ok ? 200 : 400, result)
+      if (body.defaults !== undefined) {
+        const defaults = asDefaults(body.defaults)
+        if (defaults === undefined) {
+          send(res, 400, { ok: false, message: '请求格式不对。defaults 需要是对象。' })
+          return
+        }
+        const result = await hub.saveDefaults(defaults)
+        if (!result.ok) {
+          send(res, 400, result)
+          return
+        }
+      }
+      send(res, 200, {
+        ok: true,
+        value: {
+          commands: hub.listCustom(),
+          defaults: hub.defaults(),
+        },
+      })
       return
     }
     send(res, 404, { ok: false, message: '没有这个接口。' })
