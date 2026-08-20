@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { composeAliasText } from '../src/shared/ultra-slash/catalog.ts'
 import { SKILL_COMMAND_NAME } from '../src/shared/ultra-slash/ids.ts'
 import { translate } from '../src/shared/ultra-slash/locales.ts'
-import { applyCommands, createCommandHub, loadHubFromDisk } from '../src/host/ultra-slash/register.ts'
+import { applyUltraSlash } from '../src/host/ultra-slash/apply.ts'
+import { applyCommands, createCommandHub, loadHubFromDisk, withConflictSink, type YieldedConflict } from '../src/host/ultra-slash/register.ts'
 import type { SteerAgent, SteerCommandDefinition, SteerInvocation } from '../src/shared/ultra-slash/types.ts'
 
 function agent(status: SteerAgent['status'], steer: SteerAgent['steer'] = vi.fn()): SteerAgent {
@@ -187,5 +188,72 @@ describe('custom command hub', () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.message).toContain('/steer')
     expect(hub.listCustom()).toEqual([])
+  })
+})
+
+describe('conflict yield (standalone ultra-slash already owns resources)', () => {
+  it('skips already-registered builtins and reports each yield', () => {
+    const registered: SteerCommandDefinition[] = []
+    const first = mockCtx(registered)
+    applyCommands(first)
+    const conflicts: YieldedConflict[] = []
+    const restore = withConflictSink((conflict) => conflicts.push(conflict))
+    try {
+      expect(() => applyCommands(mockCtx(registered))).not.toThrow()
+    } finally {
+      restore()
+    }
+    expect(conflicts.map((c) => (c.resource === 'command' ? c.name : c.path)).sort())
+      .toEqual(['docs', 'new', 'skill', 'steer'])
+  })
+
+  it('reports a custom command conflict when the hub loads a shared store', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ultra-slash-yield-'))
+    const path = join(dir, 'commands.json')
+    const registered: SteerCommandDefinition[] = []
+    const conflicts: YieldedConflict[] = []
+    const restore = withConflictSink((conflict) => conflicts.push(conflict))
+    try {
+      // Standalone ultra-slash's hub already registered the shared custom command.
+      applyCommands(mockCtx(registered))
+      const owner = createCommandHub(mockCtx(registered), path)
+      expect((await owner.saveCustom([{ name: 'review', steerText: '只看 diff' }])).ok).toBe(true)
+
+      const workbench = createCommandHub(mockCtx(registered), path)
+      const loaded = await loadHubFromDisk(workbench, path)
+      expect(loaded.ok).toBe(true)
+      expect(conflicts.some((c) => c.resource === 'command' && c.name === 'review')).toBe(true)
+    } finally {
+      restore()
+    }
+  })
+
+  it('stands down for the /ultra-slash HTTP prefix when the webServer already owns it', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'ultra-slash-http-yield-'))
+    vi.stubEnv('DSH_HOME', home)
+    const conflicts: YieldedConflict[] = []
+    const restore = withConflictSink((conflict) => conflicts.push(conflict))
+    try {
+      const ctx = {
+        get() { return undefined },
+        commands: {
+          register() { return () => {} },
+        },
+        webServer: {
+          register() {
+            throw new Error('webserver: duplicate prefix route "/ultra-slash"')
+          },
+        },
+        effect(fn: () => unknown) {
+          fn()
+          return () => {}
+        },
+      }
+      expect(() => applyUltraSlash(ctx as never)).not.toThrow()
+      expect(conflicts.some((c) => c.resource === 'http-prefix' && c.path === '/ultra-slash')).toBe(true)
+    } finally {
+      restore()
+      vi.unstubAllEnvs()
+    }
   })
 })

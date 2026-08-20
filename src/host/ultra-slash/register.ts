@@ -80,6 +80,52 @@ function nameFromRegisterError(error: unknown): string | undefined {
   return match?.[1]
 }
 
+/** Where a conflicting registration was found and this half stood down for it. */
+export type YieldedConflict =
+  | { readonly resource: 'command'; readonly name: string }
+  | { readonly resource: 'http-prefix'; readonly path: string }
+
+/** Sink for the one-time "this half yielded" notice (tests can capture it). */
+export type ConflictSink = (conflict: YieldedConflict) => void
+
+const noticeSink: ConflictSink = (conflict) => {
+  const where = conflict.resource === 'command'
+    ? 'command "/' + conflict.name + '"'
+    : 'HTTP prefix "' + conflict.path + '"'
+  // A leftover standalone ultra-slash install already registered this
+  // resource; register nothing and let the owner serve it. The harness must
+  // keep booting — this is a yield, never a failure.
+  console.warn(
+    '[dsh-workbench-plugin] ultra-slash ' + where + ' is already registered by another plugin '
+    + '(a leftover deepseek-harness-ultra-slash install); this half stands down for it. '
+    + 'No data is touched; the owner keeps serving the resource.',
+  )
+}
+
+/**
+ * Install the conflict sink for one apply() lifetime. Returns a reset.
+ * Module-level state is fine: each harness process mounts at most one
+ * workbench fiber, and tests reset it explicitly.
+ */
+export function withConflictSink(sink: ConflictSink | undefined): () => void {
+  const previous = currentConflictSink
+  currentConflictSink = sink ?? noticeSink
+  return () => {
+    currentConflictSink = previous
+  }
+}
+
+let currentConflictSink: ConflictSink = noticeSink
+
+function yieldConflict(conflict: YieldedConflict): void {
+  currentConflictSink(conflict)
+}
+
+/** Report a yielded HTTP-prefix conflict from the webServer registration. */
+export function yieldHttpPrefixConflict(path: string): void {
+  yieldConflict({ resource: 'http-prefix', path })
+}
+
 function occupiedMessage(locale: UiLocale, name: string, error: unknown): string {
   if (isAlreadyRegistered(error)) {
     return translate(locale, 'catalog.issue.occupied', { name })
@@ -109,21 +155,34 @@ function registerBuiltinOne(ctx: HubContext, definition: SteerCommandDefinition)
   try {
     return registerOne(ctx, definition)
   } catch (error: unknown) {
-    if (isAlreadyRegistered(error)) return () => {}
+    if (isAlreadyRegistered(error)) {
+      const name = nameFromRegisterError(error) ?? definition.name
+      yieldConflict({ resource: 'command', name })
+      return () => {}
+    }
     throw error
   }
 }
 
+/** A custom command may also be owned by a standalone ultra-slash hub (same store file). */
 function registerCustomRow(
   ctx: HubContext,
   command: CustomSlashCommand,
 ): () => void {
-  return registerOne(ctx, {
-    name: command.name,
-    description: command.description,
-    input: { hint: translate('en', 'alias.hint') },
-    handler: aliasHandler(ctx, () => command.steerText),
-  })
+  try {
+    return registerOne(ctx, {
+      name: command.name,
+      description: command.description,
+      input: { hint: translate('en', 'alias.hint') },
+      handler: aliasHandler(ctx, () => command.steerText),
+    })
+  } catch (error: unknown) {
+    if (isAlreadyRegistered(error)) {
+      yieldConflict({ resource: 'command', name: command.name })
+      return () => {}
+    }
+    throw error
+  }
 }
 
 /**

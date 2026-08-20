@@ -1,6 +1,12 @@
 /**
  * Browser half: ultra-slash `/` group and `/new` session switch.
  * The settings UI lives in the workbench SideDock, not DSH Settings.
+ *
+ * Conflicts with a leftover standalone ultra-slash install are handled by
+ * yielding: if the `/ultra-slash` slash source is already registered, this
+ * half stands down for it so the web app always mounts. The `/new` bridge is
+ * only installed when this half actually owns the slash source — a double
+ * bridge would start two sessions per `/new`.
  */
 import { PLUGIN_NAME } from '../../shared/ultra-slash/ids.ts'
 import { translate, type UltraSlashKey, type UiLocale } from '../../shared/ultra-slash/locales.ts'
@@ -15,6 +21,7 @@ import {
   pluginLexicon,
   pluginSlashCandidates,
   type LocaleRegistry,
+  type SlashSource,
   type SlashTriggerService,
 } from './slash-menu.ts'
 import { installNewSessionBridge, newSlashMatchEnter, newSlashMatchSpace, startNewSession } from './new-session.ts'
@@ -97,6 +104,37 @@ function syncHiddenNames(
   for (const name of customNames) hidden.add(name)
 }
 
+/**
+ * Whether the `/ultra-slash` slash source is already owned (a leftover
+ * standalone ultra-slash install registered first).
+ */
+export function slashSourceTaken(service: SlashTriggerService): boolean {
+  return (service.live?.sources ?? []).some(
+    (source) => source.trigger === '/' && source.name === PLUGIN_SLASH_SOURCE,
+  )
+}
+
+/**
+ * Register the plugin's `/` source, standing down when the group name is
+ * already owned. Returns the disposer plus whether this half actually owns
+ * the source (false on a yield).
+ */
+function registerSourceTolerant(
+  service: SlashTriggerService,
+  source: SlashSource,
+): { dispose: () => void; owned: boolean } {
+  if (slashSourceTaken(service)) {
+    console.warn(
+      '[dsh-workbench-plugin] slash source "/' + PLUGIN_SLASH_SOURCE + '" is already registered '
+      + '(a leftover deepseek-harness-ultra-slash install); this half stands down for it. '
+      + 'No data is touched; the owner keeps serving the group.',
+    )
+    return { dispose: () => {}, owned: false }
+  }
+  const dispose = service.registerSource(source)
+  return { dispose, owned: true }
+}
+
 /** Register the ultra-slash `/` group and `/new` bridge. Chat behavior stays the same. */
 export function installUltraSlashClient(ctx: UltraSlashClientContext): void {
   const inputTriggers = resolveTriggerService(ctx)
@@ -127,6 +165,10 @@ export function installUltraSlashClient(ctx: UltraSlashClientContext): void {
   }, `${PLUGIN_NAME}: locale`)
 
   ctx.effect(() => injectDividerStyle(), `${PLUGIN_NAME}: slash divider`)
+
+  // The bridge must only run when this half owns the slash source: a double
+  // bridge would start two sessions for one /new.
+  let ownSource = false
 
   ctx.effect(() => {
     const t = bindMenuTranslate(locale)
@@ -160,9 +202,11 @@ export function installUltraSlashClient(ctx: UltraSlashClientContext): void {
       lexicon: () => pluginLexicon(cache.list().map((command) => command.name)),
       subscribeLexicon: (_session: unknown, listener: () => void) => cache.subscribe(listener),
     }
-    const unregister = inputTriggers.registerSource(source)
+    const outcome = registerSourceTolerant(inputTriggers, source)
+    ownSource = outcome.owned
     return () => {
-      unregister()
+      outcome.dispose()
+      ownSource = false
     }
   }, `${PLUGIN_NAME}: ultra-slash source`)
 
@@ -172,10 +216,13 @@ export function installUltraSlashClient(ctx: UltraSlashClientContext): void {
   )
 
   ctx.effect(
-    () => installNewSessionBridge(inputTriggers, (initialText) => {
-      const text = initialText.trim().length > 0 ? initialText : cache.defaults().new ?? ''
-      startNewSession((name) => ctx.get(name), text)
-    }),
+    () => {
+      if (!ownSource) return () => {}
+      return installNewSessionBridge(inputTriggers, (initialText) => {
+        const text = initialText.trim().length > 0 ? initialText : cache.defaults().new ?? ''
+        startNewSession((name) => ctx.get(name), text)
+      })
+    },
     `${PLUGIN_NAME}: /new session`,
   )
 }

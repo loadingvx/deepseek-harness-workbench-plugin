@@ -32,14 +32,15 @@ if [[ -e "${WEB_NM}/dsh-git-plugin" || -L "${WEB_NM}/dsh-git-plugin" ]]; then
   rm -rf "${WEB_NM}/dsh-git-plugin"
 fi
 
-# Ultra Slash 已并入本插件。旧的独立包若还留在 profile 里，会抢同一套
-# / 命令和 locale，工作台会报「ultra-slash already has locale zh」然后整包加载失败。
-if [[ -f "$WEB_PKG" ]] && grep -q '"deepseek-harness-ultra-slash"' "$WEB_PKG"; then
+# Ultra Slash 已并入本插件。两端都对冲突做让位，可与独立包共存；
+# 不再在 devops 里卸掉独立包——用户先装哪个再装哪个都不应导致 harness 起不来。
+# 仅清掉更早的旧包名 dsh-steer（若残留）。
+if [[ -f "$WEB_PKG" ]] && grep -q '"dsh-steer"' "$WEB_PKG"; then
   # shellcheck disable=SC2086
-  eval $DSH_CMD plugin --profile web remove deepseek-harness-ultra-slash || true
+  eval $DSH_CMD plugin --profile web remove dsh-steer || true
 fi
-if [[ -e "${WEB_NM}/deepseek-harness-ultra-slash" || -L "${WEB_NM}/deepseek-harness-ultra-slash" ]]; then
-  rm -rf "${WEB_NM}/deepseek-harness-ultra-slash"
+if [[ -e "${WEB_NM}/dsh-steer" || -L "${WEB_NM}/dsh-steer" ]]; then
+  rm -rf "${WEB_NM}/dsh-steer"
 fi
 
 # shellcheck disable=SC2086
@@ -49,5 +50,6 @@ echo
 echo "插件已安装到 web profile。正在启动 Web 界面…"
 echo "浏览器打开 http://127.0.0.1:3080 →「对话」→ 新建会话，工作台会自动打开。"
 echo "改代码后重新执行本脚本，或先 devops/build.sh 再刷新页面。"
+echo "若 profile 里已有 deepseek-harness-ultra-slash，双方会互相让位，harness 仍应正常启动。"
 echo
 exec bash "${ROOT}/devops/start-web.sh"
