@@ -99,17 +99,47 @@ function deletedOnlyPreview(hunk: ReviewHunk): string {
   return only.map(line => `− ${line}`).join('\n')
 }
 
-function buildDecorations(docText: string, config: ReviewEditorConfig | null): DecrationsValue {
-  if (config === null || config.hunks.length === 0) return Decoration.none
-  type Mark = { at: number; order: number; deco: ReturnType<typeof Decoration.line> }
-  const marks: Mark[] = []
-  let order = 0
-  for (const hunk of config.hunks) {
+/**
+ * Doc offsets of each review hunk (same needle rules as the decorations):
+ * first unique occurrence of the hunk's newText, skipping empty needles.
+ * Navigation (prev/next change, jump-to-first) and decorations share this so
+ * the editor always scrolls to a position the chrome actually marks.
+ */
+export function reviewHunkPositions(docText: string, hunks: ReviewHunk[]): number[] {
+  const out: number[] = []
+  for (const hunk of hunks) {
     const needle = hunk.newText
     if (needle === '') continue
     const from = docText.indexOf(needle)
     if (from < 0) continue
     if (docText.indexOf(needle, from + Math.max(needle.length, 1)) >= 0) continue
+    out.push(from)
+  }
+  return out
+}
+
+/** Jump the editor to the hunk at positions[index]: cursor + scroll into view. */
+export function scrollEditorToReviewHunk(view: EditorView, positions: number[], index: number): void {
+  const pos = positions[index]
+  if (pos === undefined) return
+  view.dispatch({
+    selection: { anchor: pos, head: pos },
+    effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: 56 }),
+  })
+  view.focus()
+}
+
+function buildDecorations(docText: string, config: ReviewEditorConfig | null): DecrationsValue {
+  if (config === null || config.hunks.length === 0) return Decoration.none
+  type Mark = { at: number; order: number; deco: ReturnType<typeof Decoration.line> }
+  const marks: Mark[] = []
+  let order = 0
+  const positions = reviewHunkPositions(docText, config.hunks)
+  for (let i = 0; i < config.hunks.length; i++) {
+    const hunk = config.hunks[i]!
+    const from = positions[i]
+    if (from === undefined) continue
+    const needle = hunk.newText
     const to = from + needle.length
     marks.push({
       at: from,

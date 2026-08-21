@@ -274,6 +274,13 @@ export function registerGitHttp(
           if (review === undefined) return { revision: 0, files: [] }
           return review.list(rootOf())
         })
+      } else if (method === 'POST' && route === '/git/review/prefs') {
+        const body = await readJson(req)
+        result = await wrap(async () => {
+          if (review === undefined) throw new Error('review unavailable')
+          if (typeof body.enabled === 'boolean') review.setEnabled(body.enabled)
+          return { enabled: review.isEnabled() }
+        })
       } else if (method === 'POST' && route === '/git/review/keep') {
         const body = await readJson(req)
         result = await wrap(async () => {

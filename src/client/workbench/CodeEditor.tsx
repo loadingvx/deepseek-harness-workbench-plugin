@@ -8,6 +8,8 @@ import { ensureVimExCommands, installEditorVimOps, uninstallEditorVimOps } from 
 import { IconChat } from './icons.tsx'
 import {
   reviewEditorExtension,
+  reviewHunkPositions,
+  scrollEditorToReviewHunk,
   setReviewEditorConfig,
   type ReviewEditorConfig,
 } from './review-cm.ts'
@@ -27,8 +29,16 @@ export interface CodeEditorReviewProps {
   onUndoHunk: (hunkId: string) => void
 }
 
+/** Jump request for the review-bar prev/next-change buttons (and jump-to-first). */
+export interface CodeEditorReviewNav {
+  /** Index into the review hunks to scroll to. */
+  index: number
+  /** Monotonic stamp so repeated jumps to the same index re-trigger. */
+  stamp: number
+}
+
 export function CodeEditor({
-  path, value, onChange, onSave, onAddToChat, vimOps, label, mode, t, review,
+  path, value, onChange, onSave, onAddToChat, vimOps, label, mode, t, review, reviewNav = null,
 }: {
   path: string
   value: string
@@ -40,6 +50,7 @@ export function CodeEditor({
   mode: EditorModeId
   t: Translate
   review?: CodeEditorReviewProps
+  reviewNav?: CodeEditorReviewNav | null
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -172,6 +183,16 @@ export function CodeEditor({
       }
     setReviewEditorConfig(view, config)
   }, [review, t, value, path])
+
+  /** Review-bar navigation: scroll the editor to the requested hunk index. */
+  useEffect(() => {
+    const view = viewRef.current
+    if (view === null || reviewNav === null) return
+    const current = reviewRef.current
+    if (current === undefined) return
+    const positions = reviewHunkPositions(view.state.doc.toString(), current.hunks)
+    scrollEditorToReviewHunk(view, positions, reviewNav.index)
+  }, [reviewNav])
 
   useEffect(() => () => {
     if (flashTimer.current !== null) clearTimeout(flashTimer.current)

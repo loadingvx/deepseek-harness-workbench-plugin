@@ -40,8 +40,29 @@ interface WorkspaceBucket {
 
 export class PendingReviewStore {
   private readonly buckets = new Map<string, WorkspaceBucket>()
+  /** When false, write/edit are not captured into the review queue. */
+  private enabled = true
 
   constructor(private readonly fs: WorkspaceFs) {}
+
+  isEnabled(): boolean {
+    return this.enabled
+  }
+
+  /**
+   * Toggle capture. Disabling clears every pending baseline so turning back on
+   * does not resurrect a stale queue from while the feature was off.
+   */
+  setEnabled(on: boolean): void {
+    this.enabled = on
+    if (!on) {
+      for (const bucket of this.buckets.values()) {
+        if (bucket.files.size === 0) continue
+        bucket.files.clear()
+        this.bump(bucket)
+      }
+    }
+  }
 
   private async keyOf(root: string): Promise<string> {
     try {
@@ -78,6 +99,7 @@ export class PendingReviewStore {
   }
 
   async captureBaseline(root: string, relPath: string): Promise<void> {
+    if (!this.enabled) return
     const bucket = await this.bucket(root)
     if (bucket.files.has(relPath)) return
     if (bucket.files.size >= MAX_PENDING_FILES) throw new GitError('REVIEW_FULL')
@@ -109,6 +131,7 @@ export class PendingReviewStore {
   }
 
   async noteSuccess(root: string, relPath: string): Promise<void> {
+    if (!this.enabled) return
     const bucket = await this.bucket(root)
     const entry = bucket.files.get(relPath)
     if (entry === undefined) return
@@ -131,6 +154,7 @@ export class PendingReviewStore {
   }
 
   async list(root: string): Promise<ReviewSnapshot> {
+    if (!this.enabled) return { revision: 0, files: [] }
     const bucket = await this.bucket(root)
     const files: ReviewFileSnapshot[] = []
     for (const entry of [...bucket.files.values()].sort((a, b) => a.path.localeCompare(b.path))) {

@@ -16,6 +16,7 @@ import {
   retainReviewLive,
   subscribeReviewLive,
 } from './review-live.ts'
+import { getReviewOn, subscribeReviewOn } from './review-settings.ts'
 import { SettingsPanel } from './SettingsPanel.tsx'
 import { UpdateBanner } from './UpdateBanner.tsx'
 import { UsagePanel } from './UsagePanel.tsx'
@@ -32,7 +33,7 @@ import css from './SideDock.module.css'
 export type { SideTab }
 
 export function SideDock({
-  client, workspaceId, workspaceTitle, workspacePath, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, t, devtoolsDock = 'side', onDevtoolsDock, showDevtoolsTab = false, onAddNetToChat, onAddTextToChat,
+  client, workspaceId, workspaceTitle, workspacePath, sessionId, running, useProjection, activePath, selected, tab, onTab, onOpenFile, onOpenReviewFile, onOpenDiff, onOpenCommitDiff, onRenamed, onDeleted, onCollapse, leadingSash, update, onDismissUpdate, t, devtoolsDock = 'side', onDevtoolsDock, showDevtoolsTab = false, onAddNetToChat, onAddTextToChat,
 }: {
   client: GitClient
   workspaceId?: string
@@ -46,6 +47,8 @@ export function SideDock({
   tab: SideTab
   onTab: (tab: SideTab) => void
   onOpenFile: (path: string) => void
+  /** Review-panel-only open: lets the workbench jump the editor to the first change. */
+  onOpenReviewFile?: (path: string) => void
   onOpenDiff: (path: string, staged: boolean, repo?: string) => void
   onOpenCommitDiff: (hash: string, path: string, repo?: string) => void
   onRenamed: (from: string, to: string) => void
@@ -67,7 +70,8 @@ export function SideDock({
   const navReady = useSyncExternalStore(subscribeNavHost, isNavHostReady, () => false)
   const showUsageTab = usageTabVisible(dock, navReady)
   const pendingCount = useSyncExternalStore(subscribeReviewLive, readReviewPendingCount, () => 0)
-  const showReviewTab = pendingCount > 0
+  const reviewOn = useSyncExternalStore(subscribeReviewOn, getReviewOn, getReviewOn)
+  const showReviewTab = reviewOn && pendingCount > 0
 
   useEffect(() => retainReviewLive(client, workspaceId), [client, workspaceId])
 
@@ -134,7 +138,7 @@ export function SideDock({
           <ReviewPanel
             client={client}
             workspaceId={workspaceId}
-            onOpenFile={onOpenFile}
+            onOpenFile={onOpenReviewFile ?? onOpenFile}
             t={t}
           />
         ) : tab === 'usage' && showUsageTab ? (

@@ -22,6 +22,7 @@ export const TERM_AI_SETTINGS_OPEN_KEY = 'dsh-workbench-term-ai-settings-open'
 export const SETTINGS_SOUND_OPEN_KEY = 'dsh-workbench-settings-sound-open'
 export const SETTINGS_COMMANDS_OPEN_KEY = 'dsh-workbench-settings-commands-open'
 export const SETTINGS_SVG_RENDER_OPEN_KEY = 'dsh-workbench-settings-svg-render-open'
+export const SETTINGS_REVIEW_OPEN_KEY = 'dsh-workbench-settings-review-open'
 
 /** Compact GRAPH (message-only rows) is the factory default. */
 export const DEFAULT_GRAPH_COMPACT = true
@@ -35,3 +36,4 @@ export const DEFAULT_TERM_AI_SETTINGS_OPEN = false
 export const DEFAULT_SETTINGS_SOUND_OPEN = true
 export const DEFAULT_SETTINGS_COMMANDS_OPEN = true
 export const DEFAULT_SETTINGS_SVG_RENDER_OPEN = true
+export const DEFAULT_SETTINGS_REVIEW_OPEN = true

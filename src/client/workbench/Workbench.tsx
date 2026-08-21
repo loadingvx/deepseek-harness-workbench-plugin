@@ -70,6 +70,7 @@ import {
   retainReviewLive,
   subscribeReviewLive,
 } from './review-live.ts'
+import { getReviewOn, subscribeReviewOn } from './review-settings.ts'
 import { termIdFromTabId } from '../../shared/new-file-path.ts'
 import type { TermCleanExitAction } from './term-session.ts'
 import { createTerminalTab, nextBrowserTab, nextTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type Translate, type WorkbenchInjected } from './types.ts'
@@ -285,23 +286,27 @@ function WorkbenchInner(props: WorkbenchProps) {
   const workspace = useWorkspace(useSessions, useWorkspaces)
   const workspaceId = workspace?.workspaceId
   const reviewSnap = useSyncExternalStore(subscribeReviewLive, readReviewLive, readReviewLive)
-  const reviewPending = reviewSnap.files.length
+  const reviewOn = useSyncExternalStore(subscribeReviewOn, getReviewOn, getReviewOn)
+  const reviewPending = reviewOn ? reviewSnap.files.length : 0
   const reviewPendingPrev = useRef(0)
   const [reviewBusy, setReviewBusy] = useState(false)
+  /** Agent changes 面板点文件名后：请求编辑器定位到该文件第一个改动。 */
+  const [reviewJump, setReviewJump] = useState<{ path: string; stamp: number } | null>(null)
   useEffect(() => retainReviewLive(client, workspaceId), [client, workspaceId])
   useLayoutEffect(() => {
     const prev = reviewPendingPrev.current
     reviewPendingPrev.current = reviewPending
-    if (prev === 0 && reviewPending > 0) {
+    if (reviewOn && prev === 0 && reviewPending > 0) {
       patchWorkbenchChrome({ sideOpen: true, sideTab: 'review' })
     }
-  }, [reviewPending])
+  }, [reviewPending, reviewOn])
 
   const reviewByPath = useMemo(() => {
     const map: Record<string, (typeof reviewSnap.files)[number]> = {}
+    if (!reviewOn) return map
     for (const file of reviewSnap.files) map[file.path] = file
     return map
-  }, [reviewSnap])
+  }, [reviewSnap, reviewOn])
 
   const reloadOpenBuffer = useCallback(async (path: string): Promise<void> => {
     if (workspaceId === undefined) return
@@ -649,6 +654,12 @@ function WorkbenchInner(props: WorkbenchProps) {
       [path]: { path, original: result.value.content, draft: result.value.content, language: result.value.language },
     }))
   }, [client, workspaceId])
+
+  /** Agent changes 面板打开文件：先打开，再请求编辑器跳到第一个 diff。 */
+  const openFileFromReview = useCallback((path: string): void => {
+    void openFile(path)
+    setReviewJump(current => ({ path, stamp: (current?.stamp ?? 0) + 1 }))
+  }, [openFile])
 
   const openDiff = (path: string, staged: boolean, repo?: string): void => {
     patchWorkbenchChrome({ editorOpen: true })
@@ -1113,6 +1124,7 @@ function WorkbenchInner(props: WorkbenchProps) {
           onReviewUndoHunk={(path, hunkId) => {
             void runReviewAction(() => client.reviewUndo(workspaceId!, path, hunkId), [path])
           }}
+          reviewJump={reviewJump}
           onCreateFile={async (path) => {
             if (workspaceId === undefined) return { ok: false, code: 'NO_WORKSPACE', messageZh: t('editor.addFileNoWorkspace'), hintZh: '' }
             const existing = await client.readFile(workspaceId, path)
@@ -1155,6 +1167,7 @@ function WorkbenchInner(props: WorkbenchProps) {
             else patchWorkbenchChrome({ sideOpen: true, sideTab: tab })
           }}
           onOpenFile={(path) => { void openFile(path) }}
+          onOpenReviewFile={openFileFromReview}
           onOpenDiff={openDiff}
           onOpenCommitDiff={openCommitDiff}
           onRenamed={renamePath}

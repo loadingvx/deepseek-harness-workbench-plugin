@@ -188,6 +188,8 @@ export interface GitClient {
   reviewList(workspaceId: string): Promise<GitResult<ReviewSnapshot>>
   reviewKeep(workspaceId: string, path?: string, hunkId?: string): Promise<GitResult<ReviewSnapshot>>
   reviewUndo(workspaceId: string, path?: string, hunkId?: string): Promise<GitResult<ReviewSnapshot>>
+  /** Sync Change review preference to the host (stops/starts baseline capture). */
+  reviewSetEnabled(enabled: boolean): Promise<GitResult<{ enabled: boolean }>>
 }
 
 export function createGitClient(): GitClient {
@@ -346,6 +348,10 @@ export function createGitClient(): GitClient {
         ...(path !== undefined && path !== '' ? { path } : {}),
         ...(hunkId !== undefined && hunkId !== '' ? { hunkId } : {}),
       }),
+    }),
+    reviewSetEnabled: (enabled) => request('/git/review/prefs', {
+      method: 'POST',
+      body: JSON.stringify({ enabled }),
     }),
   }
 }
