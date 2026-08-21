@@ -210,6 +210,22 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     messageZh: '网页没有加载成功。',
     hintZh: '请确认地址正确，并且本机网络能打开这个网站。',
   },
+  REVIEW_NOT_FOUND: {
+    messageZh: '没有这条待确认的改动。',
+    hintZh: '它可能已经 Keep / Undo，或被新的改动覆盖。请点刷新后再看「待确认」列表。',
+  },
+  REVIEW_STALE: {
+    messageZh: '文件已含手动修改，不能按代码块操作。',
+    hintZh: '请用整文件 Keep（保留现在的内容）或 Undo（确认后回到 Agent 改之前）。单块 Keep/Undo 只适用于尚未手改的文件。',
+  },
+  REVIEW_AMBIGUOUS: {
+    messageZh: '这段改动在文件里出现不止一次，无法自动处理。',
+    hintZh: '请打开文件手动改，或对该文件使用「整文件 Undo」回到 Agent 改之前。',
+  },
+  REVIEW_FULL: {
+    messageZh: '待确认改动太多，已暂停跟踪新的 Agent 写入。',
+    hintZh: '请先在「待确认」里 Keep 或 Undo 一些文件，再让 Agent 继续改。',
+  },
   BROWSER_SELF: {
     messageZh: '不能在这里打开工作台自己。',
     hintZh: '地址栏填的是当前工作台页面。请改成你要预览的网站，例如本地开发地址 http://127.0.0.1:5173 。',

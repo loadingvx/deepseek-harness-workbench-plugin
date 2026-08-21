@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -112,7 +113,10 @@ export async function saveCustomCommands(
     ...(Object.keys(defaults).length > 0 ? { defaults } : {}),
   }
   const json = JSON.stringify(body, null, 2) + '\n'
-  const tmp = path + '.' + process.pid + '.tmp'
+  // Unique tmp name per write: two writers (e.g. this plugin and a leftover
+  // standalone ultra-slash install sharing the same store file in one process)
+  // must never collide on the rename target, or the loser gets ENOENT.
+  const tmp = path + '.' + process.pid + '.' + randomUUID() + '.tmp'
   try {
     await mkdir(dirname(path), { recursive: true })
     await writeFile(tmp, json, 'utf8')

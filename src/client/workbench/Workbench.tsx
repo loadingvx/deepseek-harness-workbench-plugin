@@ -64,6 +64,11 @@ import { IconChat, IconDevtools, IconEditor, IconFiles, IconGit, IconGlobe, Icon
 import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
 import { SideDock } from './SideDock.tsx'
+import {
+  readReviewPendingCount,
+  retainReviewLive,
+  subscribeReviewLive,
+} from './review-live.ts'
 import { termIdFromTabId } from '../../shared/new-file-path.ts'
 import type { TermCleanExitAction } from './term-session.ts'
 import { createTerminalTab, nextBrowserTab, nextTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type Translate, type WorkbenchInjected } from './types.ts'
@@ -278,6 +283,16 @@ function WorkbenchInner(props: WorkbenchProps) {
 
   const workspace = useWorkspace(useSessions, useWorkspaces)
   const workspaceId = workspace?.workspaceId
+  const reviewPending = useSyncExternalStore(subscribeReviewLive, readReviewPendingCount, () => 0)
+  const reviewPendingPrev = useRef(0)
+  useEffect(() => retainReviewLive(client, workspaceId), [client, workspaceId])
+  useLayoutEffect(() => {
+    const prev = reviewPendingPrev.current
+    reviewPendingPrev.current = reviewPending
+    if (prev === 0 && reviewPending > 0) {
+      patchWorkbenchChrome({ sideOpen: true, sideTab: 'review' })
+    }
+  }, [reviewPending])
   const { attention } = useAttentionCounts(useSessions, useWorkspaces)
   useSessionBeep(attention, playWorkbenchSound)
   const inputDraft = props.useInput?.(state => state.draft) ?? ''
@@ -1066,7 +1081,7 @@ function WorkbenchInner(props: WorkbenchProps) {
           tab={sideTab}
           onTab={(tab) => {
             if (tab === 'devtools') changeDevtoolsDock('side')
-            else patchWorkbenchChrome({ sideTab: tab })
+            else patchWorkbenchChrome({ sideOpen: true, sideTab: tab })
           }}
           onOpenFile={(path) => { void openFile(path) }}
           onOpenDiff={openDiff}

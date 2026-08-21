@@ -6,6 +6,7 @@ import type {
   GitBranchInfo, GitCommitMessage, GitCommitResult, GitCreateBranchResult, GitDiffSnapshot,
   GitFail, GitFetchResult, GitFileChange, GitIdentity, GitInitInput, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
   GitStatusSnapshot, GitSwitchResult, NearbyGitSnapshot, PluginUpdateSnapshot, ProviderUsageSnapshot,
+  ReviewSnapshot,
 } from '../shared/types.ts'
 import type { PullMode, PushMode } from '../shared/git-sync-prefs.ts'
 import { isCurrentRepoId } from '../shared/git-nearby.ts'
@@ -184,6 +185,9 @@ export interface GitClient {
       onDelta?: (text: string) => void
     },
   ): Promise<GitResult<{ message: string }>>
+  reviewList(workspaceId: string): Promise<GitResult<ReviewSnapshot>>
+  reviewKeep(workspaceId: string, path?: string, hunkId?: string): Promise<GitResult<ReviewSnapshot>>
+  reviewUndo(workspaceId: string, path?: string, hunkId?: string): Promise<GitResult<ReviewSnapshot>>
 }
 
 export function createGitClient(): GitClient {
@@ -326,5 +330,22 @@ export function createGitClient(): GitClient {
       options,
       '模型没有返回命令。',
     ),
+    reviewList: (workspaceId) => request(`/git/review?${withRepoQuery(workspaceId)}`),
+    reviewKeep: (workspaceId, path, hunkId) => request('/git/review/keep', {
+      method: 'POST',
+      body: JSON.stringify({
+        workspaceId,
+        ...(path !== undefined && path !== '' ? { path } : {}),
+        ...(hunkId !== undefined && hunkId !== '' ? { hunkId } : {}),
+      }),
+    }),
+    reviewUndo: (workspaceId, path, hunkId) => request('/git/review/undo', {
+      method: 'POST',
+      body: JSON.stringify({
+        workspaceId,
+        ...(path !== undefined && path !== '' ? { path } : {}),
+        ...(hunkId !== undefined && hunkId !== '' ? { hunkId } : {}),
+      }),
+    }),
   }
 }

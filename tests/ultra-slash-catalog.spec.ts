@@ -135,6 +135,25 @@ describe('custom command store', () => {
     await expect(loadCustomCommands(path)).rejects.toBeInstanceOf(StoreError)
   })
 
+  it('tolerates concurrent writers sharing one store path', async () => {
+    // Two hubs in one process — the workbench's embedded copy and a leftover
+    // standalone ultra-slash install — boot concurrently and both persist to
+    // the same commands.json. Each write must use its own tmp file, or the
+    // second rename() fails with ENOENT (regression: pid-based tmp name).
+    const dir = await mkdtemp(join(tmpdir(), 'ultra-slash-race-'))
+    const path = join(dir, 'commands.json')
+    // Each write is atomic and complete: both must resolve without ENOENT,
+    // and the survivor must be one of the two consistent lists.
+    const results = await Promise.all([
+      saveCustomCommands(path, [{ name: 'a', steerText: 'x' }]),
+      saveCustomCommands(path, [{ name: 'b', steerText: 'y' }]),
+    ])
+    expect(results).toHaveLength(2)
+    const loaded = await loadCustomCommands(path)
+    expect(loaded.map((row) => row.name)).toHaveLength(1)
+    expect(['a', 'b']).toContain(loaded[0]?.name)
+  })
+
   it('places the store under DSH_HOME', () => {
     expect(customCommandStorePath({ DSH_HOME: '/tmp/dsh-home' })).toBe(
       '/tmp/dsh-home/ultra-slash/commands.json',

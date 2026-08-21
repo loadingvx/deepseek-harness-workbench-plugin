@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { GitService } from './host/git-service.ts'
 import { registerGitHttp } from './host/http.ts'
+import { PendingReviewStore, registerPendingReview } from './host/pending-review.ts'
 import { registerGitTools } from './host/tools.ts'
 import { applyUltraSlash } from './host/ultra-slash/apply.ts'
 import { registerSoundsHttp } from './host/workbench-sounds/http.ts'
@@ -13,8 +14,10 @@ export const inject = ['tools', 'webServer', 'llm', 'agentDefaultModel', 'comman
 export function apply(ctx: Context): void {
   const git = new GitService()
   const fs = new WorkspaceFs()
-  ctx.effect(() => registerGitHttp(ctx, git, fs), 'workbench: http')
+  const review = new PendingReviewStore(fs)
+  ctx.effect(() => registerGitHttp(ctx, git, fs, review), 'workbench: http')
   ctx.effect(() => registerGitTools(ctx, git), 'workbench: tools')
+  ctx.effect(() => registerPendingReview(ctx, review), 'workbench: pending review')
   applyUltraSlash(ctx)
   ctx.effect(() => {
     const server = ctx.webServer

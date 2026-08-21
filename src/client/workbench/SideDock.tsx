@@ -1,4 +1,4 @@
-import { useLayoutEffect, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useSyncExternalStore, type ReactNode } from 'react'
 import type { GitClient } from '../api.ts'
 import type { PluginUpdateSnapshot } from '../../shared/types.ts'
 import type { SideTab } from './auto-open.ts'
@@ -8,8 +8,14 @@ import { IconButton } from './IconButton.tsx'
 import type { DevtoolsDock } from './browser-dock.ts'
 import type { NetRefSnapshot } from '../../shared/browser-net-ref.ts'
 import { DevToolsPanel } from './DevToolsPanel.tsx'
-import { IconDevtools, IconFiles, IconGit, IconPanelOff, IconSettings, IconUsage } from './icons.tsx'
+import { IconDevtools, IconFiles, IconGit, IconPanelOff, IconReview, IconSettings, IconUsage } from './icons.tsx'
 import type { Translate } from './types.ts'
+import { ReviewPanel } from './ReviewPanel.tsx'
+import {
+  readReviewPendingCount,
+  retainReviewLive,
+  subscribeReviewLive,
+} from './review-live.ts'
 import { SettingsPanel } from './SettingsPanel.tsx'
 import { UpdateBanner } from './UpdateBanner.tsx'
 import { UsagePanel } from './UsagePanel.tsx'
@@ -60,6 +66,10 @@ export function SideDock({
   const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
   const navReady = useSyncExternalStore(subscribeNavHost, isNavHostReady, () => false)
   const showUsageTab = usageTabVisible(dock, navReady)
+  const pendingCount = useSyncExternalStore(subscribeReviewLive, readReviewPendingCount, () => 0)
+  const showReviewTab = pendingCount > 0
+
+  useEffect(() => retainReviewLive(client, workspaceId), [client, workspaceId])
 
   useLayoutEffect(() => {
     if (!showUsageTab && tab === 'usage') onTab('files')
@@ -68,6 +78,10 @@ export function SideDock({
   useLayoutEffect(() => {
     if (!showDevtoolsTab && tab === 'devtools') onTab('files')
   }, [showDevtoolsTab, tab, onTab])
+
+  useLayoutEffect(() => {
+    if (!showReviewTab && tab === 'review') onTab('files')
+  }, [showReviewTab, tab, onTab])
 
   return (
     <aside className={css.root} data-git-ide-panel="side">
@@ -80,6 +94,14 @@ export function SideDock({
         <IconButton label={t('ide.git')} active={tab === 'git'} onClick={() => { onTab('git') }}>
           <IconGit />
         </IconButton>
+        {showReviewTab ? (
+          <span className={css.tabWrap}>
+            <IconButton label={t('ide.review')} active={tab === 'review'} onClick={() => { onTab('review') }}>
+              <IconReview />
+            </IconButton>
+            <span className={css.tabBadge} aria-hidden>{pendingCount > 99 ? '99+' : pendingCount}</span>
+          </span>
+        ) : null}
         {showUsageTab ? (
           <IconButton label={t('ide.usage')} active={tab === 'usage'} onClick={() => { onTab('usage') }}>
             <IconUsage />
@@ -106,6 +128,13 @@ export function SideDock({
             selected={selected}
             onOpenDiff={onOpenDiff}
             onOpenCommitDiff={onOpenCommitDiff}
+            t={t}
+          />
+        ) : tab === 'review' && showReviewTab ? (
+          <ReviewPanel
+            client={client}
+            workspaceId={workspaceId}
+            onOpenFile={onOpenFile}
             t={t}
           />
         ) : tab === 'usage' && showUsageTab ? (
