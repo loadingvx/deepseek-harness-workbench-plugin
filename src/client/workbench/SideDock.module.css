@@ -37,8 +37,8 @@
   height: 14px;
   padding: 0 3px;
   border-radius: 999px;
-  background: var(--dsw-alias-color-danger, #e05c5c);
-  color: #fff;
+  background: var(--dsw-alias-state-error-primary, #c45c55);
+  color: var(--dsw-alias-label-inverse, #fff);
   font-size: 9px;
   font-weight: 700;
   line-height: 14px;

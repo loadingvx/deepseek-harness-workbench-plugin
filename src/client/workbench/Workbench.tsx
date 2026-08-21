@@ -1,9 +1,9 @@
-import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ErrorInfo, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { BrowserElSnapshot } from '../../shared/browser-el.ts'
 import { redactSecrets } from '../../shared/redact.ts'
-import type { GitFail } from '../../shared/types.ts'
+import type { GitFail, GitResult, ReviewSnapshot } from '../../shared/types.ts'
 import {
   defaultWorkbenchChrome,
   getWorkbenchChrome,
@@ -65,7 +65,8 @@ import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
 import { SideDock } from './SideDock.tsx'
 import {
-  readReviewPendingCount,
+  applyReviewLiveSnapshot,
+  readReviewLive,
   retainReviewLive,
   subscribeReviewLive,
 } from './review-live.ts'
@@ -283,8 +284,10 @@ function WorkbenchInner(props: WorkbenchProps) {
 
   const workspace = useWorkspace(useSessions, useWorkspaces)
   const workspaceId = workspace?.workspaceId
-  const reviewPending = useSyncExternalStore(subscribeReviewLive, readReviewPendingCount, () => 0)
+  const reviewSnap = useSyncExternalStore(subscribeReviewLive, readReviewLive, readReviewLive)
+  const reviewPending = reviewSnap.files.length
   const reviewPendingPrev = useRef(0)
+  const [reviewBusy, setReviewBusy] = useState(false)
   useEffect(() => retainReviewLive(client, workspaceId), [client, workspaceId])
   useLayoutEffect(() => {
     const prev = reviewPendingPrev.current
@@ -293,6 +296,60 @@ function WorkbenchInner(props: WorkbenchProps) {
       patchWorkbenchChrome({ sideOpen: true, sideTab: 'review' })
     }
   }, [reviewPending])
+
+  const reviewByPath = useMemo(() => {
+    const map: Record<string, (typeof reviewSnap.files)[number]> = {}
+    for (const file of reviewSnap.files) map[file.path] = file
+    return map
+  }, [reviewSnap])
+
+  const reloadOpenBuffer = useCallback(async (path: string): Promise<void> => {
+    if (workspaceId === undefined) return
+    if (buffersRef.current[path] === undefined) return
+    const result = await client.readFile(workspaceId, path)
+    if (!result.ok) {
+      if (result.code === 'FS_NOT_FOUND') {
+        setBuffers(current => {
+          if (current[path] === undefined) return current
+          const next = { ...current }
+          delete next[path]
+          return next
+        })
+      }
+      return
+    }
+    setBuffers(current => current[path] === undefined
+      ? current
+      : {
+        ...current,
+        [path]: {
+          ...current[path]!,
+          original: result.value.content,
+          draft: result.value.content,
+          language: result.value.language,
+        },
+      })
+  }, [client, workspaceId])
+
+  const runReviewAction = useCallback(async (
+    action: () => Promise<GitResult<ReviewSnapshot>>,
+    reloadPaths: string[],
+  ): Promise<void> => {
+    if (workspaceId === undefined || reviewBusy) return
+    setReviewBusy(true)
+    try {
+      const result = await action()
+      if (!result.ok) {
+        setFileError(result)
+        return
+      }
+      setFileError(null)
+      applyReviewLiveSnapshot(result.value)
+      await Promise.all(reloadPaths.map(path => reloadOpenBuffer(path)))
+    } finally {
+      setReviewBusy(false)
+    }
+  }, [workspaceId, reviewBusy, reloadOpenBuffer])
   const { attention } = useAttentionCounts(useSessions, useWorkspaces)
   useSessionBeep(attention, playWorkbenchSound)
   const inputDraft = props.useInput?.(state => state.draft) ?? ''
@@ -1042,6 +1099,20 @@ function WorkbenchInner(props: WorkbenchProps) {
           onAiModeChange={toggleTermAi}
           onTermCleanExit={handleTermCleanExit}
           onAddEditorToChat={sendEditorToChat}
+          reviewByPath={reviewByPath}
+          reviewBusy={reviewBusy}
+          onReviewKeepFile={(path) => {
+            void runReviewAction(() => client.reviewKeep(workspaceId!, path), [path])
+          }}
+          onReviewUndoFile={(path) => {
+            void runReviewAction(() => client.reviewUndo(workspaceId!, path), [path])
+          }}
+          onReviewKeepHunk={(path, hunkId) => {
+            void runReviewAction(() => client.reviewKeep(workspaceId!, path, hunkId), [path])
+          }}
+          onReviewUndoHunk={(path, hunkId) => {
+            void runReviewAction(() => client.reviewUndo(workspaceId!, path, hunkId), [path])
+          }}
           onCreateFile={async (path) => {
             if (workspaceId === undefined) return { ok: false, code: 'NO_WORKSPACE', messageZh: t('editor.addFileNoWorkspace'), hintZh: '' }
             const existing = await client.readFile(workspaceId, path)

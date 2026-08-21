@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { GitClient } from '../api.ts'
 import type { GitResult, ReviewFileSnapshot, ReviewSnapshot } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconCheck, IconClose, IconRefresh, IconReview } from './icons.tsx'
+import { IconRefresh, IconReview } from './icons.tsx'
 import {
   applyReviewLiveSnapshot,
   readReviewLive,
@@ -39,7 +39,6 @@ export function ReviewPanel({
   const snap = useSyncExternalStore(subscribeReviewLive, readReviewLive, readReviewLive)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState<string | null>(null)
   const [undoAsk, setUndoAsk] = useState<UndoAsk>(null)
 
   useEffect(() => retainReviewLive(client, workspaceId), [client, workspaceId])
@@ -64,9 +63,9 @@ export function ReviewPanel({
     }
   }
 
-  const requestUndoFile = (path: string, manualEdited: boolean): void => {
-    if (manualEdited) setUndoAsk({ kind: 'file', path })
-    else void run(() => client.reviewUndo(workspaceId!, path))
+  const requestUndoFile = (file: ReviewFileSnapshot): void => {
+    if (file.manualEdited) setUndoAsk({ kind: 'file', path: file.path })
+    else void run(() => client.reviewUndo(workspaceId!, file.path))
   }
 
   const requestUndoAll = (): void => {
@@ -91,19 +90,19 @@ export function ReviewPanel({
 
   return (
     <div className={css.root} data-review-panel="">
-      <div className={css.toolbar}>
+      <div className={css.head}>
         <div className={css.title}>
           <IconReview />
           <span>{t('review.title')}</span>
-          {!empty ? <span className={css.badge}>{files.length}</span> : null}
+          {!empty ? <span className={css.count}>{files.length}</span> : null}
         </div>
-        <div className={css.actions}>
+        <div className={css.headActions}>
           <IconButton label={t('review.refresh')} disabled={busy} onClick={() => { void refresh() }}>
             <IconRefresh />
           </IconButton>
           <button
             type="button"
-            className={css.keepAll}
+            className={css.textBtn}
             disabled={busy || empty}
             onClick={() => { void run(() => client.reviewKeep(workspaceId)) }}
           >
@@ -111,7 +110,7 @@ export function ReviewPanel({
           </button>
           <button
             type="button"
-            className={css.undoAll}
+            className={css.textBtn}
             disabled={busy || empty}
             onClick={requestUndoAll}
           >
@@ -119,26 +118,49 @@ export function ReviewPanel({
           </button>
         </div>
       </div>
-      <p className={css.hint}>{t('review.hint')}</p>
+      <p className={css.hint}>{t('review.hintShort')}</p>
       {error !== null ? <pre className={css.error}>{error}</pre> : null}
       {empty ? (
         <p className={css.empty}>{t('review.empty')}</p>
       ) : (
         <ul className={css.list}>
           {files.map(file => (
-            <ReviewFileRow
-              key={file.path}
-              file={file}
-              expanded={expanded === file.path}
-              busy={busy}
-              t={t}
-              onToggle={() => { setExpanded(current => current === file.path ? null : file.path) }}
-              onOpen={() => { onOpenFile(file.path) }}
-              onKeepFile={() => { void run(() => client.reviewKeep(workspaceId, file.path)) }}
-              onUndoFile={() => { requestUndoFile(file.path, file.manualEdited) }}
-              onKeepHunk={(hunkId) => { void run(() => client.reviewKeep(workspaceId, file.path, hunkId)) }}
-              onUndoHunk={(hunkId) => { void run(() => client.reviewUndo(workspaceId, file.path, hunkId)) }}
-            />
+            <li key={file.path} className={css.row} data-path={file.path}>
+              <button
+                type="button"
+                className={css.fileBtn}
+                title={file.path}
+                onClick={() => { onOpenFile(file.path) }}
+              >
+                <span className={css.name}>{fileName(file.path)}</span>
+                <span className={css.meta}>
+                  <span className={css.stats}>+{file.addedLines} −{file.removedLines}</span>
+                  {file.created ? <span className={css.chip}>{t('review.created')}</span> : null}
+                  {file.manualEdited ? <span className={css.chipWarn}>{t('review.manualEdited')}</span> : null}
+                </span>
+                <span className={css.path}>{file.path}</span>
+              </button>
+              <div className={css.rowActions}>
+                <button
+                  type="button"
+                  className={css.fileAction}
+                  disabled={busy}
+                  title={t('review.keepFile')}
+                  onClick={() => { void run(() => client.reviewKeep(workspaceId, file.path)) }}
+                >
+                  {t('review.keep')}
+                </button>
+                <button
+                  type="button"
+                  className={css.fileAction}
+                  disabled={busy}
+                  title={t('review.undoFile')}
+                  onClick={() => { requestUndoFile(file) }}
+                >
+                  {t('review.undo')}
+                </button>
+              </div>
+            </li>
           ))}
         </ul>
       )}
@@ -168,7 +190,7 @@ export function ReviewPanel({
               <button type="button" className={css.dialogCancel} disabled={busy} onClick={() => { setUndoAsk(null) }}>
                 {t('review.undoConfirmCancel')}
               </button>
-              <button type="button" className={css.dialogDanger} disabled={busy} onClick={confirmUndo}>
+              <button type="button" className={css.dialogOk} disabled={busy} onClick={confirmUndo}>
                 {t('review.undoConfirmOk')}
               </button>
             </div>
@@ -176,87 +198,5 @@ export function ReviewPanel({
         </div>
       ) : null}
     </div>
-  )
-}
-
-function ReviewFileRow({
-  file, expanded, busy, t, onToggle, onOpen, onKeepFile, onUndoFile, onKeepHunk, onUndoHunk,
-}: {
-  file: ReviewFileSnapshot
-  expanded: boolean
-  busy: boolean
-  t: Translate
-  onToggle: () => void
-  onOpen: () => void
-  onKeepFile: () => void
-  onUndoFile: () => void
-  onKeepHunk: (id: string) => void
-  onUndoHunk: (id: string) => void
-}) {
-  const hunkLocked = file.manualEdited
-  return (
-    <li className={css.file} data-path={file.path} data-manual={file.manualEdited ? '1' : '0'}>
-      <div className={css.fileHead}>
-        <button type="button" className={css.fileName} onClick={onToggle} title={file.path}>
-          <span className={css.chevron} data-open={expanded ? '1' : '0'}>▸</span>
-          <span className={css.name}>{fileName(file.path)}</span>
-          <span className={css.path}>{file.path}</span>
-        </button>
-        <span className={css.stats}>
-          +{file.addedLines} −{file.removedLines}
-          {file.created ? <span className={css.tag}>{t('review.created')}</span> : null}
-          {file.manualEdited ? <span className={css.tagManual}>{t('review.manualEdited')}</span> : null}
-        </span>
-        <div className={css.fileActions}>
-          <button type="button" className={css.link} disabled={busy} onClick={onOpen}>{t('review.open')}</button>
-          <button type="button" className={css.keep} disabled={busy} onClick={onKeepFile} title={t('review.keepFile')}>
-            <IconCheck /> {t('review.keep')}
-          </button>
-          <button type="button" className={css.undo} disabled={busy} onClick={onUndoFile} title={t('review.undoFile')}>
-            <IconClose /> {t('review.undo')}
-          </button>
-        </div>
-      </div>
-      {expanded ? (
-        <div className={css.hunks}>
-          {hunkLocked ? <p className={css.emptyHunk}>{t('review.hunkLocked')}</p> : null}
-          {file.hunks.length === 0 ? (
-            <p className={css.emptyHunk}>{t('review.noHunks')}</p>
-          ) : file.hunks.map((hunk, index) => (
-            <div key={hunk.id} className={css.hunk} data-hunk={hunk.id}>
-              <div className={css.hunkBar}>
-                <span>{t('review.hunk', { n: index + 1 })}</span>
-                <div className={css.hunkActions}>
-                  <button
-                    type="button"
-                    className={css.keep}
-                    disabled={busy || hunkLocked}
-                    onClick={() => { onKeepHunk(hunk.id) }}
-                  >
-                    {t('review.keepHunk')}
-                  </button>
-                  <button
-                    type="button"
-                    className={css.undo}
-                    disabled={busy || hunkLocked}
-                    onClick={() => { onUndoHunk(hunk.id) }}
-                  >
-                    {t('review.undoHunk')}
-                  </button>
-                </div>
-              </div>
-              <pre className={css.diff}>
-                {hunk.oldText !== null ? hunk.oldText.split('\n').map((line, i) => (
-                  <div key={`d${i}`} className={css.del}>-{line}</div>
-                )) : null}
-                {hunk.newText.split('\n').map((line, i) => (
-                  <div key={`a${i}`} className={css.add}>+{line}</div>
-                ))}
-              </pre>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </li>
   )
 }
