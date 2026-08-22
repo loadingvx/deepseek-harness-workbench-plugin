@@ -1,10 +1,18 @@
 import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ReviewHunk } from '../../shared/types.ts'
 import { workbenchEditorExtensions } from './code-editor-extensions.ts'
 import { editorModeExtensions, type EditorModeId } from './editor-mode.ts'
 import { ensureVimExCommands, installEditorVimOps, uninstallEditorVimOps } from './editor-vim-commands.ts'
 import { IconChat } from './icons.tsx'
+import {
+  reviewEditorExtension,
+  reviewHunkPositions,
+  scrollEditorToReviewHunk,
+  setReviewEditorConfig,
+  type ReviewEditorConfig,
+} from './review-cm.ts'
 import type { EditorVimOps, Translate } from './types.ts'
 import css from './EditorPane.module.css'
 
@@ -14,20 +22,35 @@ interface SelSnapshot {
   top: number
 }
 
+export interface CodeEditorReviewProps {
+  hunks: ReviewHunk[]
+  manualEdited: boolean
+  onKeepHunk: (hunkId: string) => void
+  onUndoHunk: (hunkId: string) => void
+}
+
+/** Jump request for the review-bar prev/next-change buttons (and jump-to-first). */
+export interface CodeEditorReviewNav {
+  /** Index into the review hunks to scroll to. */
+  index: number
+  /** Monotonic stamp so repeated jumps to the same index re-trigger. */
+  stamp: number
+}
+
 export function CodeEditor({
-  path, value, onChange, onSave, onAddToChat, vimOps, label, mode, t,
+  path, value, onChange, onSave, onAddToChat, vimOps, label, mode, t, review, reviewNav = null,
 }: {
   path: string
   value: string
   onChange: (next: string) => void
   onSave: () => void
-  /** Send selected editor text to the composer as an official chip. */
   onAddToChat?: (text: string, kind: 'selection' | 'file') => boolean
-  /** Vim :w/:q/:qa/:x/:vs/:sp/:only window behaviors scoped to this editor. */
   vimOps?: EditorVimOps
   label: string
   mode: EditorModeId
   t: Translate
+  review?: CodeEditorReviewProps
+  reviewNav?: CodeEditorReviewNav | null
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -35,6 +58,7 @@ export function CodeEditor({
   const onChangeRef = useRef(onChange)
   const onSaveRef = useRef(onSave)
   const onAddToChatRef = useRef(onAddToChat)
+  const reviewRef = useRef(review)
   const applyingRef = useRef(false)
   const selRef = useRef<SelSnapshot | null>(null)
   const [sel, setSel] = useState<SelSnapshot | null>(null)
@@ -43,8 +67,8 @@ export function CodeEditor({
   onChangeRef.current = onChange
   onSaveRef.current = onSave
   onAddToChatRef.current = onAddToChat
+  reviewRef.current = review
 
-  /** Position the floating "add to chat" button at the selection head. */
   const syncSelection = useCallback((state: EditorState): void => {
     const view = viewRef.current
     const host = hostRef.current
@@ -99,6 +123,7 @@ export function CodeEditor({
             },
           }),
           modeCompartment.of(editorModeExtensions(mode)),
+          reviewEditorExtension(),
         ],
       }),
     })
@@ -114,8 +139,6 @@ export function CodeEditor({
     }
   }, [path, label, syncSelection])
 
-  // The ops close over the active tab / buffer, so re-bind them whenever the
-  // EditorPane rebuilds them (tab switch, buffer change, split open/close).
   useEffect(() => {
     const view = viewRef.current
     if (view === null || vimOps === undefined) return
@@ -140,6 +163,36 @@ export function CodeEditor({
     })
     applyingRef.current = false
   }, [value])
+
+  useEffect(() => {
+    const view = viewRef.current
+    if (view === null) return
+    const current = reviewRef.current
+    const config: ReviewEditorConfig | null = current === undefined
+      ? null
+      : {
+        hunks: current.hunks,
+        handlers: {
+          onKeep: (id) => { reviewRef.current?.onKeepHunk(id) },
+          onUndo: (id) => { reviewRef.current?.onUndoHunk(id) },
+          keepLabel: t('review.keepHunk'),
+          undoLabel: t('review.undoHunk'),
+          locked: current.manualEdited,
+          lockedHint: t('review.hunkLocked'),
+        },
+      }
+    setReviewEditorConfig(view, config)
+  }, [review, t, value, path])
+
+  /** Review-bar navigation: scroll the editor to the requested hunk index. */
+  useEffect(() => {
+    const view = viewRef.current
+    if (view === null || reviewNav === null) return
+    const current = reviewRef.current
+    if (current === undefined) return
+    const positions = reviewHunkPositions(view.state.doc.toString(), current.hunks)
+    scrollEditorToReviewHunk(view, positions, reviewNav.index)
+  }, [reviewNav])
 
   useEffect(() => () => {
     if (flashTimer.current !== null) clearTimeout(flashTimer.current)
@@ -173,8 +226,6 @@ export function CodeEditor({
           className={css.selChatBtn}
           style={{ left: sel.left, top: sel.top }}
           title={t('editor.menu.addSelToChat')}
-          // Keep focus in the editor: stealing focus blurs CodeMirror and can
-          // clear the visual selection before the click handler runs.
           onMouseDown={(event) => { event.preventDefault() }}
           onClick={addSelectionToChat}
         >

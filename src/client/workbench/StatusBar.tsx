@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import type { GitClient } from '../api.ts'
 import type { PluginUpdateSnapshot } from '../../shared/types.ts'
 import { redactSecrets } from '../../shared/redact.ts'
@@ -28,14 +29,15 @@ function openExternal(url: string): void {
 }
 
 /**
- * Status-bar popup menu, pinned to the viewport.
+ * Status-bar popup menu, pinned to the viewport and portaled to document.body.
  *
- * The bar lives inside the bottom strip ([data-git-ide-panel=bottom], which is
- * overflow:hidden). While the terminal is an editor tab that strip collapses to
- * the bar alone, so an absolutely positioned menu (bottom: calc(100% + 4px))
- * pops upward and is clipped out of view. `position: fixed` plus the anchor's
- * rect puts the menu in the same place but never clipped - same technique as
- * the file-tree context menu.
+ * Why portal + fixed (not just fixed inside the bar):
+ * 1. The bar sits in [data-git-ide-panel=bottom] (overflow:hidden, z-index:4).
+ *    Absolute menus are clipped when the strip is only the 24px bar.
+ * 2. Fixed alone is not enough: the bottom strip's z-index creates a stacking
+ *    context, so the menu still loses to the sticky chat composer (which often
+ *    participates at a higher root-level z-index). Product rule: layout / mode
+ *    menus must sit above the session input. Portal escapes that trap.
  */
 function StatusMenu({
   open,
@@ -67,18 +69,20 @@ function StatusMenu({
   }, [open, anchor])
 
   if (!open || style === null) return null
-  return (
+  return createPortal(
     <>
       <div className={css.menuBackdrop} onClick={onClose} />
       <div
-        className={extraClass === undefined ? css.menu : `${css.menu} ${css.menuFixed} ${extraClass}`}
+        className={extraClass === undefined ? `${css.menu} ${css.menuFixed}` : `${css.menu} ${css.menuFixed} ${extraClass}`}
         style={style}
         role="menu"
         aria-label={label}
+        onMouseDown={(event) => { event.stopPropagation() }}
       >
         {children}
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
 

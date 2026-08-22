@@ -241,7 +241,9 @@
   border-radius: 6px;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* 跟随插件与会话（会话代码块）的代码字体设置：--ds-font-family-code，
+     不再写死本地字体栈（旧栈以裸 monospace 收尾，Windows CJK 会回落宋体）。 */
+  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   font-size: 10px;
   line-height: 1.5;
   white-space: pre-wrap;

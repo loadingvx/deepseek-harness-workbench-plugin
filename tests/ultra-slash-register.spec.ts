@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -205,6 +205,54 @@ describe('conflict yield (standalone ultra-slash already owns resources)', () =>
     }
     expect(conflicts.map((c) => (c.resource === 'command' ? c.name : c.path)).sort())
       .toEqual(['docs', 'new', 'skill', 'steer'])
+  })
+
+  it('reports a yield from applyCommands when a standalone install owns the builtins', () => {
+    const registered: SteerCommandDefinition[] = []
+    applyCommands(mockCtx(registered))
+    const yielded = applyCommands(mockCtx(registered))
+    expect(yielded).toBe(true)
+  })
+
+  it('reports no yield when this half owns the builtins', () => {
+    const registered: SteerCommandDefinition[] = []
+    const yielded = applyCommands(mockCtx(registered))
+    expect(yielded).toBe(false)
+  })
+
+  it('does not write the shared store when a standalone install owns the resources', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'ultra-slash-yield-store-'))
+    vi.stubEnv('DSH_HOME', home)
+    const conflicts: YieldedConflict[] = []
+    const restore = withConflictSink((conflict) => conflicts.push(conflict))
+    try {
+      const ctx = {
+        get() { return undefined },
+        commands: {
+          register(definition: SteerCommandDefinition) {
+            throw new Error(`command "${definition.name}" is already registered`)
+          },
+        },
+        webServer: {
+          register() {
+            throw new Error('webserver: duplicate prefix route "/ultra-slash"')
+          },
+        },
+        effect(fn: () => unknown) {
+          fn()
+          return () => {}
+        },
+      }
+      expect(() => applyUltraSlash(ctx as never)).not.toThrow()
+      expect(conflicts.some((c) => c.resource === 'http-prefix' && c.path === '/ultra-slash')).toBe(true)
+      // loadHubFromDisk is async; give a (wrong) store write time to appear.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      await expect(readFile(join(home, 'ultra-slash', 'commands.json'), 'utf8'))
+        .rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      restore()
+      vi.unstubAllEnvs()
+    }
   })
 
   it('reports a custom command conflict when the hub loads a shared store', async () => {

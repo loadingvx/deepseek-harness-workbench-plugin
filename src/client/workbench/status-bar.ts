@@ -41,15 +41,13 @@ export function showEditorStatusChrome(editorOpen: boolean): boolean {
 }
 
 /**
- * Viewport offsets for a status-bar popup menu.
+ * Viewport offsets for a status-bar popup menu (portaled + position:fixed).
  *
  * The bar sits inside the bottom strip ([data-git-ide-panel=bottom], which is
- * overflow:hidden). While the terminal is an editor tab that strip collapses to
- * the bar alone, so an absolutely positioned menu popping upward
- * (bottom: calc(100% + 4px)) gets clipped out of view. The menus are therefore
- * pinned to the viewport (position: fixed) using the anchor's rect: the menu's
- * bottom edge sits 4px above the anchor's top, its right edge aligns with the
- * anchor's right edge — the same placement as before, but never clipped.
+ * overflow:hidden and z-index:4). Absolute menus get clipped when that strip is
+ * only the 24px bar; fixed-but-in-tree menus still lose to the sticky chat
+ * composer. StatusMenu therefore portals to document.body and pins with these
+ * offsets: menu bottom 4px above the anchor top, right edges aligned.
  */
 export function statusMenuAnchorStyle(
   rect: { right: number; top: number },

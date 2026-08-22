@@ -248,10 +248,13 @@
   background: color-mix(in srgb, var(--dsw-alias-state-warning-primary, #c98600) 28%, transparent);
 }
 
+/* Portaled to document.body (see StatusMenu). Above the sticky chat composer
+   (often root-level sticky z-index ≤100) and workbench context menus (30/31);
+   below extreme host overlays such as the browser inspect highlight. */
 .menuBackdrop {
   position: fixed;
   inset: 0;
-  z-index: 10;
+  z-index: 200;
 }
 
 .menu {
@@ -259,8 +262,11 @@
   left: auto;
   right: 0;
   bottom: calc(100% + 4px);
-  z-index: 20;
+  z-index: 201;
   min-width: 188px;
+  max-height: min(70vh, calc(100vh - 16px));
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 4px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 8px;
@@ -268,11 +274,8 @@
   box-shadow: var(--dsw-shadow-lv2);
 }
 
-/* Status-bar popups must escape the bottom strip ([data-git-ide-panel=bottom],
-   overflow:hidden). While the terminal is an editor tab that strip collapses to
-   the 24px bar alone and an absolute popup is clipped away; pinning to the
-   viewport keeps the menu visible. Coordinates come from the anchor's rect
-   (statusMenuAnchorStyle) and override right/bottom via inline styles. */
+/* Always paired with portal + statusMenuAnchorStyle so the menu is not clipped
+   by [data-git-ide-panel=bottom] overflow:hidden and not trapped in its z-index. */
 .menuFixed {
   position: fixed;
 }

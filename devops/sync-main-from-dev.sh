@@ -93,7 +93,11 @@ if [ "$(git branch --show-current)" != "$MAIN_BRANCH" ]; then
 fi
 
 # ---- 1. 列出 main 当前仍存在的所有文件 -------------------------------------
-mapfile -t files < <(git ls-tree -r --name-only "$MAIN_BRANCH")
+# Bash 3.2 (macOS /bin/bash) has no mapfile; use while-read instead.
+files=()
+while IFS= read -r line || [ -n "$line" ]; do
+  files+=("$line")
+done < <(git ls-tree -r --name-only "$MAIN_BRANCH")
 echo "==> main 当前存在 ${#files[@]} 个文件"
 
 # ---- 2. 更新: dev 有 → 取 dev 最新；dev 无但现场有 → 取现场（如 lib/） ------
@@ -122,18 +126,31 @@ if git ls-tree -r --name-only "$DEV_BRANCH" -- docs | grep -q .; then
   # dev 有 docs：全量取 dev 版本（含 dev 新增的文档）
   git checkout "$DEV_BRANCH" -- docs
   # main 上有而 dev 没有的 docs 文件 → 删除（保证目录与 dev 完全一致）
-  mapfile -t stale_docs < <(comm -23     <(git ls-tree -r --name-only "$MAIN_BRANCH" -- docs | sort)     <(git ls-tree -r --name-only "$DEV_BRANCH" -- docs | sort))
+  stale_docs=()
+  while IFS= read -r line || [ -n "$line" ]; do
+    stale_docs+=("$line")
+  done < <(comm -23 \
+    <(git ls-tree -r --name-only "$MAIN_BRANCH" -- docs | sort) \
+    <(git ls-tree -r --name-only "$DEV_BRANCH" -- docs | sort))
   if [ "${#stale_docs[@]}" -gt 0 ]; then
     git rm -r --quiet --ignore-unmatch -- "${stale_docs[@]}"
     docs_removed=("${stale_docs[@]}")
   fi
   # dev 有而 main 没有的 docs 文件 → 新增（用于统计）
-  mapfile -t new_docs < <(comm -13     <(git ls-tree -r --name-only "$MAIN_BRANCH" -- docs | sort)     <(git ls-tree -r --name-only "$DEV_BRANCH" -- docs | sort))
+  new_docs=()
+  while IFS= read -r line || [ -n "$line" ]; do
+    new_docs+=("$line")
+  done < <(comm -13 \
+    <(git ls-tree -r --name-only "$MAIN_BRANCH" -- docs | sort) \
+    <(git ls-tree -r --name-only "$DEV_BRANCH" -- docs | sort))
   docs_new=("${new_docs[@]}")
 else
   # dev 完全没有 docs → main 上也移除整个 docs 目录
   git rm -r --quiet --ignore-unmatch -- docs
-  mapfile -t docs_removed < <(git ls-tree -r --name-only "$MAIN_BRANCH" -- docs)
+  docs_removed=()
+  while IFS= read -r line || [ -n "$line" ]; do
+    docs_removed+=("$line")
+  done < <(git ls-tree -r --name-only "$MAIN_BRANCH" -- docs)
 fi
 
 # lib 目录整体以现场为准: 新增、删除、修改一并纳入

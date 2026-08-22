@@ -151,14 +151,14 @@ function registerOne(ctx: HubContext, definition: SteerCommandDefinition): () =>
 }
 
 /** Builtins may already be owned by a leftover ultra-slash plugin; skip instead of crashing workbench load. */
-function registerBuiltinOne(ctx: HubContext, definition: SteerCommandDefinition): () => void {
+function registerBuiltinOne(ctx: HubContext, definition: SteerCommandDefinition): (() => void) | undefined {
   try {
     return registerOne(ctx, definition)
   } catch (error: unknown) {
     if (isAlreadyRegistered(error)) {
       const name = nameFromRegisterError(error) ?? definition.name
       yieldConflict({ resource: 'command', name })
-      return () => {}
+      return undefined
     }
     throw error
   }
@@ -195,33 +195,44 @@ function registerCustomRow(
 export function registerBuiltinCommands(
   ctx: HubContext,
   readDefaults: () => BuiltinDefaults = () => ({}),
-): () => void {
+): { undo: () => void; yielded: boolean } {
   const undo: Array<() => void> = []
+  let yielded = false
   for (const command of BUILTIN_SLASH_COMMANDS) {
     if (command.kind === 'steer') {
-      undo.push(registerBuiltinOne(ctx, {
+      const disposer = registerBuiltinOne(ctx, {
         name: COMMAND_NAME,
         description: translate('en', 'steer.description'),
         input: { hint: COMMAND_HINT },
         handler: (invocation) => executeSteer(invocation, localeOf(ctx)),
-      }))
+      })
+      if (disposer === undefined) {
+        yielded = true
+        continue
+      }
+      undo.push(disposer)
       continue
     }
     if (command.kind === 'session') {
-      undo.push(registerBuiltinOne(ctx, {
+      const disposer = registerBuiltinOne(ctx, {
         name: command.name,
         description: translate('en', 'new.description'),
         handler: (invocation) => {
           if (invocation.signal.aborted) return cancelledSteerResult(localeOf(ctx))
           return newSessionResult(localeOf(ctx))
         },
-      }))
+      })
+      if (disposer === undefined) {
+        yielded = true
+        continue
+      }
+      undo.push(disposer)
       continue
     }
     const payloadKey = command.payloadKey
     if (payloadKey === undefined) continue
     const name = command.name
-    undo.push(registerBuiltinOne(ctx, {
+    const disposer = registerBuiltinOne(ctx, {
       name,
       description: translate('en', command.descriptionKey),
       input: { hint: translate('en', 'alias.hint') },
@@ -232,10 +243,18 @@ export function registerBuiltinCommands(
           ? configured
           : translate(locale, payloadKey)
       }),
-    }))
+    })
+    if (disposer === undefined) {
+      yielded = true
+      continue
+    }
+    undo.push(disposer)
   }
-  return () => {
-    while (undo.length > 0) undo.pop()?.()
+  return {
+    undo: () => {
+      while (undo.length > 0) undo.pop()?.()
+    },
+    yielded,
   }
 }
 
@@ -383,7 +402,11 @@ export async function loadHubFromDisk(hub: CommandHub, storePath = customCommand
   }
 }
 
-/** Register shipped commands. Tests can call this without touching the store. */
-export function applyCommands(ctx: HubContext, readDefaults: () => BuiltinDefaults = () => ({})): void {
-  registerBuiltinCommands(ctx, readDefaults)
+/**
+ * Register shipped commands. Tests can call this without touching the store.
+ * Returns true when a leftover standalone install already owned at least one
+ * builtin (this half stood down), false when this half owns the resources.
+ */
+export function applyCommands(ctx: HubContext, readDefaults: () => BuiltinDefaults = () => ({})): boolean {
+  return registerBuiltinCommands(ctx, readDefaults).yielded
 }

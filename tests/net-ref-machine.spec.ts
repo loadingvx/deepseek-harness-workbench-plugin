@@ -1,10 +1,45 @@
-import { describe, expect, it } from 'vitest'
-import { InputMachine } from '/root/arch_workspace/deepseek-harness/packages/client/ui-conversation/src/client/input/machine.ts'
+import { existsSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { buildNetReference, encodeNetRef } from '../src/shared/browser-net-ref.ts'
 
 const PLACEHOLDER = '\uFFFC'
 
-describe('harness input machine accepts net-ref chips', () => {
+/** Optional override; otherwise ./deepseek-harness (gitignored symlink) beside this repo. */
+const harnessRoot = process.env.DSH_HARNESS
+  ? resolve(process.env.DSH_HARNESS)
+  : join(dirname(fileURLToPath(import.meta.url)), '..', 'deepseek-harness')
+
+const machinePath = join(
+  harnessRoot,
+  'packages/client/ui-conversation/src/client/input/machine.ts',
+)
+const hasHarnessMachine = existsSync(machinePath)
+
+type InputMachineInstance = {
+  state: {
+    draft: string
+    draftRev: number
+    occurrences: Array<{ ref: string; label: string }>
+  }
+  dispatch: (event: unknown) => void
+}
+type InputMachineCtor = new () => InputMachineInstance
+
+/**
+ * Integration against the real harness InputMachine.
+ * Needs a local deepseek-harness checkout (ln -s ../deepseek-harness .) or DSH_HARNESS=.
+ * Without it the suite is skipped so release/CI still pass.
+ */
+describe.skipIf(!hasHarnessMachine)('harness input machine accepts net-ref chips', () => {
+  let InputMachine: InputMachineCtor
+
+  beforeAll(async () => {
+    const mod = await import(pathToFileURL(machinePath).href) as { InputMachine: InputMachineCtor }
+    InputMachine = mod.InputMachine
+  })
+
   it('mints an occurrence for a workbench-net reference at the cursor', () => {
     const machine = new InputMachine()
     machine.dispatch({ type: 'draft-changed', draft: 'hello world', editRange: { start: 0, end: 11 } })

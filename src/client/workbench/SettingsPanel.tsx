@@ -8,7 +8,8 @@
  * ① 声音与提醒 —— 提示音总闸、铃声选择、循环提醒与间隔；
  * ② 插件命令 —— 复用 SlashPanel 的 SettingsSection（内置 / 自定义斜杠命令管理）；
  * ③ 智能体控制面 —— 编辑器首 Tab「Agent Control Plane」显示开关；
- * ④ 会话渲染增强 —— 会话中 SVG 标签回答的渲染开关。
+ * ④ 会话渲染增强 —— 会话中 SVG 标签回答的渲染开关；
+ * ⑤ 改动确认 —— Agent write/edit 后的 Keep / Undo 确认机制。
  */
 import { useRef, useState, useSyncExternalStore } from 'react'
 import {
@@ -18,6 +19,7 @@ import {
 import type { Translate } from './types.ts'
 import { useBeepOn, useLoopReminder, useReminderInterval } from './useSessionMonitor.ts'
 import { useSvgRenderOn } from './svg-render-settings.ts'
+import { useReviewOn } from './review-settings.ts'
 import { SVG_RENDER_EXAMPLE } from './svg-tail.ts'
 import { IconChevron } from './icons.tsx'
 import { SoundSettings } from './SoundSettings.tsx'
@@ -26,11 +28,13 @@ import { getSlashCache, getSlashI18n, subscribeSlashI18n } from '../ultra-slash/
 import {
   DEFAULT_SETTINGS_COMMANDS_OPEN,
   DEFAULT_SETTINGS_CONTROL_PLANE_OPEN,
+  DEFAULT_SETTINGS_REVIEW_OPEN,
   DEFAULT_SETTINGS_SOUND_OPEN,
   DEFAULT_SETTINGS_SVG_RENDER_OPEN,
   readBoolFlag,
   SETTINGS_COMMANDS_OPEN_KEY,
   SETTINGS_CONTROL_PLANE_OPEN_KEY,
+  SETTINGS_REVIEW_OPEN_KEY,
   SETTINGS_SOUND_OPEN_KEY,
   SETTINGS_SVG_RENDER_OPEN_KEY,
   writeBoolFlag,
@@ -67,6 +71,7 @@ export function SettingsPanel({ t }: { t: Translate }) {
   const [intervalSec, setIntervalSec] = useReminderInterval()
   const [svgRenderOn, setSvgRenderOn] = useSvgRenderOn()
   const [controlPlaneOn, setControlPlaneOn] = useControlPlaneVisible()
+  const [reviewOn, setReviewOn] = useReviewOn()
   // 循环提醒生效 = 提示音总闸开启 且 循环提醒子开关开启（提示音关闭时联动失效，UI 与行为一致）
   const loopActive = beepOn && loopOn
   // 间隔输入草稿：键入过程中不写偏好，失焦 / Enter 才提交，非法输入回退
@@ -93,6 +98,7 @@ export function SettingsPanel({ t }: { t: Translate }) {
   const [commandsOpen, setCommandsOpen] = useState(() => readBoolFlag(SETTINGS_COMMANDS_OPEN_KEY, DEFAULT_SETTINGS_COMMANDS_OPEN))
   const [svgRenderOpen, setSvgRenderOpen] = useState(() => readBoolFlag(SETTINGS_SVG_RENDER_OPEN_KEY, DEFAULT_SETTINGS_SVG_RENDER_OPEN))
   const [controlPlaneOpen, setControlPlaneOpen] = useState(() => readBoolFlag(SETTINGS_CONTROL_PLANE_OPEN_KEY, DEFAULT_SETTINGS_CONTROL_PLANE_OPEN))
+  const [reviewOpen, setReviewOpen] = useState(() => readBoolFlag(SETTINGS_REVIEW_OPEN_KEY, DEFAULT_SETTINGS_REVIEW_OPEN))
   const toggleSound = (): void => {
     setSoundOpen((open) => {
       writeBoolFlag(SETTINGS_SOUND_OPEN_KEY, !open)
@@ -114,6 +120,12 @@ export function SettingsPanel({ t }: { t: Translate }) {
   const toggleControlPlane = (): void => {
     setControlPlaneOpen((open) => {
       writeBoolFlag(SETTINGS_CONTROL_PLANE_OPEN_KEY, !open)
+      return !open
+    })
+  }
+  const toggleReview = (): void => {
+    setReviewOpen((open) => {
+      writeBoolFlag(SETTINGS_REVIEW_OPEN_KEY, !open)
       return !open
     })
   }
@@ -247,6 +259,31 @@ export function SettingsPanel({ t }: { t: Translate }) {
               <div className={css.svgRenderTip}>
                 <span className={css.svgRenderTipText}>{t('settings.svgRenderTip')}</span>
                 <code className={css.svgRenderTipCode}>{SVG_RENDER_EXAMPLE}</code>
+              </div>
+            </div>
+          ) : null}
+        </section>
+
+        <section className={css.pane} data-open={reviewOpen || undefined}>
+          <div className={css.sectionHead}>
+            <button type="button" className={css.sectionToggle} aria-expanded={reviewOpen} onClick={toggleReview}>
+              <IconChevron open={reviewOpen} />
+              <span className={css.sectionTitle}>{t('settings.section.review')}</span>
+            </button>
+          </div>
+          {reviewOpen ? (
+            <div className={css.paneBody}>
+              <div className={css.settingRow}>
+                <span className={css.settingLabel}>{t('settings.reviewLabel')}</span>
+                <SettingsSwitch
+                  on={reviewOn}
+                  label={reviewOn ? t('settings.reviewOff') : t('settings.reviewOn')}
+                  title={reviewOn ? t('settings.reviewOnHint') : t('settings.reviewOffHint')}
+                  onToggle={setReviewOn}
+                />
+              </div>
+              <div className={css.svgRenderTip}>
+                <span className={css.svgRenderTipText}>{t('settings.reviewTip')}</span>
               </div>
             </div>
           ) : null}

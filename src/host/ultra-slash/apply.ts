@@ -56,8 +56,16 @@ export function applyUltraSlash(ctx: Context): void {
   const hub = createCommandHub(host)
   // Register builtins AFTER the hub exists so /skill and /docs read the
   // persisted per-command default prompts at invocation time.
-  applyCommands(host, () => hub.defaults())
-  void loadHubFromDisk(hub)
+  const yielded = applyCommands(host, () => hub.defaults())
+  // Only the half that owns the resources may load (and normalize) the shared
+  // store. When a leftover standalone ultra-slash install registered the
+  // builtins first, this half stood down: loading here would race the owner's
+  // own boot load on the same commands.json (and, with the old pid-based tmp
+  // name, one of the two rename() calls failed with ENOENT, latching a
+  // "could not write" warning in the settings panel).
+  if (!yielded) {
+    void loadHubFromDisk(hub)
+  }
   ctx.effect(() => {
     const server = ctx.webServer
     if (server === undefined || typeof server.register !== 'function') return () => {}

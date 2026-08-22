@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { GitClient } from '../api.ts'
-import type { GitFail } from '../../shared/types.ts'
+import type { GitFail, ReviewFileSnapshot } from '../../shared/types.ts'
 import { IconButton } from './IconButton.tsx'
 import { joinWorkspaceFile, suggestNewFileDir, termIdFromTabId } from '../../shared/new-file-path.ts'
-import { IconChat, IconClose, IconDiff, IconEditor, IconEye, IconGlobe, IconLayout, IconMore, IconPanelOff, IconPlus, IconSave, IconSplit, IconTerminal } from './icons.tsx'
+import { IconChat, IconChevronLeft, IconChevronRight, IconClose, IconDiff, IconEditor, IconEye, IconGlobe, IconLayout, IconMore, IconPanelOff, IconPlus, IconSave, IconSplit, IconTerminal } from './icons.tsx'
 import { PathBreadcrumb } from './PathBreadcrumb.tsx'
 import { TerminalView } from './TerminalView.tsx'
 import { BrowserView } from './BrowserView.tsx'
 import { TERMINAL_TAB_ID, browserTabLabel, controlPlaneTabLabel, terminalTabLabel, type FileBuffer, type FileTab, type Translate } from './types.ts'
-import { CodeEditor } from './CodeEditor.tsx'
+import { CodeEditor, type CodeEditorReviewNav } from './CodeEditor.tsx'
 import { isMarkdownPath } from './code-language.ts'
 import type { EditorModeId } from './editor-mode.ts'
 import { FilePreview } from './FilePreview.tsx'
@@ -54,6 +54,15 @@ export interface EditorPaneProps {
   terminalDocked?: boolean
   /** Editor selection / whole file → official composer chip. */
   onAddEditorToChat?: (snapshot: EditorRefSnapshot) => boolean
+  /** Pending Agent review for the active (or any open) file path. */
+  reviewByPath?: Record<string, ReviewFileSnapshot>
+  reviewBusy?: boolean
+  onReviewKeepFile?: (path: string) => void
+  onReviewUndoFile?: (path: string) => void
+  onReviewKeepHunk?: (path: string, hunkId: string) => void
+  onReviewUndoHunk?: (path: string, hunkId: string) => void
+  /** Open-from-review-panel request: jump the active file's editor to its first change. */
+  reviewJump?: { path: string; stamp: number } | null
   t: Translate
 }
 
@@ -108,14 +117,47 @@ type MdViewMode = 'edit' | 'preview' | 'split'
 /** Center editor: explorer + tabs + text/diff, with unsaved-close confirmation. */
 export function EditorPane({
   client, workspaceId, sessionId, tabs, activeId, buffers,
-  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onNewBrowser, onOpenDevtools, onPickBrowserEl, onBrowserTitle, onCreateFile, aiTermIds, onAiModeChange, editorMode, onDockToBottom, onTermCleanExit, terminalDocked, onAddEditorToChat, t,
+  onOpenFile, onActivate, onClose, onCloseMany, onDraft, onSaved, onCollapse, notice, termSeed, workspaceTitle, leadingSash, onNewTerminal, onNewBrowser, onOpenDevtools, onPickBrowserEl, onBrowserTitle, onCreateFile, aiTermIds, onAiModeChange, editorMode, onDockToBottom, onTermCleanExit, terminalDocked, onAddEditorToChat,
+  reviewByPath, reviewBusy, onReviewKeepFile, onReviewUndoFile, onReviewKeepHunk, onReviewUndoHunk, reviewJump = null, t,
 }: EditorPaneProps) {
   const active = tabs.find(tab => tab.id === activeId) ?? null
   const buffer = active?.kind === 'file' ? buffers[active.path] : undefined
   const dirty = buffer !== undefined && buffer.draft !== buffer.original
+  const activeReview = active?.kind === 'file' ? reviewByPath?.[active.path] : undefined
+  /** Review-bar prev/next-change navigation; null until the user navigates. */
+  const [reviewNav, setReviewNav] = useState<{ index: number; stamp: number } | null>(null)
+  const consumedJumpRef = useRef(-1)
+  const activeFilePath = active?.kind === 'file' ? active.path : null
+  useEffect(() => {
+    // 换文件时清掉导航位置，避免旧文件的 index 落到新文件上。
+    setReviewNav(null)
+  }, [activeFilePath])
+  useEffect(() => {
+    // Agent changes 面板点文件名 → 打开文件后自动定位到第一个 diff。
+    if (reviewJump === null || reviewJump.path !== activeFilePath) return
+    if (consumedJumpRef.current === reviewJump.stamp) return
+    consumedJumpRef.current = reviewJump.stamp
+    setReviewNav({ index: 0, stamp: 1 })
+  }, [reviewJump, activeFilePath])
+  const reviewHunkCount = activeReview?.hunks.length ?? 0
+  const navReviewHunk = (delta: -1 | 1): void => {
+    const n = reviewHunkCount
+    if (n === 0) return
+    setReviewNav((current) => {
+      if (current === null) {
+        // 首次点击：next → 第一个改动，prev → 最后一个改动（循环）。
+        return { index: delta === 1 ? 0 : n - 1, stamp: 1 }
+      }
+      return {
+        index: (current.index + delta + n) % n,
+        stamp: current.stamp + 1,
+      }
+    })
+  }
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<GitFail | null>(null)
   const [pendingClose, setPendingClose] = useState<{ ids: string[]; names: string[] } | null>(null)
+  const [reviewUndoAsk, setReviewUndoAsk] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; tabId: string } | null>(null)
   const [addOpen, setAddOpen] = useState(false)
@@ -466,23 +508,35 @@ export function EditorPane({
     body = <p className={css.hint}>{t('panel.loading')}</p>
   } else {
     /** One CodeMirror editor bound to one tab's buffer and vim ops. */
-    const editorOf = (tab: FileTab, buf: FileBuffer, ops: EditorVimOps): ReactNode => (
-      <CodeEditor
-        path={tab.path}
-        value={buf.draft}
-        label={fileName(tab.path)}
-        mode={editorMode}
-        t={t}
-        onChange={(next) => { onDraft(tab.path, next) }}
-        onSave={() => { void saveTab(tab.id) }}
-        onAddToChat={onAddEditorToChat === undefined
-          ? undefined
-          : (text, kind) => addEditorToChat(tab.id, text, kind)}
-        vimOps={ops}
-      />
-    )
+    const editorOf = (tab: FileTab, buf: FileBuffer, ops: EditorVimOps, nav?: CodeEditorReviewNav | null): ReactNode => {
+      const pending = reviewByPath?.[tab.path]
+      return (
+        <CodeEditor
+          path={tab.path}
+          value={buf.draft}
+          label={fileName(tab.path)}
+          mode={editorMode}
+          t={t}
+          onChange={(next) => { onDraft(tab.path, next) }}
+          onSave={() => { void saveTab(tab.id) }}
+          onAddToChat={onAddEditorToChat === undefined
+            ? undefined
+            : (text, kind) => addEditorToChat(tab.id, text, kind)}
+          vimOps={ops}
+          review={pending === undefined || onReviewKeepHunk === undefined || onReviewUndoHunk === undefined
+            ? undefined
+            : {
+              hunks: pending.hunks,
+              manualEdited: pending.manualEdited,
+              onKeepHunk: (hunkId) => { onReviewKeepHunk(tab.path, hunkId) },
+              onUndoHunk: (hunkId) => { onReviewUndoHunk(tab.path, hunkId) },
+            }}
+          reviewNav={nav}
+        />
+      )
+    }
     const primaryEditor = (() => {
-      const editor = editorOf(active, buffer, vimOps)
+      const editor = editorOf(active, buffer, vimOps, reviewNav)
       if (!markdownOpen) return editor
       return (
         <div className={css.mdShell} data-mode={mdMode}>
@@ -840,7 +894,85 @@ export function EditorPane({
               <div>{(error ?? notice)!.hintZh}</div>
             </div>
           ) : null}
+          {activeReview !== undefined && active?.kind === 'file' ? (
+            <div className={css.reviewBar} data-review-bar="">
+              <span className={css.reviewBarLabel}>
+                {t('review.editorBar', { n: String(activeReview.hunks.length) })}
+                {activeReview.manualEdited ? (
+                  <> · <span className={css.reviewBarWarn}>{t('review.manualEdited')}</span></>
+                ) : null}
+              </span>
+              <IconButton
+                dense
+                label={t('review.prevChange')}
+                disabled={reviewHunkCount === 0}
+                onClick={() => { navReviewHunk(-1) }}
+              >
+                <IconChevronLeft />
+              </IconButton>
+              <IconButton
+                dense
+                label={t('review.nextChange')}
+                disabled={reviewHunkCount === 0}
+                onClick={() => { navReviewHunk(1) }}
+              >
+                <IconChevronRight />
+              </IconButton>
+              <button
+                type="button"
+                className={css.reviewBarBtn}
+                disabled={reviewBusy === true || onReviewKeepFile === undefined}
+                onClick={() => { onReviewKeepFile?.(active.path) }}
+              >
+                {t('review.keep')}
+              </button>
+              <button
+                type="button"
+                className={css.reviewBarBtn}
+                disabled={reviewBusy === true || onReviewUndoFile === undefined}
+                onClick={() => {
+                  if (activeReview.manualEdited) setReviewUndoAsk(active.path)
+                  else onReviewUndoFile?.(active.path)
+                }}
+              >
+                {t('review.undo')}
+              </button>
+            </div>
+          ) : null}
           {body}
+          {reviewUndoAsk !== null ? (
+            <div
+              className={css.reviewDialogMask}
+              onClick={() => { setReviewUndoAsk(null) }}
+            >
+              <div
+                className={css.reviewDialog}
+                role="alertdialog"
+                aria-modal="true"
+                onClick={(event) => { event.stopPropagation() }}
+              >
+                <h2>{t('review.undoConfirmTitle')}</h2>
+                <p>{t('review.undoConfirmFileBody', { name: fileName(reviewUndoAsk) })}</p>
+                <div className={css.reviewDialogRow}>
+                  <button type="button" className={css.reviewBarBtn} onClick={() => { setReviewUndoAsk(null) }}>
+                    {t('review.undoConfirmCancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className={css.reviewBarBtn}
+                    disabled={reviewBusy === true}
+                    onClick={() => {
+                      const path = reviewUndoAsk
+                      setReviewUndoAsk(null)
+                      onReviewUndoFile?.(path)
+                    }}
+                  >
+                    {t('review.undoConfirmOk')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
           {newFileOpen ? (
             <div className={css.dialogMask}>
               <div className={css.dialog} role="dialog" aria-labelledby="git-new-file-title">

@@ -49,6 +49,15 @@ export function IconGit() {
   )
 }
 
+export function IconReview() {
+  return (
+    <Icon>
+      <path d="M2.5 2.5h11v11H2.5z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M5 8.2 7 10.2 11 5.8" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </Icon>
+  )
+}
+
 export function IconUsage() {
   return (
     <Icon>

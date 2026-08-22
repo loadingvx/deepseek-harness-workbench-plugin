@@ -636,3 +636,45 @@ describe('GitService init', () => {
     expect(probe.isRepo).toBe(false)
   })
 })
+describe('GitService non-ASCII paths', () => {
+  it('round-trips a Chinese filename through status, stage, commit, log and diff', async () => {
+    const root = await initRepo()
+    // Force git to C-quote non-ASCII paths (the default) so the octal
+    // unquoting in git-service is actually exercised.
+    await runGit({ cwd: root, args: ['config', 'core.quotePath', 'true'] })
+    await writeFile(join(root, '使用手册.md'), 'hello 中文\n')
+    const dirty = await git.status(root)
+    expect(dirty.untracked.map(file => file.path)).toContain('使用手册.md')
+    await git.stage(root, ['使用手册.md'])
+    expect((await git.status(root)).staged.map(file => file.path)).toContain('使用手册.md')
+    await git.commit(root, 'add 中文文档')
+    const log = await git.log(root, 5)
+    expect(log[0]?.subject).toBe('add 中文文档')
+    const files = await git.commitFiles(root, log[0]?.hash ?? '')
+    expect(files.map(file => file.path)).toEqual(['使用手册.md'])
+    const diff = await git.commitDiff(root, log[0]?.hash ?? '', '使用手册.md')
+    expect(diff.text).toContain('+hello 中文')
+  })
+
+  it('shows the new name of a renamed Chinese file', async () => {
+    const root = await initRepo()
+    await runGit({ cwd: root, args: ['config', 'core.quotePath', 'true'] })
+    await writeFile(join(root, '旧文件.md'), 'old\n')
+    await git.stage(root, ['旧文件.md'])
+    await git.commit(root, 'seed')
+    await runGit({ cwd: root, args: ['mv', '旧文件.md', '新文件.md'] })
+    const status = await git.status(root)
+    const renamed = status.staged.find(file => file.kind === 'renamed')
+    expect(renamed?.path).toBe('新文件.md')
+  })
+
+  it('keeps a path containing " -> " intact outside rename rows', async () => {
+    const root = await initRepo()
+    await runGit({ cwd: root, args: ['config', 'core.quotePath', 'true'] })
+    await writeFile(join(root, 'a -> b.md'), 'x\n')
+    const dirty = await git.status(root)
+    expect(dirty.untracked.map(file => file.path)).toContain('a -> b.md')
+    await git.stage(root, ['a -> b.md'])
+    expect((await git.status(root)).staged.map(file => file.path)).toContain('a -> b.md')
+  })
+})

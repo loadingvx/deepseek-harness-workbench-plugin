@@ -15,6 +15,7 @@ import { TerminalHub } from './terminal.ts'
 import { sanitizeTermId } from '../shared/new-file-path.ts'
 import { checkPluginUpdate } from './update-check.ts'
 import { readProviderUsage } from './provider-usage.ts'
+import type { PendingReviewStore } from './pending-review.ts'
 import type { WorkspaceFs } from './workspace-fs.ts'
 import {
   browserFailPage,
@@ -143,6 +144,7 @@ export function registerGitHttp(
   ctx: Context,
   git: GitService,
   fs: WorkspaceFs,
+  review?: PendingReviewStore,
   editors = new ExternalOpen(fs),
   term = new TerminalHub(),
 ): () => void {
@@ -266,6 +268,38 @@ export function registerGitHttp(
         result = await wrap(async () => {
           await git.restore(await gitRootOf(body), asStringArray(body.paths))
           return { done: true }
+        })
+      } else if (method === 'GET' && route === '/git/review') {
+        result = await wrap(async () => {
+          if (review === undefined) return { revision: 0, files: [] }
+          return review.list(rootOf())
+        })
+      } else if (method === 'POST' && route === '/git/review/prefs') {
+        const body = await readJson(req)
+        result = await wrap(async () => {
+          if (review === undefined) throw new Error('review unavailable')
+          if (typeof body.enabled === 'boolean') review.setEnabled(body.enabled)
+          return { enabled: review.isEnabled() }
+        })
+      } else if (method === 'POST' && route === '/git/review/keep') {
+        const body = await readJson(req)
+        result = await wrap(async () => {
+          if (review === undefined) throw new Error('review unavailable')
+          const path = typeof body.path === 'string' ? body.path : ''
+          const hunkId = typeof body.hunkId === 'string' ? body.hunkId : undefined
+          if (path === '') return review.keepAll(rootOf(body))
+          if (hunkId !== undefined && hunkId !== '') return review.keepHunk(rootOf(body), path, hunkId)
+          return review.keepFile(rootOf(body), path)
+        })
+      } else if (method === 'POST' && route === '/git/review/undo') {
+        const body = await readJson(req)
+        result = await wrap(async () => {
+          if (review === undefined) throw new Error('review unavailable')
+          const path = typeof body.path === 'string' ? body.path : ''
+          const hunkId = typeof body.hunkId === 'string' ? body.hunkId : undefined
+          if (path === '') return review.undoAll(rootOf(body))
+          if (hunkId !== undefined && hunkId !== '') return review.undoHunk(rootOf(body), path, hunkId)
+          return review.undoFile(rootOf(body), path)
         })
       } else if (method === 'POST' && route === '/git/commit') {
         const body = await readJson(req)

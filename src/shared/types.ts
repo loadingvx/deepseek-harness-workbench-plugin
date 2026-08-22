@@ -54,6 +54,10 @@ export type GitErrorCode =
   | 'BROWSER_TIMEOUT'
   | 'BROWSER_FAILED'
   | 'BROWSER_SELF'
+  | 'REVIEW_NOT_FOUND'
+  | 'REVIEW_STALE'
+  | 'REVIEW_AMBIGUOUS'
+  | 'REVIEW_FULL'
 
 export interface GitFail {
   ok: false
@@ -337,6 +341,35 @@ export interface SessionContextPressure {
   pressureTokens?: number
   projectedTokens?: number
   contextWindow?: number
+}
+
+/** One pending Agent edit hunk (baseline ↔ current disk). */
+export interface ReviewHunk {
+  id: string
+  oldText: string | null
+  newText: string
+}
+
+/** One file still awaiting Keep / Undo in the Agent review queue. */
+export interface ReviewFileSnapshot {
+  path: string
+  created: boolean
+  updatedAt: number
+  afterHash: string
+  /**
+   * Disk no longer matches the Agent-settled snapshot (user typed more, etc.).
+   * Cursor-style: stay in pending; Keep accepts current; Undo restores baseline after confirm.
+   */
+  manualEdited: boolean
+  hunks: ReviewHunk[]
+  addedLines: number
+  removedLines: number
+}
+
+/** Workspace-scoped Agent review queue (Cursor/Trae-style Keep/Undo). */
+export interface ReviewSnapshot {
+  revision: number
+  files: ReviewFileSnapshot[]
 }
 
 /** Heuristic composition of the next request (not billed totals). */

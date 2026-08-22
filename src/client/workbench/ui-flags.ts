@@ -24,6 +24,7 @@ export const SETTINGS_COMMANDS_OPEN_KEY = 'dsh-workbench-settings-commands-open'
 export const SETTINGS_SVG_RENDER_OPEN_KEY = 'dsh-workbench-settings-svg-render-open'
 export const SETTINGS_CONTROL_PLANE_OPEN_KEY = 'dsh-workbench-settings-control-plane-open'
 export const CONTROL_PLANE_VISIBLE_KEY = 'dsh-workbench-control-plane-visible'
+export const SETTINGS_REVIEW_OPEN_KEY = 'dsh-workbench-settings-review-open'
 
 /** Compact GRAPH (message-only rows) is the factory default. */
 export const DEFAULT_GRAPH_COMPACT = true
@@ -40,3 +41,4 @@ export const DEFAULT_SETTINGS_SVG_RENDER_OPEN = true
 export const DEFAULT_SETTINGS_CONTROL_PLANE_OPEN = true
 /** Agent Control Plane 编辑器首 Tab：默认开启。 */
 export const DEFAULT_CONTROL_PLANE_VISIBLE = true
+export const DEFAULT_SETTINGS_REVIEW_OPEN = true

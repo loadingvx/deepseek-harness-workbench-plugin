@@ -77,13 +77,93 @@ export function parseParents(raw: string | undefined): string[] {
   return parents
 }
 
-function parsePath(raw: string): string {
+function pushUtf8(bytes: number[], ch: string): void {
+  for (const byte of new TextEncoder().encode(ch)) bytes.push(byte)
+}
+
+/**
+ * Decode one git-quoted path token. Git C-quotes paths that need it
+ * (core.quotePath defaults to on): every non-ASCII byte becomes \ooo
+ * octal (so a Chinese name like 使用手册.md comes back as "\344\275\277..."),
+ * and control characters, double quotes and backslashes become \t, \n,
+ * \" and \\ escapes. Decoding the octal bytes back through UTF-8 is what
+ * keeps non-ASCII filenames usable; leaving the backslashes in makes later
+ * code treat them as separators and every git command fails with
+ * `fatal: Invalid path '/344': No such file or directory`.
+ */
+function unquoteToken(raw: string): string {
   const trimmed = raw.trim()
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed.slice(1, -1).replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+  if (!(trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2)) {
+    return trimmed
   }
-  const arrow = trimmed.indexOf(' -> ')
-  return arrow === -1 ? trimmed : trimmed.slice(arrow + 4)
+  const body = trimmed.slice(1, -1)
+  const bytes: number[] = []
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i]
+    if (ch !== '\\') {
+      pushUtf8(bytes, ch)
+      continue
+    }
+    const next = body[i + 1]
+    if (next === undefined) {
+      pushUtf8(bytes, '\\')
+      break
+    }
+    switch (next) {
+      case 'a': bytes.push(0x07); i++; break
+      case 'b': bytes.push(0x08); i++; break
+      case 't': bytes.push(0x09); i++; break
+      case 'n': bytes.push(0x0a); i++; break
+      case 'v': bytes.push(0x0b); i++; break
+      case 'f': bytes.push(0x0c); i++; break
+      case 'r': bytes.push(0x0d); i++; break
+      case '"': bytes.push(0x22); i++; break
+      case '\\': bytes.push(0x5c); i++; break
+      default:
+        if (next >= '0' && next <= '7') {
+          let value = 0
+          let count = 0
+          while (count < 3 && i + 1 + count < body.length) {
+            const digit = body[i + 1 + count]
+            if (digit < '0' || digit > '7') break
+            value = value * 8 + (digit.charCodeAt(0) - 0x30)
+            count++
+          }
+          if (value > 0xff) {
+            pushUtf8(bytes, '\\')
+            break
+          }
+          bytes.push(value)
+          i += count
+        } else {
+          // Not a git escape: keep the backslash literally.
+          pushUtf8(bytes, '\\')
+          i++
+        }
+    }
+  }
+  return new TextDecoder().decode(Uint8Array.from(bytes))
+}
+
+/**
+ * Parse the path column of a porcelain v1 status row. Rename rows look like
+ * `R  old -> new` with either side C-quoted (git always quotes a path that
+ * contains ` -> `); every other row is a single path token.
+ */
+function parsePath(raw: string, rename = false): string {
+  if (!rename) return unquoteToken(raw)
+  const body = raw.trim()
+  let inQuote = false
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i]
+    if (ch === '\\') { i++; continue }
+    if (ch === '"') { inQuote = !inQuote; continue }
+    if (!inQuote && body.startsWith(' -> ', i)) {
+      return unquoteToken(body.slice(i + 4))
+    }
+  }
+  const arrow = body.indexOf(' -> ')
+  return arrow === -1 ? unquoteToken(body) : unquoteToken(body.slice(arrow + 4))
 }
 
 /** Visible header so an empty new file is not mistaken for “no diff”. */
@@ -160,7 +240,7 @@ function parsePorcelain(stdout: string): { header: string; files: GitFileChange[
     if (line.length < 4) continue
     const x = line[0] ?? ' '
     const y = line[1] ?? ' '
-    const path = parsePath(line.slice(3))
+    const path = parsePath(line.slice(3), x === 'R')
     if (x !== ' ' && x !== '?') {
       const kind = letterKind(x)
       files.push({ path, kind, staged: true, labelZh: KIND_LABEL[kind] })
@@ -628,7 +708,7 @@ export class GitService {
       const letter = (parts[0] ?? '').trim()
       if (letter === '') continue
       // R100\told\tnew → path is the new name; plain entries are XY\tpath.
-      const path = parts.length >= 3 ? (parts[2] ?? '') : (parts[1] ?? '')
+      const path = parts.length >= 3 ? unquoteToken(parts[2] ?? '') : unquoteToken(parts[1] ?? '')
       if (path.trim() === '') continue
       const kind = letterKind(letter.charAt(0) ?? 'M')
       files.push({ path: path.trim(), kind, staged: false, labelZh: KIND_LABEL[kind] })
