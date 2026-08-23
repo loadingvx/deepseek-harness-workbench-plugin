@@ -1,7 +1,5 @@
-import { loadMermaid } from './mermaid-loader.ts'
-
-let initialized = false
-let sequence = 0
+import { renderMermaidSVG } from 'beautiful-mermaid'
+import { mermaidRenderOptions } from './mermaid-theme.ts'
 
 export interface MermaidHostClasses {
   host: string
@@ -14,22 +12,6 @@ export interface MermaidLabels {
   loadFail: string
 }
 
-function initMermaid(api: { initialize: (config: {
-  startOnLoad: boolean
-  securityLevel: string
-  theme: string
-  fontFamily: string
-}) => void }): void {
-  if (initialized) return
-  initialized = true
-  api.initialize({
-    startOnLoad: false,
-    securityLevel: 'strict',
-    theme: 'default',
-    fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-  })
-}
-
 function mermaidBlocks(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll('pre > code.language-mermaid'))
     .map((code) => code.parentElement)
@@ -37,11 +19,9 @@ function mermaidBlocks(root: HTMLElement): HTMLElement[] {
 }
 
 /**
- * Render every mermaid fenced block inside root into an SVG diagram using the
- * official mermaid.js renderer. The mermaid library is loaded on first use from
- * `/git/vendor/mermaid.js` so it is not part of the DSH boot `client.js`.
- * Blocks are processed sequentially; a block that fails to parse keeps its
- * source text visible inside an error box with the parser message as a tooltip.
+ * Render every mermaid fenced block inside root into an SVG diagram via
+ * beautiful-mermaid (bundled in client.js). Blocks are processed sequentially;
+ * unsupported syntax or parse errors keep the source visible in an error box.
  * Returns the number of mermaid blocks found.
  */
 export async function renderMermaidBlocks(
@@ -65,22 +45,7 @@ export async function renderMermaidBlocks(
     hosts.push({ host, source })
   }
 
-  let mermaid
-  try {
-    mermaid = await loadMermaid()
-  } catch (error) {
-    if (isCancelled()) return hosts.length
-    const detail = error instanceof Error ? error.message : String(error)
-    for (const { host, source } of hosts) {
-      host.className = classes.error
-      host.textContent = labels.loadFail + (source.trim() === '' ? '' : '\n\n' + source)
-      host.title = detail
-    }
-    return hosts.length
-  }
-  if (isCancelled()) return hosts.length
-  initMermaid(mermaid)
-
+  const options = mermaidRenderOptions(root)
   let found = 0
   for (const { host, source } of hosts) {
     if (isCancelled()) return found
@@ -90,11 +55,10 @@ export async function renderMermaidBlocks(
       continue
     }
     try {
-      const { svg, bindFunctions } = await mermaid.render('dsw-mmd-' + (++sequence), source)
+      const svg = renderMermaidSVG(source, options)
       if (isCancelled()) return found
       host.textContent = ''
       host.innerHTML = svg
-      bindFunctions?.(host)
     } catch (error) {
       if (isCancelled()) return found
       host.className = classes.error

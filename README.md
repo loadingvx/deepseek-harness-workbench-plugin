@@ -79,7 +79,7 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 - Vim mode: visual selections render properly (`v` / `V` / `<C-v>`); `:w` saves, `:q` closes the tab, `:qa` closes all, `:x` / `:wq` save and close, `:vs` / `:sp` split left-right / top-bottom, `:only` unsplits; append `!` to force (skip unsaved-change confirmation)
 - Editor split: `:vs` / `:sp` splits only the editor body into two file views — the toolbar and tab bar stay single, nothing is duplicated; the split pane's tab is underlined, clicking a tab switches the focused pane's file; drag the sash to resize, `:only` or the "Unsplit" toolbar button merges back
 - Editor → chat: a floating "Add to chat" button appears on selection; the toolbar and the tab right-click menu can add the whole file — the same official composer chip as terminal / network refs, with the file path as context
-- Markdown: edit, preview, or split; GFM; http(s) and workspace-relative images; [Mermaid](https://mermaid.js.org/) 11 fenced blocks; workspace file links open in the editor; unsafe links are blocked
+- Markdown: edit, preview, or split; GFM; http(s) and workspace-relative images; Mermaid fenced blocks (flowchart, sequence, state, class, ER, XY chart via [beautiful-mermaid](https://www.npmjs.com/package/beautiful-mermaid)); workspace file links open in the editor; unsafe links are blocked
 - Git working-tree diffs and commit diffs open as editor tabs
 - Image preview: png, jpg, jpeg, gif, webp, avif, bmp, ico
 - Table preview: csv, tsv, xlsx (UTF-8, then GB18030 if the file looks garbled). `.xls` is recognized but opens in an external app

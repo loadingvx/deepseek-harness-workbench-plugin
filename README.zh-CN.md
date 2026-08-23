@@ -78,7 +78,7 @@ DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作�
 - Vim 模式：视觉模式选中区域正常高亮（`v` / `V` / `<C-v>`）；`:w` 保存、`:q` 关闭标签、`:qa` 全部关闭、`:x` / `:wq` 保存并关闭、`:vs` / `:sp` 左右 / 上下分栏、`:only` 取消分栏；`!` 强制（跳过未保存确认）
 - 编辑器分栏：`:vs` / `:sp` 只把编辑区正文拆成两个文件视图——顶部工具栏、标签栏保持单一，不重复；分栏对应的标签带下划线标记，点标签切换焦点栏的文件；拖动分隔条调整大小，`:only` 或工具栏「合并分栏」按钮合并
 - 编辑器内容 → 会话：选中代码出现「添加到chat」浮动按钮；工具栏与标签右键菜单可把整个文件加入会话（与终端、网络请求同一官方胶囊机制，附文件路径）
-- Markdown：编辑、预览、分栏；GFM；`http(s)` 与工作区相对路径图片；[Mermaid](https://mermaid.js.org/) 11 代码块；工作区文件链接可点开；不安全链接会拦截
+- Markdown：编辑、预览、分栏；GFM；`http(s)` 与工作区相对路径图片；Mermaid 代码块（流程图、时序图、状态图、类图、ER 图、XY 图，基于 [beautiful-mermaid](https://www.npmjs.com/package/beautiful-mermaid)）；工作区文件链接可点开；不安全链接会拦截
 - 工作区 diff 与提交 diff 在编辑器标签中打开
 - 图片预览：png、jpg、jpeg、gif、webp、avif、bmp、ico
 - 表格预览：csv、tsv、xlsx（UTF-8，乱码时再试 GB18030）。`.xls` 请用本机应用打开

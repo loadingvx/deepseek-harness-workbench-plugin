@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises'
 import { existsSync, readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import { basename, dirname, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { transform } from 'lightningcss'
@@ -15,27 +14,11 @@ function resolveBrowserPkg(spec: string): string {
   return resolved.startsWith('file:') ? fileURLToPath(resolved) : resolved
 }
 
-/**
- * mermaid's architecture diagrams import cytoscape. Output format is CJS, so
- * rolldown would pick cytoscape's "require" export and hoist
- * require("cytoscape") — DSH ModuleLoader has no such factory. Point at the
- * ESM file by path (createRequire cannot use the "import"-only subpath).
- */
-function resolveMermaidCytoscapeEsm(): string {
-  const mermaidPkg = fileURLToPath(new URL(import.meta.resolve('mermaid/package.json')))
-  const cytoscapeCjs = createRequire(mermaidPkg).resolve('cytoscape')
-  const esm = resolvePath(dirname(cytoscapeCjs), 'cytoscape.esm.mjs')
-  if (!existsSync(esm)) {
-    throw new Error(`找不到 mermaid 附带的 cytoscape ESM（${esm}）。请重新安装依赖后再构建。`)
-  }
-  return esm
-}
-
 const PACKAGE_ID = 'dsh-workbench-plugin'
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'
 
-function browserShims(withCytoscape: boolean): Record<string, string> {
+function browserShims(): Record<string, string> {
   return {
     'node:process': resolvePath('src/client/shims/node-process.ts'),
     'node:path': resolvePath('src/client/shims/node-path.ts'),
@@ -43,7 +26,6 @@ function browserShims(withCytoscape: boolean): Record<string, string> {
     'node:module': resolvePath('src/client/shims/node-module.ts'),
     module: resolvePath('src/client/shims/node-module.ts'),
     fflate: resolveBrowserPkg('fflate/browser'),
-    ...(withCytoscape ? { cytoscape: resolveMermaidCytoscapeEsm() } : {}),
   }
 }
 
@@ -126,7 +108,7 @@ const client: UserConfig = {
   clean: false,
   external: [...CLIENT_EXTERNALS],
   noExternal: (id: string) => (CLIENT_EXTERNALS.includes(id as (typeof CLIENT_EXTERNALS)[number]) ? undefined : true),
-  alias: browserShims(false),
+  alias: browserShims(),
   define: {
     'process.env.NODE_ENV': JSON.stringify(nodeEnv),
     'import.meta.env.MODE': JSON.stringify(nodeEnv),
@@ -147,8 +129,6 @@ const client: UserConfig = {
   }, cssModulesPlugin()],
   outputOptions: {
     entryFileNames: 'client.js',
-    // DSH ModuleLoader wraps this factory and cannot fetch sibling chunks.
-    // Heavy mermaid lives in lib/vendor/mermaid.js and is loaded at preview time.
     inlineDynamicImports: true,
     banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PACKAGE_ID)}, factory: (require) => {`,
     footer: 'return module.exports; } });',
@@ -156,33 +136,4 @@ const client: UserConfig = {
   },
 }
 
-/**
- * Browser ESM served at `/git/vendor/mermaid.js`. Must not use the ModuleLoader
- * banner: the page loads it with native `import(url)` after boot.
- */
-const mermaidVendor: UserConfig = {
-  name: `${PACKAGE_ID}/vendor-mermaid`,
-  entry: { mermaid: 'src/client/vendor/mermaid-entry.ts' },
-  outDir: 'lib/vendor',
-  format: 'esm',
-  platform: 'browser',
-  target: 'es2024',
-  dts: false,
-  sourcemap: false,
-  minify: true,
-  clean: false,
-  noExternal: () => true,
-  alias: browserShims(true),
-  define: {
-    'process.env.NODE_ENV': JSON.stringify(nodeEnv),
-    'import.meta.env.MODE': JSON.stringify(nodeEnv),
-    'import.meta.env': JSON.stringify({ MODE: nodeEnv }),
-  },
-  plugins: [cssModulesPlugin()],
-  outputOptions: {
-    entryFileNames: 'mermaid.js',
-    inlineDynamicImports: true,
-  },
-}
-
-export default [host, client, mermaidVendor]
+export default [host, client]

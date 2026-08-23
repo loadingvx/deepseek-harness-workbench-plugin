@@ -72,22 +72,10 @@ describe('lib/client.js', () => {
     expect(code).not.toContain('require("cytoscape")')
   })
 
-  it('does not inline mermaid into the boot factory', () => {
+  it('bundles beautiful-mermaid for markdown preview diagrams', () => {
     if (!existsSync(bundle)) return
     const code = readFileSync(bundle, 'utf8')
-    expect(code.includes('/git/vendor/mermaid.js')).toBe(true)
-    expect(code.includes('@mermaid-js/parser')).toBe(false)
-  })
-})
-
-describe('lib/vendor/mermaid.js', () => {
-  const vendor = resolve(import.meta.dirname, '../lib/vendor/mermaid.js')
-
-  it('is a self-contained ESM bundle, not a re-export of the npm package', () => {
-    if (!existsSync(vendor)) return
-    const code = readFileSync(vendor, 'utf8')
-    expect(code.length).toBeGreaterThan(1_000_000)
-    expect(code.startsWith('window.__ModuleLoader__')).toBe(false)
-    expect(code.includes(' as default}')).toBe(true)
+    expect(code.includes('org.eclipse.elk') || code.includes('elkjs')).toBe(true)
+    expect(code.includes('/git/vendor/mermaid.js')).toBe(false)
   })
 })

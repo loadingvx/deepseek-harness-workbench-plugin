@@ -24,7 +24,6 @@ import {
   inspectScriptBody,
 } from './browser-proxy.ts'
 import { isWorkbenchSelfUrl, readBrowserViewTarget, workbenchHrefFromHost } from '../shared/browser-url.ts'
-import { sendVendorAsset, vendorDirFrom } from './vendor-static.ts'
 
 function sendHtml(res: ServerResponse, status: number, html: string): void {
   res.statusCode = status
@@ -162,17 +161,6 @@ export function registerGitHttp(
     if (method === 'OPTIONS') {
       res.statusCode = 204
       res.end()
-      return
-    }
-
-    if (method === 'GET' && route.startsWith('/git/vendor/')) {
-      const served = await sendVendorAsset(req, res, route, vendorDirFrom(import.meta.url))
-      if (!served) {
-        res.statusCode = 404
-        res.setHeader('content-type', 'text/plain; charset=utf-8')
-        res.setHeader('cache-control', 'no-store')
-        res.end('没有这个脚本。')
-      }
       return
     }
 

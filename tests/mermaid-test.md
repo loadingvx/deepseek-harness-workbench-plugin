@@ -1,15 +1,23 @@
-# Mermaid 渲染能力测试
+# Mermaid 渲染测试（Markdown 预览）
 
-本文件用于检查 Markdown 预览是否支持 [Mermaid](https://mermaid.js.org/) 图表。
+> **路径**：`tests/mermaid-test.md`  
+> **用途**：在工作台编辑器中打开本文件，切换到 **预览**（👁）或 **分栏** 模式，逐块检查 Mermaid 是否正常渲染。
 
-**判定方法**：在编辑器中打开本文件，切到「预览」（👁）或「分栏」模式。
+当前渲染引擎：[beautiful-mermaid](https://www.npmjs.com/package/beautiful-mermaid)（已打进插件 `client.js`，无需额外加载 vendor 脚本）。
 
-- ✅ **支持**：下面的 ```mermaid 代码块会渲染成对应图表（流程图、时序图、甘特图等）。
-- ❌ **不支持**：所有 ```mermaid 块原样显示为灰色代码块（只看到文本，没有图形）。
+## 怎么判断
+
+| 现象 | 含义 |
+| --- | --- |
+| 代码块变成 SVG 图表 | ✅ 当前引擎支持该语法 |
+| 灰色虚线框 + 保留源码 + 顶部错误提示 | ❌ 不支持或语法有误（属预期行为） |
+| 仍是普通灰色代码块、完全没有图形 | 预览未启用 Mermaid，或插件未加载 |
 
 ---
 
-## 1. 流程图 Flowchart（graph TD，含子图与样式）
+## ✅ 支持的图表（应渲染为 SVG）
+
+### 1. 流程图 · 自上而下 `graph TD`
 
 ```mermaid
 graph TD
@@ -22,17 +30,19 @@ graph TD
     style C fill:#bbf,stroke:#333,stroke-width:2px
 ```
 
-## 2. 流程图 Flowchart LR（含 HTML 标签）
+### 2. 流程图 · 自左向右 `flowchart LR`（含子图）
 
 ```mermaid
 flowchart LR
-    A["客户端 <br/> fetch /git/status"] --> B{HTTP 200?}
-    B -->|是| C["解析 JSON<br/>GitResult"]
+    subgraph 客户端
+        A["fetch /git/status"] --> B{HTTP 200?}
+    end
+    B -->|是| C["解析 GitResult"]
     B -->|否| D["显示错误横幅"]
     C --> E["更新侧栏"]
 ```
 
-## 3. 时序图 Sequence（loop / alt）
+### 3. 时序图 `sequenceDiagram`（含 loop / alt）
 
 ```mermaid
 sequenceDiagram
@@ -46,13 +56,13 @@ sequenceDiagram
         H-->>W: 写入结果
     end
     alt 成功
-        W-->>U: 已保存 ✓
+        W-->>U: 已保存
     else 失败
         W-->>U: 显示错误提示
     end
 ```
 
-## 4. 类图 Class
+### 4. 类图 `classDiagram`
 
 ```mermaid
 classDiagram
@@ -68,7 +78,7 @@ classDiagram
     GitClient ..> GitFail : 返回
 ```
 
-## 5. 状态图 State v2
+### 5. 状态图 `stateDiagram-v2`
 
 ```mermaid
 stateDiagram-v2
@@ -80,22 +90,59 @@ stateDiagram-v2
     已保存 --> [*]
 ```
 
-## 6. ER 图
+### 6. ER 图 `erDiagram`
 
 ```mermaid
 erDiagram
     WORKSPACE ||--o{ TAB : contains
-    TAB {
-        string path
-        string kind
-    }
     WORKSPACE {
         string workspaceId
         string path
     }
+    TAB {
+        string path
+        string kind
+    }
 ```
 
-## 7. 甘特图 Gantt
+### 7. XY 图 · 柱状 `xychart-beta`（bar）
+
+```mermaid
+xychart-beta
+    title "会话 Token 分布"
+    x-axis [prompt, completion, tools]
+    y-axis "tokens" 0 --> 12000
+    bar [8200, 3100, 900]
+```
+
+### 8. XY 图 · 折线 `xychart-beta`（line）
+
+```mermaid
+xychart-beta
+    title "近 7 日用量"
+    x-axis [Mon, Tue, Wed, Thu, Fri, Sat, Sun]
+    y-axis "USD" 0 --> 5
+    line [1.2, 0.8, 2.1, 1.5, 3.0, 0.4, 0.6]
+```
+
+### 9. XY 图 · 柱线组合
+
+```mermaid
+xychart-beta
+    title "请求量 vs 错误率"
+    x-axis [w1, w2, w3, w4]
+    y-axis "count" 0 --> 500
+    bar [120, 200, 180, 260]
+    line [2, 5, 3, 8]
+```
+
+---
+
+## ❌ 暂不支持的图表（应显示错误框并保留源码）
+
+以下语法来自官方 Mermaid，**beautiful-mermaid 尚未实现**。预览时应出现错误提示框，而不是 SVG。
+
+### A. 甘特图 `gantt`
 
 ```mermaid
 gantt
@@ -109,7 +156,7 @@ gantt
     上线          :milestone, after b1, 0d
 ```
 
-## 8. 饼图 Pie
+### B. 饼图 `pie`
 
 ```mermaid
 pie title 语言占比
@@ -118,7 +165,7 @@ pie title 语言占比
     "Markdown" : 15
 ```
 
-## 9. 用户旅程 User Journey
+### C. 用户旅程 `journey`
 
 ```mermaid
 journey
@@ -130,7 +177,7 @@ journey
       等待文件树: 2: 系统
 ```
 
-## 10. 思维导图 Mindmap
+### D. 思维导图 `mindmap`
 
 ```mermaid
 mindmap
@@ -145,7 +192,7 @@ mindmap
       命令助手
 ```
 
-## 11. 时间线 Timeline
+### E. 时间线 `timeline`
 
 ```mermaid
 timeline
@@ -155,7 +202,7 @@ timeline
     0.1.8 : Markdown 图片
 ```
 
-## 12. Git 图 Gitgraph
+### F. Git 图 `gitGraph`
 
 ```mermaid
 gitGraph
@@ -169,11 +216,25 @@ gitGraph
 
 ---
 
-## 对照：普通代码块（非 mermaid，应始终显示为代码）
+## 对照：普通代码块（非 mermaid）
+
+下面应**始终**显示为代码，不会变成图表：
 
 ```text
 graph TD
-    A-->B
+    A --> B
 ```
 
-> 提示：如果上面所有 mermaid 块都只是代码块，说明当前预览**不支持 mermaid**；若部分支持部分不支持，可据此判断用的是哪个 mermaid 解析器（mermaid.js 8 / 9 / 10+ 对新语法支持不同）。
+---
+
+## 回归检查清单
+
+打开 `tests/mermaid-test.md` 后快速过一遍：
+
+1. **§1–§9** 共 9 个块 → 全部出现 SVG
+2. **§A–§F** 共 6 个块 → 全部出现错误框（含原始源码）
+3. 最底部 `text` 代码块 → 保持代码样式
+4. 切换 **编辑 / 预览 / 分栏** 三种模式，图表不丢失、不重复
+5. 切换工作台明暗主题后，图表颜色随 CSS 变量变化（无需刷新整页）
+
+若 §1–§9 任意一块只显示代码，说明 Mermaid 渲染链路异常，请检查插件是否已 `pnpm run build` 并重新 `bash devops/dev.sh`。
