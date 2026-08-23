@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { registerControlPlane } from './host/control-plane/http.ts'
 import { GitService } from './host/git-service.ts'
 import { registerGitHttp } from './host/http.ts'
 import { PendingReviewStore, registerPendingReview } from './host/pending-review.ts'
@@ -8,7 +9,16 @@ import { registerSoundsHttp } from './host/workbench-sounds/http.ts'
 import { WorkspaceFs } from './host/workspace-fs.ts'
 
 export const name = 'dsh-workbench-plugin'
-export const inject = ['tools', 'webServer', 'llm', 'agentDefaultModel', 'commands']
+/** agents / systemPrompt：控制面观测与旋钮；未声明 inject 时访问 ctx.agents 会直接让 profile 启动失败。 */
+export const inject = [
+  'tools',
+  'webServer',
+  'llm',
+  'agentDefaultModel',
+  'commands',
+  'agents',
+  'systemPrompt',
+]
 
 /** Host half: Git service, workspace files, JSON API, model-facing tools, Ultra Slash, and sounds. */
 export function apply(ctx: Context): void {
@@ -16,6 +26,7 @@ export function apply(ctx: Context): void {
   const fs = new WorkspaceFs()
   const review = new PendingReviewStore(fs)
   ctx.effect(() => registerGitHttp(ctx, git, fs, review), 'workbench: http')
+  ctx.effect(() => registerControlPlane(ctx), 'workbench: control-plane')
   ctx.effect(() => registerGitTools(ctx, git), 'workbench: tools')
   ctx.effect(() => registerPendingReview(ctx, review), 'workbench: pending review')
   applyUltraSlash(ctx)

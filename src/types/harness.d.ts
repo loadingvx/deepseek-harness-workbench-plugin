@@ -53,6 +53,11 @@ declare module '@deepseek-ai/cordis' {
     }
     agents?: {
       get(id: string): unknown
+      list(): unknown[]
+    }
+    systemPrompt?: {
+      section(spec: { name: string; order: number; text: string }): () => void
+      assemble(context?: Record<string, unknown>): Promise<{ sections: Array<{ name: string; text?: string; complete?: boolean }> }>
     }
     credentials?: {
       resolve(ref: string): Promise<{ value?: string } | undefined>

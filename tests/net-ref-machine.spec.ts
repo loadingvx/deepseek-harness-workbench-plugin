@@ -4,8 +4,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { buildNetReference, encodeNetRef } from '../src/shared/browser-net-ref.ts'
 
-const PLACEHOLDER = '\uFFFC'
-
 /** Optional override; otherwise ./deepseek-harness (gitignored symlink) beside this repo. */
 const harnessRoot = process.env.DSH_HARNESS
   ? resolve(process.env.DSH_HARNESS)
@@ -26,6 +24,7 @@ type InputMachineInstance = {
   dispatch: (event: unknown) => void
 }
 type InputMachineCtor = new () => InputMachineInstance
+type ReferenceDraftText = (reference: Pick<{ label: string }, 'label'>) => string
 
 /**
  * Integration against the real harness InputMachine.
@@ -34,10 +33,15 @@ type InputMachineCtor = new () => InputMachineInstance
  */
 describe.skipIf(!hasHarnessMachine)('harness input machine accepts net-ref chips', () => {
   let InputMachine: InputMachineCtor
+  let referenceDraftText: ReferenceDraftText
 
   beforeAll(async () => {
-    const mod = await import(pathToFileURL(machinePath).href) as { InputMachine: InputMachineCtor }
+    const mod = await import(pathToFileURL(machinePath).href) as {
+      InputMachine: InputMachineCtor
+      referenceDraftText: ReferenceDraftText
+    }
     InputMachine = mod.InputMachine
+    referenceDraftText = mod.referenceDraftText
   })
 
   it('mints an occurrence for a workbench-net reference at the cursor', () => {
@@ -52,7 +56,7 @@ describe.skipIf(!hasHarnessMachine)('harness input machine accepts net-ref chips
       span: { start: 11, end: 11, draftRev: before.draftRev },
     })
     const after = machine.state
-    expect(after.draft).toBe('hello world' + PLACEHOLDER + ' ')
+    expect(after.draft).toBe('hello world' + referenceDraftText(ref!) + ' ')
     expect(after.occurrences.length).toBe(1)
     expect(after.occurrences[0]!.ref).toBe(encodeNetRef({ method: 'POST', url: 'https://example.com/api' }))
     expect(after.occurrences[0]!.label).toContain('curl')
@@ -86,6 +90,7 @@ describe.skipIf(!hasHarnessMachine)('harness input machine accepts net-ref chips
     const spanB = { start: machine.state.draft.length, end: machine.state.draft.length, draftRev: machine.state.draftRev }
     machine.dispatch({ type: 'insert-ref', reference: refB!, span: spanB })
     expect(machine.state.occurrences.length).toBe(2)
-    expect(machine.state.draft).toContain('\uFFFC')
+    expect(machine.state.draft).toContain(referenceDraftText(refA!))
+    expect(machine.state.draft).toContain(referenceDraftText(refB!))
   })
 })

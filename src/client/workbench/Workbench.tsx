@@ -73,7 +73,7 @@ import {
 import { getReviewOn, subscribeReviewOn } from './review-settings.ts'
 import { termIdFromTabId } from '../../shared/new-file-path.ts'
 import type { TermCleanExitAction } from './term-session.ts'
-import { createTerminalTab, nextBrowserTab, nextTerminalTab, TERMINAL_TAB_ID, type FileBuffer, type FileTab, type Translate, type WorkbenchInjected } from './types.ts'
+import { createControlPlaneTab, createTerminalTab, nextBrowserTab, nextTerminalTab, TERMINAL_TAB_ID, CONTROL_PLANE_TAB_ID, type FileBuffer, type FileTab, type Translate, type WorkbenchInjected } from './types.ts'
 import { previewKindOfPath } from '../../shared/preview-kind.ts'
 import { isTermAssistHotkey, isTermNewTabHotkey } from '../../shared/term-assist.ts'
 import { StatusBar } from './StatusBar.tsx'
@@ -82,6 +82,7 @@ import { UsageNavPortal } from './UsagePanel.tsx'
 import { defaultUsageDock, isNavHostReady, readUsageDock, subscribeNavHost, subscribeUsageDock, usageTabVisible } from './usage-dock.ts'
 import { STATUS_BAR_H } from './status-bar.ts'
 import { DEFAULT_TERM_AI_OPEN, TERM_AI_OPEN_KEY, readBoolFlag, writeBoolFlag } from './ui-flags.ts'
+import { getControlPlaneVisible, useControlPlaneVisible } from './control-plane-settings.ts'
 import { usePluginUpdate, visibleUpdate } from './UpdateBanner.tsx'
 import { updateTermSeed } from '../../shared/version.ts'
 import { useWorkspace } from './useWorkspace.ts'
@@ -207,8 +208,15 @@ function WorkbenchInner(props: WorkbenchProps) {
   const navReady = useSyncExternalStore(subscribeNavHost, isNavHostReady, () => false)
   const showUsageTab = usageTabVisible(usageDock, navReady)
   const [host, setHost] = useState<HTMLElement | null>(null)
-  const [tabs, setTabs] = useState<FileTab[]>(() => [createTerminalTab()])
-  const [activeId, setActiveId] = useState<string | null>(TERMINAL_TAB_ID)
+  const [controlPlaneOn] = useControlPlaneVisible()
+  const [tabs, setTabs] = useState<FileTab[]>(() => (
+    getControlPlaneVisible()
+      ? [createControlPlaneTab(), createTerminalTab()]
+      : [createTerminalTab()]
+  ))
+  const [activeId, setActiveId] = useState<string | null>(() => (
+    getControlPlaneVisible() ? CONTROL_PLANE_TAB_ID : TERMINAL_TAB_ID
+  ))
   const [buffers, setBuffers] = useState<Record<string, FileBuffer>>({})
   const [selectedDiff, setSelectedDiff] = useState<{ path: string; staged: boolean } | null>(null)
   const [fileError, setFileError] = useState<GitFail | null>(null)
@@ -404,6 +412,33 @@ function WorkbenchInner(props: WorkbenchProps) {
   useEffect(() => {
     if (running || pending > 0) patchWorkbenchChrome({ chatOpen: true })
   }, [running, pending])
+
+  // Keep the Control Plane tab pinned as the first editor tab when enabled.
+  useEffect(() => {
+    setTabs((current) => {
+      const has = current.some(tab => tab.id === CONTROL_PLANE_TAB_ID)
+      if (controlPlaneOn) {
+        if (!has) return [createControlPlaneTab(), ...current]
+        if (current[0]?.id === CONTROL_PLANE_TAB_ID) return current
+        return [createControlPlaneTab(), ...current.filter(tab => tab.id !== CONTROL_PLANE_TAB_ID)]
+      }
+      if (!has) return current
+      return current.filter(tab => tab.id !== CONTROL_PLANE_TAB_ID)
+    })
+    setActiveId((current) => {
+      if (controlPlaneOn) {
+        if (current === null || current === TERMINAL_TAB_ID) return CONTROL_PLANE_TAB_ID
+        return current === CONTROL_PLANE_TAB_ID || tabsRef.current.some(tab => tab.id === current)
+          ? current
+          : CONTROL_PLANE_TAB_ID
+      }
+      if (current === CONTROL_PLANE_TAB_ID) {
+        const fallback = tabsRef.current.find(tab => tab.id !== CONTROL_PLANE_TAB_ID)
+        return fallback?.id ?? TERMINAL_TAB_ID
+      }
+      return current
+    })
+  }, [controlPlaneOn])
 
   useEffect(() => {
     const id = requestAnimationFrame(() => { markLongFileRefChips() })
@@ -1013,7 +1048,7 @@ function WorkbenchInner(props: WorkbenchProps) {
   }
 
   const closeTabs = (ids: string[]): void => {
-    const closable = ids.filter(id => id !== TERMINAL_TAB_ID)
+    const closable = ids.filter(id => id !== TERMINAL_TAB_ID && id !== CONTROL_PLANE_TAB_ID)
     if (closable.length === 0) return
     if (workspaceId !== undefined) {
       for (const id of closable) {
@@ -1079,6 +1114,8 @@ function WorkbenchInner(props: WorkbenchProps) {
         <EditorPane
           client={client}
           workspaceId={workspaceId}
+          sessionId={sessionId}
+          useSession={props.useSession}
           workspaceTitle={workspace?.title}
           tabs={editorTabs}
           activeId={editorActiveId}

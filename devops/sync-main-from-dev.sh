@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 #
 # sync-main-from-dev.sh
-# 将 main 分支上当前仍存在的文件列表，用 dev 分支的最新版本覆盖更新，并提交到 main。
+# 将 dev 分支的全部内容镜像到 main，并在 main 上额外提交 lib/ 构建产物。
+#
+# 分支约定:
+#   dev  — 完整源码，lib/ 在 .gitignore 中不跟踪
+#   main — 与 dev 内容一致 + 跟踪 lib/（供 GitHub 安装，无需用户侧构建）
 #
 # 特殊处理:
-#   1. lib/ 目录 dev 不跟踪（.gitignore），但 main 需要其"现场"实际内容（构建产物）。
-#      因此 dev 中不存在的文件，若现场工作区存在则直接取现场内容提交；
-#      lib/ 目录整体以现场为准（新增/修改/删除一并同步），
-#      但 lib/client.js.map 排除（构建 map 文件不提交）。
-#   2. docs/ 目录全量镜像 dev：新增、修改、删除都以 dev 的目录为准。
+#   1. lib/ 目录 dev 不跟踪，main 需要其"现场"实际内容（构建产物）。
+#      运行前请在 dev 分支执行 pnpm run build，或保证 main 工作区 lib/ 已是 dev 源码构建结果。
+#      lib/client.js.map 不提交。
+#   2. main 的 .gitignore 会去掉 lib 条目，使 lib/ 可被正常跟踪。
 #
 # 用法:
 #   devops/sync-main-from-dev.sh [选项] [main分支] [dev分支]
@@ -26,7 +29,7 @@
 set -euo pipefail
 
 usage() {
-  sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -92,112 +95,69 @@ if [ "$(git branch --show-current)" != "$MAIN_BRANCH" ]; then
   fi
 fi
 
-# ---- 1. 列出 main 当前仍存在的所有文件 -------------------------------------
-# Bash 3.2 (macOS /bin/bash) has no mapfile; use while-read instead.
-files=()
-while IFS= read -r line || [ -n "$line" ]; do
-  files+=("$line")
-done < <(git ls-tree -r --name-only "$MAIN_BRANCH")
-echo "==> main 当前存在 ${#files[@]} 个文件"
+# ---- 1. 全量镜像 dev 跟踪的所有文件 -----------------------------------------
+echo "==> 从 $DEV_BRANCH 检出全部跟踪文件"
+git checkout "$DEV_BRANCH" -- .
 
-# ---- 2. 更新: dev 有 → 取 dev 最新；dev 无但现场有 → 取现场（如 lib/） ------
-updated=()
-from_worktree=()
-skipped=()
-for f in "${files[@]}"; do
+# ---- 2. 移除 main 上有、dev 上没有的文件（保留 lib/）-----------------------
+removed=()
+while IFS= read -r f || [ -n "$f" ]; do
   case "$f" in
-    docs/*) continue ;;   # docs 全量由下方镜像步骤处理，不在此循环
+    lib/*) continue ;;
   esac
-  if git cat-file -e "$DEV_BRANCH:$f" 2>/dev/null; then
-    git checkout "$DEV_BRANCH" -- "$f"
-    updated+=("$f")
-  elif [ -e "$f" ]; then
-    git add -f -- "$f"          # dev 不跟踪但现场存在（如 lib/*）→ 用现场版本
-    from_worktree+=("$f")
-  else
-    skipped+=("$f")
+  if ! git cat-file -e "$DEV_BRANCH:$f" 2>/dev/null; then
+    git rm -f -- "$f" 2>/dev/null || git rm -f --cached -- "$f" 2>/dev/null || true
+    removed+=("$f")
   fi
-done
+done < <(git ls-files)
 
-# ---- 2.5 docs 全量镜像 dev（新增/修改/删除均以 dev 为准） -------------------
-docs_removed=()
-docs_new=()
-if git ls-tree -r --name-only "$DEV_BRANCH" -- docs | grep -q .; then
-  # dev 有 docs：全量取 dev 版本（含 dev 新增的文档）
-  git checkout "$DEV_BRANCH" -- docs
-  # main 上有而 dev 没有的 docs 文件 → 删除（保证目录与 dev 完全一致）
-  stale_docs=()
-  while IFS= read -r line || [ -n "$line" ]; do
-    stale_docs+=("$line")
-  done < <(comm -23 \
-    <(git ls-tree -r --name-only "$MAIN_BRANCH" -- docs | sort) \
-    <(git ls-tree -r --name-only "$DEV_BRANCH" -- docs | sort))
-  if [ "${#stale_docs[@]}" -gt 0 ]; then
-    git rm -r --quiet --ignore-unmatch -- "${stale_docs[@]}"
-    docs_removed=("${stale_docs[@]}")
-  fi
-  # dev 有而 main 没有的 docs 文件 → 新增（用于统计）
-  new_docs=()
-  while IFS= read -r line || [ -n "$line" ]; do
-    new_docs+=("$line")
-  done < <(comm -13 \
-    <(git ls-tree -r --name-only "$MAIN_BRANCH" -- docs | sort) \
-    <(git ls-tree -r --name-only "$DEV_BRANCH" -- docs | sort))
-  docs_new=("${new_docs[@]}")
-else
-  # dev 完全没有 docs → main 上也移除整个 docs 目录
-  git rm -r --quiet --ignore-unmatch -- docs
-  docs_removed=()
-  while IFS= read -r line || [ -n "$line" ]; do
-    docs_removed+=("$line")
-  done < <(git ls-tree -r --name-only "$MAIN_BRANCH" -- docs)
+# ---- 3. main 的 .gitignore 去掉 lib，使 lib/ 可被正常跟踪 -------------------
+if [ -f .gitignore ] && grep -qx 'lib' .gitignore; then
+  grep -vx 'lib' .gitignore > .gitignore.tmp || true
+  mv .gitignore.tmp .gitignore
+  git add .gitignore
+  echo "==> 已从 .gitignore 移除 lib（main 分支跟踪 lib/）"
 fi
 
-# lib 目录整体以现场为准: 新增、删除、修改一并纳入
-# 排除 lib/client.js.map（构建 map 文件不提交）
+# ---- 4. lib 目录以现场构建产物为准 ------------------------------------------
 if [ -d lib ]; then
-  git add -A -f -- lib ':(exclude)lib/client.js.map'
+  git add -A -- lib ':(exclude)lib/client.js.map'
+else
+  echo "警告: 工作区无 lib/ 目录。请先在 dev 分支执行 pnpm run build，再重新运行本脚本。" >&2
 fi
 
 # ---- 输出汇总 ---------------------------------------------------------------
+# 勿用 read 变量名 `_`：bash 里 `$_` 是特殊参数，会与 `|| [ -n "$_" ]` 组合成死循环。
+dev_count=0
+while IFS= read -r entry; do
+  dev_count=$((dev_count + 1))
+done < <(git ls-tree -r --name-only "$DEV_BRANCH")
+
 echo ""
-echo "==> 已从 $DEV_BRANCH 更新 ${#updated[@]} 个文件:"
-printf '    %s\n' "${updated[@]}"
-if [ "${#from_worktree[@]}" -gt 0 ]; then
-  echo ""
-  echo "==> ${#from_worktree[@]} 个文件 dev 不跟踪，使用现场实际内容（lib）:"
-  printf '    %s\n' "${from_worktree[@]}"
-fi
-if [ "${#docs_new[@]}" -gt 0 ]; then
-  echo ""
-  echo "==> docs 全量镜像 dev，新增 ${#docs_new[@]} 个文档:"
-  printf '    %s\n' "${docs_new[@]}"
-fi
-if [ "${#docs_removed[@]}" -gt 0 ]; then
-  echo ""
-  echo "==> docs 全量镜像 dev，删除 ${#docs_removed[@]} 个 main 独有文档:"
-  printf '    %s\n' "${docs_removed[@]}"
-fi
-if [ "${#skipped[@]}" -gt 0 ]; then
-  echo ""
-  echo "==> 以下 ${#skipped[@]} 个文件 dev 中不存在且现场也不存在，保持 main 原样:"
-  printf '    %s\n' "${skipped[@]}"
+echo "==> $DEV_BRANCH 跟踪 ${dev_count} 个文件，已全量镜像到 $MAIN_BRANCH"
+if [ "${#removed[@]}" -gt 0 ]; then
+  echo "==> 已移除 ${#removed[@]} 个 $MAIN_BRANCH 独有且 dev 不存在的文件:"
+  printf '    %s\n' "${removed[@]}"
 fi
 
-# ---- 3. 提交 -----------------------------------------------------------------
-if git diff --cached --quiet; then
+# ---- 5. 提交 -----------------------------------------------------------------
+if git diff --cached --quiet && git diff --quiet; then
   echo ""
   echo "==> 没有实际差异，无需提交。"
   exit 0
 fi
 
 if [ -z "$COMMIT_MSG" ]; then
-  COMMIT_MSG="chore: sync $DEV_BRANCH compiled lib and docs to $MAIN_BRANCH"
+  COMMIT_MSG="chore: sync $DEV_BRANCH tree and lib to $MAIN_BRANCH"
 fi
 
 echo ""
 echo "==> git status --short:"
-git status --short
+git status --short | head -50
+status_lines=$(git status --short | wc -l)
+if [ "$status_lines" -gt 50 ]; then
+  echo "    ... 共 ${status_lines} 项变更"
+fi
 echo ""
 git commit -m "$COMMIT_MSG"
 echo ""

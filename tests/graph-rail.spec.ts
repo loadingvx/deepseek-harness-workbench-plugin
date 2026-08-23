@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { LANE_COL_W, layoutGraphLanes } from '../src/client/workbench/graph-lanes.ts'
 import {
-  branchOff, buildGraphRailDraw, GRAPH_CURVE_R, GRAPH_NODE_CY, GRAPH_NODE_CY_COMPACT,
+  branchOff, branchRightAt, buildGraphRailDraw, fishboneRib, GRAPH_CURVE_R, GRAPH_NODE_CY, GRAPH_NODE_CY_COMPACT,
   GRAPH_ROW_H, GRAPH_ROW_H_COMPACT, GRAPH_SEAM_PAD, graphRailMetrics, joinIn, laneX,
 } from '../src/client/workbench/graph-rail.ts'
 
@@ -99,5 +99,19 @@ describe('branch elbows', () => {
     const d = joinIn(18, -0.5, 6, 12)
     expect(d.startsWith('M 18 -0.5 V ')).toBe(true)
     expect(d.endsWith('H 6')).toBe(true)
+  })
+
+  it('branches right at row center with joinIn-style elbow', () => {
+    const d = branchRightAt(10, 20, 30)
+    expect(d.startsWith('M 10 10 V ')).toBe(true)
+    expect(d.includes(' A ')).toBe(true)
+    expect(d.endsWith('H 30')).toBe(true)
+  })
+
+  it('fishbone rib stays horizontal with rounded outer elbow', () => {
+    const d = fishboneRib(10, 20, 30)
+    expect(d.startsWith('M 10 20 H ')).toBe(true)
+    expect(d.includes(' A ')).toBe(true)
+    expect(d.includes(' V ')).toBe(false)
   })
 })

@@ -101,6 +101,30 @@ export function buildGraphRailDraw(
   }
 }
 
+function curveRadius(x1: number, y1: number, x2: number, y2: number): number {
+  return Math.max(0.5, Math.min(GRAPH_CURVE_R, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2))
+}
+
+/** 在行中心 y 从竖干 x 向右拐出圆角横枝（╰─，与 Git graph 的 joinIn 一致）。 */
+export function branchRightAt(xTrunk: number, y: number, xEnd: number, maxR = GRAPH_CURVE_R): string {
+  if (xEnd <= xTrunk + 0.5) return ''
+  const r = Math.max(0.5, Math.min(maxR, (xEnd - xTrunk) / 2))
+  const yStart = y - r * 2
+  const sign = xEnd > xTrunk ? 1 : -1
+  const sweep = xEnd > xTrunk ? 0 : 1
+  return `M ${xTrunk} ${yStart} V ${y - r} A ${r} ${r} 0 0 ${sweep} ${xTrunk + sign * r} ${y} H ${xEnd}`
+}
+
+/**
+ * 鱼骨横枝：从时间轴 (xSpine, y) 向右拐到节点，不在枝路径里再画竖段（竖轴由蓝线单独绘制）。
+ * 末端圆弧与 Git graph branchOff 同半径。
+ */
+export function fishboneRib(xSpine: number, y: number, xEnd: number): string {
+  if (xEnd <= xSpine + 0.5) return ''
+  const r = Math.max(0.5, Math.min(GRAPH_CURVE_R, (xEnd - xSpine) / 2))
+  return `M ${xSpine} ${y} H ${xEnd - r} A ${r} ${r} 0 0 1 ${xEnd} ${y}`
+}
+
 /** Side branch peels off the node, then goes straight down (classic `|\`). */
 export function branchOff(x1: number, y1: number, x2: number, y2: number): string {
   if (x1 === x2) return `M ${x1} ${y1} V ${y2}`
@@ -117,8 +141,4 @@ export function joinIn(x1: number, y1: number, x2: number, y2: number): string {
   const sign = x2 > x1 ? 1 : -1
   const sweep = x2 > x1 ? 0 : 1
   return `M ${x1} ${y1} V ${y2 - r} A ${r} ${r} 0 0 ${sweep} ${x1 + sign * r} ${y2} H ${x2}`
-}
-
-function curveRadius(x1: number, y1: number, x2: number, y2: number): number {
-  return Math.max(0.5, Math.min(GRAPH_CURVE_R, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2))
 }

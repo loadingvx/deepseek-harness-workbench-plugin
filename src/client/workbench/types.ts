@@ -1,5 +1,6 @@
 import type { GitClient } from '../api.ts'
 import type { GitFail } from '../../shared/types.ts'
+import { CONTROL_PLANE_TAB_ID } from '../../shared/control-plane.ts'
 import type { WorkbenchMount } from './auto-open.ts'
 import type { FileRefApi } from './file-ref-client.ts'
 import type { BrowserElApi } from './browser-el-client.ts'
@@ -57,10 +58,11 @@ export interface WorkbenchInjected {
 
 export const TERMINAL_TAB_ID = 'terminal:main'
 export const BROWSER_TAB_ID = 'browser:main'
+export { CONTROL_PLANE_TAB_ID }
 
 export interface FileTab {
   id: string
-  kind: 'file' | 'preview' | 'diff' | 'commitDiff' | 'terminal' | 'browser'
+  kind: 'file' | 'preview' | 'diff' | 'commitDiff' | 'terminal' | 'browser' | 'controlPlane'
   path: string
   title: string
   /** Direct-render kind for preview tabs (image / table). */
@@ -76,6 +78,19 @@ export interface FileTab {
   browserIndex?: number
   /** Open file matches .gitignore and is not tracked. */
   ignored?: boolean
+}
+
+export function createControlPlaneTab(): FileTab {
+  return {
+    id: CONTROL_PLANE_TAB_ID,
+    kind: 'controlPlane',
+    path: '',
+    title: '',
+  }
+}
+
+export function controlPlaneTabLabel(t: Translate): string {
+  return t('controlPlane.tab')
 }
 
 export function createTerminalTab(id = TERMINAL_TAB_ID, termIndex = 1): FileTab {

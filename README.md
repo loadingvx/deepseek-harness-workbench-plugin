@@ -1,11 +1,12 @@
 
 ![preview](docs/img/social-preview.jpg)
 
-A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. After Workbench is opened in Conversation, chat stays on the left. Two columns appear on the right: the editor (syntax highlighting and **smart terminal**) and the side dock for files, Git, the **Usage** panel, and the **Ultra Slash** panel.
+A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. After Workbench is opened in Conversation, chat stays on the left. Two columns appear on the right: the editor (**Agent Control Plane**, syntax highlighting, and **smart terminal**) and the side dock for files, Git, the **Usage** panel, and the **Ultra Slash** panel.
 
 Look for these first:
 
 - **Usage** — official API balance, this-machine observed spend, this-session tokens and context. Pin it above the left **Settings** button so you can see spend while chatting.
+- **Agent Control Plane** — the editor’s first tab by default. Two pages: **Execution trajectory** (timeline fishbone of user → LLM → tools → agent reply, with expandable I/O) and **Capabilities** (current-session agent model, tools, prompt sections, and session knobs). Toggle visibility in Settings.
 - **Ultra Slash** — slash commands that inject guidance **without stopping the current turn**. Manage them in the right dock; send them from the bottom group of the chat `/` menu.
 - **Smart terminal** — a local PTY in the editor. Real shell lines (including pasted `$ ls`) run as-is. Natural language is translated by **AI command assist** (<kbd>Alt</kbd>+<kbd>I</kbd> or the ✨ button) and typed into the **current** terminal. Notes are never executed. A blacklist blocks destructive commands the assistant would otherwise type. <kbd>Alt</kbd>+<kbd>J</kbd> opens another terminal tab.
 - **Add to chat** — hand the model anything without copying and pasting. Drag a file from the tree (or a DevTools network request) into the chat box; right-click terminal output to add the selection or recent output (with its pwd/shell context); or tap the **point-and-pick** button in the embedded browser and click a page element. Each lands as a reference chip in the input and rides along with your next message.
@@ -18,6 +19,7 @@ Look for these first:
 - [Interface](#interface)
 - [Core capabilities](#core-capabilities)
 - [Feature list](#feature-list)
+- [Agent Control Plane](#agent-control-plane)
 - [Usage panel](#usage-panel)
 - [Ultra Slash](#ultra-slash)
 - [Smart terminal](#smart-terminal)
@@ -31,8 +33,9 @@ Look for these first:
 
 ## Interface
 
-The workbench uses a three-column layout. Conversation stays on the left. The two columns on the right are the capability area: editor and smart terminal in the center; file tree, Git, Usage, and Ultra Slash on the far right. The right dock tabs are **Files**, **Source Control**, **Usage**, and **Ultra Slash**.
+The workbench uses a three-column layout. Conversation stays on the left. The two columns on the right are the capability area: editor (**Agent Control Plane**, syntax highlighting, smart terminal) in the center; file tree, Git, Usage, and Ultra Slash on the far right. The right dock tabs are **Files**, **Source Control**, **Usage**, and **Ultra Slash**. The editor’s first tab is **Control Plane** by default.
 
+![screen_0](docs/img/screen_shot_0.png)
 ![screen_1](docs/img/screen_shot_1.png)
 ![screen_2](docs/img/screen_shot_2.png)
 ![screen_3](docs/img/screen_shot_3.png)
@@ -46,13 +49,14 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 
 1. **Workbench layout.** Three columns: Conversation on the left, editor and terminal in the center, files / Git / Usage / Ultra Slash on the right. A new session opens the workbench immediately. By default the editor is collapsed, the files sidebar is open, and usage is pinned above Settings. Columns can be resized, collapsed to icon rails, and restored. Collapse, the side-dock tab, and the usage pin are remembered globally across reload and new sessions.
 2. **Smart terminal.** A local PTY. Real shell lines (including pasted `$ ls`) go straight to the terminal; natural language is translated and typed into the **current** shell. Notes are non-executable. A configurable blacklist blocks destructive commands the assistant would otherwise type.
-3. **Workspace editor.** CodeMirror 6 with syntax highlighting, Plain / Emacs / Vim keymaps, Markdown edit / preview / split, image and spreadsheet previews, Git diffs, tabs, breadcrumbs, save and dirty-close guards.
-4. **Files.** Tree browse, filter, hidden files, `.gitignore` marks, new / rename / delete, and open in a local editor (Cursor, VS Code, and others).
-5. **Git.** Status, stage, commit (including streamed AI messages), fetch / pull / push with safety checks, branches, merge, restore, commit graph, `git init`, and model-facing `git_*` tools.
-6. **Usage panel.** Official API balance, this-machine observed spend, this-session tokens and context. Open the right-dock **Usage** tab, or pin the panel above the left **Settings** button (including the collapsed icon rail). The status bar always shows the balance next to **Feedback**.
-7. **Ultra Slash panel.** Slash commands that inject guidance into the next model step **without interrupting the current turn**. Open the right-dock **Ultra Slash** tab to manage them; type `/` in chat and pick from the bottom Ultra Slash group. Built-in: `/steer`, `/new`, `/skill`, `/docs`. Custom `/name` shortcuts are stored on this machine and shared by every session.
-8. **Status bar.** Open-file tabs, balance, Feedback, version / upgrade, workspace path, branch, dirty count, editor mode.
-9. **Maintenance & privacy.** In-UI upgrade checker, Chinese / English UI, and redaction of tokens in paths and errors.
+3. **Agent Control Plane.** First editor tab (on by default; toggle in Settings). **Execution trajectory** shows a threaded feed with a left rail for each LLM round, tool call, and agent reply (expand for full I/O). **Capabilities** lists the current session agent’s model, tools, prompt sections, sub-agents, and session knobs you can adjust online.
+4. **Workspace editor.** CodeMirror 6 with syntax highlighting, Plain / Emacs / Vim keymaps, Markdown edit / preview / split, image and spreadsheet previews, Git diffs, tabs, breadcrumbs, save and dirty-close guards.
+5. **Files.** Tree browse, filter, hidden files, `.gitignore` marks, new / rename / delete, and open in a local editor (Cursor, VS Code, and others).
+6. **Git.** Status, stage, commit (including streamed AI messages), fetch / pull / push with safety checks, branches, merge, restore, commit graph, `git init`, and model-facing `git_*` tools.
+7. **Usage panel.** Official API balance, this-machine observed spend, this-session tokens and context. Open the right-dock **Usage** tab, or pin the panel above the left **Settings** button (including the collapsed icon rail). The status bar always shows the balance next to **Feedback**.
+8. **Ultra Slash panel.** Slash commands that inject guidance into the next model step **without interrupting the current turn**. Open the right-dock **Ultra Slash** tab to manage them; type `/` in chat and pick from the bottom Ultra Slash group. Built-in: `/steer`, `/new`, `/skill`, `/docs`. Custom `/name` shortcuts are stored on this machine and shared by every session.
+9. **Status bar.** Open-file tabs, balance, Feedback, version / upgrade, workspace path, branch, dirty count, editor mode.
+10. **Maintenance & privacy.** In-UI upgrade checker, Chinese / English UI, and redaction of tokens in paths and errors.
 
 ## Feature list
 
@@ -80,6 +84,14 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 - Image preview: png, jpg, jpeg, gif, webp, avif, bmp, ico
 - Table preview: csv, tsv, xlsx (UTF-8, then GB18030 if the file looks garbled). `.xls` is recognized but opens in an external app
 - New empty file; new terminal tab (<kbd>Alt</kbd>+<kbd>J</kbd>)
+
+### Agent Control Plane
+
+- **First editor tab** (**Control Plane** / **Agent Control Plane**). Toggle under Settings → **Agent control plane**; on by default
+- **Execution trajectory** (default): chronological user messages, each LLM round (expand for tools and agent reply), context injections, and more; left rail with blue / purple / orange fishbone lines; foldable rows with full tool I/O
+- **Capabilities**: current-session agent inventory — model, tools, prompt sections, sub-agents, environment plugins; overview stats on top, trajectory-style list below with adjustable knobs
+- Auto-refresh (~every 4s); manual **Refresh**; **Clear all knobs** resets session overrides
+- Requires an open session on the left. See [Agent Control Plane](#agent-control-plane)
 
 ### File tree
 
@@ -176,6 +188,29 @@ If the panel cannot load a balance:
 
 **Reset observed spend** only clears the local running total on this machine. It does not change the official account.
 
+## Agent Control Plane
+
+Open the editor’s first tab **Control Plane** (Chinese UI: **控制面**). If you do not see it, enable **Show control plane in editor** under Settings → **Agent control plane** (on by default).
+
+Switch between two sub-pages at the top; your choice is remembered:
+
+| Sub-page | What it does |
+| --- | --- |
+| **Execution trajectory** | Threaded view of the current session: user messages → each LLM round (expand for tool calls and agent reply) → context injections, and more. A left rail marks the timeline and branches. Expand LLM rows for in-episode detail; tools and replies show full input/output. Streaming turns are highlighted. |
+| **Capabilities** | Inspect and tune the **current session** agent: overview and stats on top, then a trajectory-style list of LLM, tools, prompt sections, sub-agents, and so on; environment plugins are listed at the bottom. Items marked **Adjustable** expose session knobs (model, tool switches, prompt section text, and more). |
+
+Common actions:
+
+- **Refresh** — reload the control-plane snapshot and trajectory
+- **Clear all knobs** — drop session knob overrides and return to defaults
+- Click a capability row — open details and adjust knobs in the drawer
+
+Notes:
+
+- Open a session on the left first; an empty state means no trajectory yet or the agent is not ready
+- Hiding the tab does **not** undo knobs already applied — it only hides the panel
+- If loading fails, update the workbench host and restart `dsh web`
+
 ## Ultra Slash
 
 Open the right-dock **Ultra Slash** tab (`/` icon; Chinese UI: **插件命令**). These commands also appear when you type `/` in the chat box: they sit in the **bottom** group, below a divider, titled Ultra Slash.
@@ -268,11 +303,11 @@ Rules the panel enforces (you will see a Chinese or English reason under the fie
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.27** (npm tag `latest`) |
+| Version | **0.1.28** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.27
++ dsh-workbench-plugin@0.1.28
 ```
 
 Maintainers publish npm with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -287,13 +322,13 @@ The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbenc
 
 ### Procedure
 
-1. Install the plugin (pin the version; do not omit `@0.1.27`):
+1. Install the plugin (pin the version; do not omit `@0.1.28`):
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.27
+dsh plugin --profile web add dsh-workbench-plugin@0.1.28
 ```
 
-`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.27` requests that release explicitly.
+`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.28` requests that release explicitly.
 
 If a pinned install is still refused as too new, add this to `~/.dsh/profiles/web/pnpm-workspace.yaml` and run the command again:
 
@@ -329,7 +364,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.27 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.28 manually using the command above. Later releases will prompt in the UI.
 
 ## Workspace terminal
 

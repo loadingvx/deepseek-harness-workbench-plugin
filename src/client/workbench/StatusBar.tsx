@@ -20,7 +20,7 @@ import { IconChevron, IconFeedback, IconGithub, IconNpm, IconSparkle } from './i
 import { readNearbyGit, retainNearbyGit, subscribeNearbyGit } from './nearby-git.ts'
 import { readGitLiveStatus, retainGitLive, subscribeGitLive } from './git-live.ts'
 import { fileName, showEditorStatusChrome, statusMenuAnchorStyle, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
-import { browserTabLabel, terminalTabLabel, type FileTab, type Translate } from './types.ts'
+import { browserTabLabel, controlPlaneTabLabel, terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import { readUsageLive, retainUsageLive, subscribeUsageLive } from './usage-live.ts'
 import css from './StatusBar.module.css'
 
@@ -421,13 +421,15 @@ function StatusTabs({
         {tabs.length === 0 ? (
           <span className={css.item}>{t('status.noFile')}</span>
         ) : tabs.map(tab => {
-          const label = tab.kind === 'terminal'
-            ? terminalTabLabel(tab, t)
-            : tab.kind === 'browser'
-              ? browserTabLabel(tab, t)
-              : tab.kind === 'diff' || tab.kind === 'commitDiff'
-                ? t('status.diff', { name: fileName(tab.path) })
-                : fileName(tab.path)
+          const label = tab.kind === 'controlPlane'
+            ? controlPlaneTabLabel(t)
+            : tab.kind === 'terminal'
+              ? terminalTabLabel(tab, t)
+              : tab.kind === 'browser'
+                ? browserTabLabel(tab, t)
+                : tab.kind === 'diff' || tab.kind === 'commitDiff'
+                  ? t('status.diff', { name: fileName(tab.path) })
+                  : fileName(tab.path)
           const title = tab.kind === 'file' || tab.kind === 'preview'
             || tab.kind === 'diff' || tab.kind === 'commitDiff'
             ? redactSecrets(tab.path)
