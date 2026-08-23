@@ -1,0 +1,251 @@
+/* 插件设置面板：分区折叠样式对齐 Git 侧栏 CHANGES / GRAPH。 */
+.root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+}
+
+.head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.title {
+  flex: none;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px 12px;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  /* Sections keep their natural height: with the default flex-shrink:1 and
+     min-height:0, an overflowing pane would shrink below its content, letting
+     that content paint over the section below (the commands fold bar covered
+     the sounds/reminders rows). flex:none + the scrollable .body guarantee the
+     two sections never overlap. */
+  flex: none;
+}
+
+/* 分区头：与 Git 侧栏 sectionHead 相同的 28px 折叠行 */
+.sectionHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  padding-right: 4px;
+  border-radius: 6px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.sectionToggle {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px 0 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sectionToggle:hover,
+.sectionHead:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.sectionTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.paneBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  /* 相对分区标题整体右移，形成内容嵌在分区头下的层级感 */
+  padding: 2px 14px 12px;
+}
+
+/* 设置行：label 在左、控件在右，左右留白与分区内容对齐 */
+.settingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+}
+
+.settingRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.settingLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingLabel[data-dimmed] {
+  opacity: 0.55;
+}
+
+/* 开关（role="switch"）：轨道 + 滑块 */
+.switch {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-button-ghost-active-fill);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-primary);
+  transition: transform 0.15s;
+}
+
+.switch[data-on] {
+  background: var(--dsw-alias-state-business-primary, #7aa2ff);
+  border-color: transparent;
+}
+
+.switch[data-on]::after {
+  transform: translateX(16px);
+  background: var(--dsw-alias-label-primary-foreground, #fff);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary, #7aa2ff);
+  outline-offset: 1px;
+}
+
+.switch:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 循环提醒间隔输入 */
+.intervalControl {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.intervalInput {
+  width: 56px;
+  height: 22px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.intervalInput:focus {
+  outline: none;
+  border-color: var(--dsw-alias-state-business-primary, #7aa2ff);
+}
+
+.intervalUnit {
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* 提示音列表块（SoundSettings 外壳）：与开关行之间留出分隔 */
+.soundBlock {
+  min-width: 0;
+  margin-top: 6px;
+}
+
+/* 会话渲染增强：tip 说明 + 合法 SVG 示例代码块 */
+.svgRenderTip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px 8px;
+}
+
+.svgRenderTipText {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.svgRenderTipCode {
+  display: block;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  /* 跟随插件与会话（会话代码块）的代码字体设置：--ds-font-family-code，
+     不再写死本地字体栈（旧栈以裸 monospace 收尾，Windows CJK 会回落宋体）。 */
+  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

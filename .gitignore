@@ -1,6 +1,5 @@
 deepseek-harness
 node_modules
-lib
 .pnpm-store
 *.tgz
 coverage

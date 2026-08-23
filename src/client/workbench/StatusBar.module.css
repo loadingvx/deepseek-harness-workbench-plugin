@@ -1,0 +1,415 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  height: 24px;
+  min-width: 0;
+  padding: 0 10px;
+  overflow: visible;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.item {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.itemLead {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  overflow: visible;
+}
+
+.balance {
+  flex: none;
+  min-width: 2.5em;
+  padding: 0 8px 0 2px;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-tertiary));
+  font-variant-numeric: tabular-nums;
+}
+
+.version {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.version:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.version:focus-visible {
+  outline: 1px solid var(--dsw-alias-label-secondary, currentColor);
+  outline-offset: 1px;
+}
+
+.grow {
+  flex: 1;
+  min-width: 8px;
+}
+
+.tabStrip {
+  position: relative;
+  display: flex;
+  flex: 1 1 220px;
+  align-items: stretch;
+  min-width: 0;
+  max-width: 52%;
+  height: 24px;
+  /* Flush with the status bar's left edge. The bar keeps its 10px padding
+     for the right-hand items; without this the first tab (usually the pinned
+     terminal) sits 10px in even when no left scroll triangle is shown. */
+  margin-left: -10px;
+}
+
+.tabs {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  min-width: 0;
+  height: 24px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.nudge {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-tertiary));
+  cursor: pointer;
+}
+
+.nudge[data-dir="left"] {
+  left: 0;
+  background: linear-gradient(to right, var(--dsw-alias-bg-base) 68%, transparent);
+}
+
+.nudge[data-dir="right"] {
+  right: 0;
+  background: linear-gradient(to left, var(--dsw-alias-bg-base) 68%, transparent);
+}
+
+.nudge:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.nudge::after {
+  content: '';
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+
+.nudge[data-dir="left"]::after {
+  border-width: 4px 5px 4px 0;
+  border-color: transparent currentColor transparent transparent;
+}
+
+.nudge[data-dir="right"]::after {
+  border-width: 4px 0 4px 5px;
+  border-color: transparent transparent transparent currentColor;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  max-width: 160px;
+  height: 24px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: none;
+  border-right: 1px solid var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab[data-active] {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.tab[data-ignored] {
+  color: var(--dsw-alias-label-caption);
+}
+
+.tab[data-ignored][data-active] {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.tab[data-ai] {
+  color: var(--dsw-alias-state-business-primary, #5b8def);
+}
+
+.tab[data-ai][data-active] {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #5b8def) 16%, transparent);
+  color: var(--dsw-alias-state-business-primary, #5b8def);
+}
+
+.aiMark {
+  display: inline-flex;
+  flex: none;
+  color: var(--dsw-alias-state-business-primary, #5b8def);
+  animation: status-ai-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes status-ai-pulse {
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aiMark {
+    animation: none;
+  }
+}
+
+.warnWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.warn,
+.warnMore {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  border: none;
+  background: color-mix(in srgb, var(--dsw-alias-state-warning-primary, #c98600) 16%, transparent);
+  color: var(--dsw-alias-state-warning-primary, #c98600);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.warn {
+  gap: 4px;
+  padding: 0 6px;
+  border-radius: 4px 0 0 4px;
+}
+
+.warnMore {
+  width: 16px;
+  padding: 0;
+  border-left: 1px solid color-mix(in srgb, var(--dsw-alias-state-warning-primary, #c98600) 28%, transparent);
+  border-radius: 0 4px 4px 0;
+}
+
+.warn:hover,
+.warnMore:hover,
+.warnMore[data-open] {
+  background: color-mix(in srgb, var(--dsw-alias-state-warning-primary, #c98600) 28%, transparent);
+}
+
+/* Portaled to document.body (see StatusMenu). Above the sticky chat composer
+   (often root-level sticky z-index ≤100) and workbench context menus (30/31);
+   below extreme host overlays such as the browser inspect highlight. */
+.menuBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+
+.menu {
+  position: absolute;
+  left: auto;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 201;
+  min-width: 188px;
+  max-height: min(70vh, calc(100vh - 16px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: var(--dsw-shadow-lv2);
+}
+
+/* Always paired with portal + statusMenuAnchorStyle so the menu is not clipped
+   by [data-git-ide-panel=bottom] overflow:hidden and not trapped in its z-index. */
+.menuFixed {
+  position: fixed;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.menuItem:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.menuItem[data-active] {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.modeWrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.mode:hover,
+.mode[data-open] {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.mode:focus-visible {
+  outline: 1px solid var(--dsw-alias-label-secondary, currentColor);
+  outline-offset: 1px;
+}
+
+.modeName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modeHint {
+  flex: none;
+  margin-left: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.layoutWrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.layoutMenu {
+  min-width: 280px;
+  max-width: min(360px, calc(100vw - 24px));
+}
+
+.layoutSection {
+  margin: 4px 8px 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.layoutItem {
+  height: auto;
+  min-height: 40px;
+  padding: 6px 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.layoutName {
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.layoutHint {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: normal;
+}
+
+.layoutNote {
+  margin: 0 8px 6px;
+  padding: 8px 10px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: normal;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-secondary, rgba(127, 127, 127, 0.12));
+}

@@ -1,0 +1,67 @@
+/* 会话渲染增强 · SVG 卡片（能力移植自 svg-viewer 的主题适配样式） */
+.tail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 0 4px;
+}
+
+/* 卡片外层：为右上角工具栏与浮动提示提供定位上下文 */
+.cardWrap {
+  position: relative;
+  min-width: 0;
+}
+
+.card {
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+  overflow-x: auto;
+}
+
+.card svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* 右上角 "..." 工具栏：悬浮在卡片右上外缘，不遮挡 SVG 内容 */
+.cardToolbar {
+  position: absolute;
+  top: -10px;
+  right: 8px;
+  z-index: 2;
+}
+
+.moreBtn {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.moreBtn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* 复制成功/失败浮动提示（卡片右上角下方） */
+.notice {
+  position: absolute;
+  top: 14px;
+  right: 8px;
+  z-index: 3;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--dsw-alias-state-business-primary, #7aa2ff);
+  color: var(--dsw-alias-label-primary-foreground, #fff);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}

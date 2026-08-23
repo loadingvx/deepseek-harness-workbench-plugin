@@ -1,0 +1,4 @@
+[tools]
+node = "24.15.0"
+# aqua:pnpm/pnpm 在 macOS 上查找 pnpm-macos-* 会 404，改走 npm 发布包
+"npm:pnpm" = "11.22.0"

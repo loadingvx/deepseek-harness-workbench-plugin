@@ -1,0 +1,16 @@
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  /* 28px icon centered in the same 36px header band as SideDock tabs / breadcrumb. */
+  padding: 4px 0 8px;
+  border-left: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-base);
+}
+
+.rail[data-edge='start'] {
+  border-left: none;
+  border-right: 1px solid var(--dsw-alias-border-l1);
+}
