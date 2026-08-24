@@ -16,6 +16,8 @@ import { sanitizeTermId } from '../shared/new-file-path.ts'
 import { checkPluginUpdate } from './update-check.ts'
 import { readProviderUsage } from './provider-usage.ts'
 import type { PendingReviewStore } from './pending-review.ts'
+import type { CanvasOpenQueue } from './canvas-open-queue.ts'
+import { transpileCanvasSource } from './canvas-compile.ts'
 import type { WorkspaceFs } from './workspace-fs.ts'
 import {
   browserFailPage,
@@ -146,6 +148,7 @@ export function registerGitHttp(
   review?: PendingReviewStore,
   editors = new ExternalOpen(fs),
   term = new TerminalHub(),
+  canvasOpen?: CanvasOpenQueue,
 ): () => void {
   const server = ctx.webServer
   if (server === undefined) {
@@ -261,6 +264,21 @@ export function registerGitHttp(
         result = await wrap(async () => {
           if (review === undefined) return { revision: 0, files: [] }
           return review.list(rootOf())
+        })
+      } else if (method === 'POST' && route === '/git/canvas/compile') {
+        const body = await readJson(req)
+        const source = typeof body.source === 'string' ? body.source : ''
+        result = await wrap(async () => {
+          const out = transpileCanvasSource(source)
+          if (!out.ok) throw new Error(out.message)
+          return { code: out.code }
+        })
+      } else if (method === 'GET' && route === '/git/canvas/open-queue') {
+        result = await wrap(async () => {
+          if (canvasOpen === undefined) return { revision: 0, opens: [] }
+          const sinceRaw = query(url, 'sinceSeq')
+          const sinceSeq = sinceRaw !== undefined && /^\d+$/.test(sinceRaw) ? Number(sinceRaw) : 0
+          return canvasOpen.snapshot(rootOf(), sinceSeq)
         })
       } else if (method === 'POST' && route === '/git/review/prefs') {
         const body = await readJson(req)

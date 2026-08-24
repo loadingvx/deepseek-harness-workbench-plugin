@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { composeAliasText } from '../src/shared/ultra-slash/catalog.ts'
-import { SKILL_COMMAND_NAME } from '../src/shared/ultra-slash/ids.ts'
+import { CANVAS_COMMAND_NAME, SKILL_COMMAND_NAME } from '../src/shared/ultra-slash/ids.ts'
 import { translate } from '../src/shared/ultra-slash/locales.ts'
 import { applyUltraSlash } from '../src/host/ultra-slash/apply.ts'
 import { applyCommands, createCommandHub, loadHubFromDisk, withConflictSink, type YieldedConflict } from '../src/host/ultra-slash/register.ts'
@@ -47,10 +47,25 @@ function mockCtx(registered: SteerCommandDefinition[] = []) {
 }
 
 describe('applyCommands', () => {
-  it('registers steer, new, skill, and docs', () => {
+  it('registers steer, new, skill, docs, and canvas', () => {
     const registered: SteerCommandDefinition[] = []
     applyCommands(mockCtx(registered))
-    expect(registered.map((row) => row.name)).toEqual(['steer', 'new', 'skill', 'docs'])
+    expect(registered.map((row) => row.name)).toEqual(['steer', 'new', 'skill', 'docs', 'canvas'])
+  })
+
+  it('injects the canvas payload and appends extra requirements', () => {
+    const registered: SteerCommandDefinition[] = []
+    applyCommands(mockCtx(registered))
+    const canvas = registered.find((row) => row.name === CANVAS_COMMAND_NAME)
+    const { invocation: emptyCall, steer: emptySteer } = invocation('')
+    canvas?.handler(emptyCall)
+    expect(vi.mocked(emptySteer).mock.calls[0]?.[0].content[0]?.text).toBe(translate('zh', 'canvas.payload'))
+
+    const { invocation: extraCall, steer: extraSteer } = invocation(' 订单管理后台原型 ')
+    canvas?.handler(extraCall)
+    expect(vi.mocked(extraSteer).mock.calls[0]?.[0].content[0]?.text).toBe(
+      composeAliasText(translate('zh', 'canvas.payload'), '订单管理后台原型'),
+    )
   })
 
   it('injects the skill payload without calling cancel', () => {
@@ -204,7 +219,7 @@ describe('conflict yield (standalone ultra-slash already owns resources)', () =>
       restore()
     }
     expect(conflicts.map((c) => (c.resource === 'command' ? c.name : c.path)).sort())
-      .toEqual(['docs', 'new', 'skill', 'steer'])
+      .toEqual(['canvas', 'docs', 'new', 'skill', 'steer'])
   })
 
   it('reports a yield from applyCommands when a standalone install owns the builtins', () => {

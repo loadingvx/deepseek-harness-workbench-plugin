@@ -8,14 +8,16 @@ const zhT = (key: string): string => translate('zh', key as UltraSlashKey)
 const enT = (key: string): string => translate('en', key as UltraSlashKey)
 
 describe('builtinPayloadDefaults', () => {
-  it('prefills skill and docs with the shipped payload, leaves new empty', () => {
+  it('prefills skill, docs, and canvas with the shipped payload, leaves new empty', () => {
     expect(builtinPayloadDefaults(zhT)).toEqual({
       skill: '完成任务后将刚才的方案创建保存为当前项目下的skill备用',
       docs: '完成任务后将问题原因和解决方案输出为md文档写入到docs目录下',
+      canvas: translate('zh', 'canvas.payload'),
     })
     expect(builtinPayloadDefaults(enT)).toEqual({
       skill: 'After you finish this task, create and save the solution you just used as a skill in the current project for later reuse',
       docs: 'After you finish this task, write the root cause and the solution as a markdown document under the docs directory',
+      canvas: translate('en', 'canvas.payload'),
     })
   })
 

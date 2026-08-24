@@ -372,6 +372,17 @@ export interface ReviewSnapshot {
   files: ReviewFileSnapshot[]
 }
 
+/** Host → client: Canvas files to auto-open after Agent write/edit. */
+export interface CanvasOpenItem {
+  readonly path: string
+  readonly seq: number
+}
+
+export interface CanvasOpenSnapshot {
+  readonly revision: number
+  readonly opens: readonly CanvasOpenItem[]
+}
+
 /** Heuristic composition of the next request (not billed totals). */
 export interface SessionContextBreakdown {
   systemTokens: number

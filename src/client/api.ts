@@ -7,6 +7,7 @@ import type {
   GitFail, GitFetchResult, GitFileChange, GitIdentity, GitInitInput, GitLogEntry, GitMergeResult, GitPullResult, GitPushResult, GitResult,
   GitStatusSnapshot, GitSwitchResult, NearbyGitSnapshot, PluginUpdateSnapshot, ProviderUsageSnapshot,
   ReviewSnapshot,
+  CanvasOpenSnapshot,
 } from '../shared/types.ts'
 import type { ControlPlaneKnobPatch, ControlPlaneKnobs, ControlPlaneSnapshot } from '../shared/control-plane.ts'
 import type { TrajectoryGraph } from '../shared/trajectory.ts'
@@ -198,6 +199,8 @@ export interface GitClient {
   reviewUndo(workspaceId: string, path?: string, hunkId?: string): Promise<GitResult<ReviewSnapshot>>
   /** Sync Change review preference to the host (stops/starts baseline capture). */
   reviewSetEnabled(enabled: boolean): Promise<GitResult<{ enabled: boolean }>>
+  canvasOpenQueue(workspaceId: string, sinceSeq?: number): Promise<GitResult<CanvasOpenSnapshot>>
+  compileCanvas(source: string): Promise<GitResult<{ code: string }>>
 }
 
 export function createGitClient(): GitClient {
@@ -376,6 +379,14 @@ export function createGitClient(): GitClient {
     reviewSetEnabled: (enabled) => request('/git/review/prefs', {
       method: 'POST',
       body: JSON.stringify({ enabled }),
+    }),
+    canvasOpenQueue: (workspaceId, sinceSeq = 0) => {
+      const query = new URLSearchParams({ workspaceId, sinceSeq: String(sinceSeq) })
+      return request(`/git/canvas/open-queue?${query.toString()}`)
+    },
+    compileCanvas: (source) => request('/git/canvas/compile', {
+      method: 'POST',
+      body: JSON.stringify({ source }),
     }),
   }
 }

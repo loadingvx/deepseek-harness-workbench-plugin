@@ -43,7 +43,7 @@ describe('plugin slash catalog', () => {
   })
 
   it('lists shipped commands with locale keys, not a hardcoded language', () => {
-    expect(PLUGIN_SLASH_COMMANDS.map((row) => row.name)).toEqual(['steer', 'new', 'skill', 'docs'])
+    expect(PLUGIN_SLASH_COMMANDS.map((row) => row.name)).toEqual(['steer', 'new', 'skill', 'docs', 'canvas'])
     expect(PLUGIN_SLASH_COMMANDS[0]).toEqual({
       name: COMMAND_NAME,
       descriptionKey: 'steer.description',
@@ -54,9 +54,9 @@ describe('plugin slash catalog', () => {
   })
 
   it('derives the text-ref lexicon from builtin plus custom names', () => {
-    expect(pluginLexicon()).toEqual(['steer', 'new', 'skill', 'docs'])
-    expect(pluginLexicon(['review', 'note'])).toEqual(['steer', 'new', 'skill', 'docs', 'review', 'note'])
-    expect(pluginLexicon(['steer'])).toEqual(['steer', 'new', 'skill', 'docs'])
+    expect(pluginLexicon()).toEqual(['steer', 'new', 'skill', 'docs', 'canvas'])
+    expect(pluginLexicon(['review', 'note'])).toEqual(['steer', 'new', 'skill', 'docs', 'canvas', 'review', 'note'])
+    expect(pluginLexicon(['steer'])).toEqual(['steer', 'new', 'skill', 'docs', 'canvas'])
   })
 
   it('keeps catalog order when the query is empty', () => {
@@ -70,6 +70,7 @@ describe('plugin slash catalog', () => {
       'new',
       'skill',
       'docs',
+      'canvas',
       'zzz',
       'aaa',
     ])
@@ -111,7 +112,7 @@ describe('plugin slash catalog', () => {
     expect(zh['steer.description']).toMatch(/[\u4e00-\u9fff]/)
     expect(pluginSlashCandidates('', true, undefined, [
       { name: 'review', description: '查 diff', steerText: '只看 diff' },
-    ]).map((row) => row.name)).toEqual(['steer', 'new', 'skill', 'docs', 'review'])
+    ]).map((row) => row.name)).toEqual(['steer', 'new', 'skill', 'docs', 'canvas', 'review'])
   })
 })
 

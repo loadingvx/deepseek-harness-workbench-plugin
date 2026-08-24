@@ -11,6 +11,9 @@ import { BrowserView } from './BrowserView.tsx'
 import { TERMINAL_TAB_ID, browserTabLabel, controlPlaneTabLabel, terminalTabLabel, type FileBuffer, type FileTab, type Translate } from './types.ts'
 import { CodeEditor, type CodeEditorReviewNav } from './CodeEditor.tsx'
 import { isMarkdownPath } from './code-language.ts'
+import { isCanvasPath, type CanvasViewMode } from '../../shared/canvas-path.ts'
+import { consumeCanvasView } from './canvas-view-prefs.ts'
+import { CanvasPreview } from './CanvasPreview.tsx'
 import type { EditorModeId } from './editor-mode.ts'
 import { FilePreview } from './FilePreview.tsx'
 import { MarkdownPreview } from './MarkdownPreview.tsx'
@@ -115,6 +118,7 @@ function isNewEmptyDiff(
 }
 
 type MdViewMode = 'edit' | 'preview' | 'split'
+type CanvasPaneMode = CanvasViewMode
 
 /** Center editor: explorer + tabs + text/diff, with unsaved-close confirmation. */
 export function EditorPane({
@@ -171,6 +175,7 @@ export function EditorPane({
   const [diffText, setDiffText] = useState('')
   const [diffLoading, setDiffLoading] = useState(false)
   const [mdView, setMdView] = useState<Record<string, MdViewMode>>({})
+  const [canvasView, setCanvasView] = useState<Record<string, CanvasPaneMode>>({})
   const [termChromeHost, setTermChromeHost] = useState<HTMLSpanElement | null>(null)
   // Split panes: only the editor body is split — the chrome (crumb row, tab
   // bar, actions) stays single. splitId is the tab shown in the second pane.
@@ -272,7 +277,18 @@ export function EditorPane({
   }
 
   const markdownOpen = active?.kind === 'file' && buffer !== undefined && isMarkdownPath(active.path)
+  const canvasOpen = active?.kind === 'file' && buffer !== undefined && isCanvasPath(active.path)
   const mdMode: MdViewMode = markdownOpen && active !== null ? (mdView[active.path] ?? 'edit') : 'edit'
+  const canvasMode: CanvasPaneMode = canvasOpen && active !== null
+    ? (canvasView[active.path] ?? 'preview')
+    : 'edit'
+  const activeFilePathForCanvas = active?.kind === 'file' ? active.path : null
+  useEffect(() => {
+    if (activeFilePathForCanvas === null || !isCanvasPath(activeFilePathForCanvas)) return
+    const pending = consumeCanvasView(activeFilePathForCanvas)
+    if (pending === undefined) return
+    setCanvasView((current) => ({ ...current, [activeFilePathForCanvas]: pending }))
+  }, [activeFilePathForCanvas])
 
   useEffect(() => {
     if (mdMode !== 'preview') return
@@ -540,6 +556,16 @@ export function EditorPane({
     }
     const primaryEditor = (() => {
       const editor = editorOf(active, buffer, vimOps, reviewNav)
+      if (canvasOpen) {
+        return (
+          <div className={css.mdShell} data-mode={canvasMode}>
+            {canvasMode !== 'preview' ? <div className={css.mdEdit}>{editor}</div> : null}
+            {canvasMode !== 'edit' ? (
+              <CanvasPreview client={client} source={buffer.draft} t={t} />
+            ) : null}
+          </div>
+        )
+      }
       if (!markdownOpen) return editor
       return (
         <div className={css.mdShell} data-mode={mdMode}>
@@ -688,6 +714,31 @@ export function EditorPane({
                   label={t('editor.mdPreview')}
                   active={mdMode === 'preview'}
                   onClick={() => { setMdView(current => ({ ...current, [active.path]: 'preview' })) }}
+                >
+                  <IconEye />
+                </IconButton>
+              </span>
+            ) : null}
+            {canvasOpen && active?.kind === 'file' ? (
+              <span className={css.mdModes} role="group" aria-label={t('editor.canvasPreview')}>
+                <IconButton
+                  label={t('editor.canvasEdit')}
+                  active={canvasMode === 'edit'}
+                  onClick={() => { setCanvasView(current => ({ ...current, [active.path]: 'edit' })) }}
+                >
+                  <IconEditor />
+                </IconButton>
+                <IconButton
+                  label={t('editor.canvasSplit')}
+                  active={canvasMode === 'split'}
+                  onClick={() => { setCanvasView(current => ({ ...current, [active.path]: 'split' })) }}
+                >
+                  <IconSplit />
+                </IconButton>
+                <IconButton
+                  label={t('editor.canvasPreview')}
+                  active={canvasMode === 'preview'}
+                  onClick={() => { setCanvasView(current => ({ ...current, [active.path]: 'preview' })) }}
                 >
                   <IconEye />
                 </IconButton>

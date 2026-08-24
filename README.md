@@ -8,6 +8,7 @@ Look for these first:
 - **Usage** — official API balance, this-machine observed spend, this-session tokens and context. Pin it above the left **Settings** button so you can see spend while chatting.
 - **Agent Control Plane** — the editor’s first tab by default. Two pages: **Execution trajectory** (timeline fishbone of user → LLM → tools → agent reply, with expandable I/O) and **Capabilities** (current-session agent model, tools, prompt sections, and session knobs). Toggle visibility in Settings.
 - **Ultra Slash** — slash commands that inject guidance **without stopping the current turn**. Manage them in the right dock; send them from the bottom group of the chat `/` menu.
+- **Canvas** — live React previews for product prototypes, dashboards, and custom visuals. Agent-written files live under `.canvas/*.canvas.tsx` in the workspace (not in IDE config folders). After a write, the workbench **auto-opens** the file in **preview**; switch to edit or split like Markdown. Send `/canvas <topic>` to steer the model without interrupting the turn.
 - **Smart terminal** — a local PTY in the editor. Real shell lines (including pasted `$ ls`) run as-is. Natural language is translated by **AI command assist** (<kbd>Alt</kbd>+<kbd>I</kbd> or the ✨ button) and typed into the **current** terminal. Notes are never executed. A blacklist blocks destructive commands the assistant would otherwise type. <kbd>Alt</kbd>+<kbd>J</kbd> opens another terminal tab.
 - **Add to chat** — hand the model anything without copying and pasting. Drag a file from the tree (or a DevTools network request) into the chat box; right-click terminal output to add the selection or recent output (with its pwd/shell context); or tap the **point-and-pick** button in the embedded browser and click a page element. Each lands as a reference chip in the input and rides along with your next message.
 - **AI commit messages** — in the right-dock **Source Control** tab, generate a message from staged changes; the text streams into the commit box. The template is editable.
@@ -22,6 +23,7 @@ Look for these first:
 - [Agent Control Plane](#agent-control-plane)
 - [Usage panel](#usage-panel)
 - [Ultra Slash](#ultra-slash)
+- [Canvas](#canvas)
 - [Smart terminal](#smart-terminal)
 - [Workspace terminal](#workspace-terminal)
 - [AI command assist](#ai-command-assist)
@@ -50,11 +52,11 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 1. **Workbench layout.** Three columns: Conversation on the left, editor and terminal in the center, files / Git / Usage / Ultra Slash on the right. A new session opens the workbench immediately. By default the editor is collapsed, the files sidebar is open, and usage is pinned above Settings. Columns can be resized, collapsed to icon rails, and restored. Collapse, the side-dock tab, and the usage pin are remembered globally across reload and new sessions.
 2. **Smart terminal.** A local PTY. Real shell lines (including pasted `$ ls`) go straight to the terminal; natural language is translated and typed into the **current** shell. Notes are non-executable. A configurable blacklist blocks destructive commands the assistant would otherwise type.
 3. **Agent Control Plane.** First editor tab (on by default; toggle in Settings). **Execution trajectory** shows a threaded feed with a left rail for each LLM round, tool call, and agent reply (expand for full I/O). **Capabilities** lists the current session agent’s model, tools, prompt sections, sub-agents, and session knobs you can adjust online.
-4. **Workspace editor.** CodeMirror 6 with syntax highlighting, Plain / Emacs / Vim keymaps, Markdown edit / preview / split, image and spreadsheet previews, Git diffs, tabs, breadcrumbs, save and dirty-close guards.
+4. **Workspace editor.** CodeMirror 6 with syntax highlighting, Plain / Emacs / Vim keymaps, Markdown edit / preview / split, **Canvas edit / preview / split** (React render of `.canvas/*.canvas.tsx`), image and spreadsheet previews, Git diffs, tabs, breadcrumbs, save and dirty-close guards.
 5. **Files.** Tree browse, filter, hidden files, `.gitignore` marks, new / rename / delete, and open in a local editor (Cursor, VS Code, and others).
 6. **Git.** Status, stage, commit (including streamed AI messages), fetch / pull / push with safety checks, branches, merge, restore, commit graph, `git init`, and model-facing `git_*` tools.
 7. **Usage panel.** Official API balance, this-machine observed spend, this-session tokens and context. Open the right-dock **Usage** tab, or pin the panel above the left **Settings** button (including the collapsed icon rail). The status bar always shows the balance next to **Feedback**.
-8. **Ultra Slash panel.** Slash commands that inject guidance into the next model step **without interrupting the current turn**. Open the right-dock **Ultra Slash** tab to manage them; type `/` in chat and pick from the bottom Ultra Slash group. Built-in: `/steer`, `/new`, `/skill`, `/docs`. Custom `/name` shortcuts are stored on this machine and shared by every session.
+8. **Ultra Slash panel.** Slash commands that inject guidance into the next model step **without interrupting the current turn**. Open the right-dock **Ultra Slash** tab to manage them; type `/` in chat and pick from the bottom Ultra Slash group. Built-in: `/steer`, `/new`, `/skill`, `/docs`, `/canvas`. Custom `/name` shortcuts are stored on this machine and shared by every session.
 9. **Status bar.** Open-file tabs, balance, Feedback, version / upgrade, workspace path, branch, dirty count, editor mode.
 10. **Maintenance & privacy.** In-UI upgrade checker, Chinese / English UI, and redaction of tokens in paths and errors.
 
@@ -80,6 +82,7 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 - Editor split: `:vs` / `:sp` splits only the editor body into two file views — the toolbar and tab bar stay single, nothing is duplicated; the split pane's tab is underlined, clicking a tab switches the focused pane's file; drag the sash to resize, `:only` or the "Unsplit" toolbar button merges back
 - Editor → chat: a floating "Add to chat" button appears on selection; the toolbar and the tab right-click menu can add the whole file — the same official composer chip as terminal / network refs, with the file path as context
 - Markdown: edit, preview, or split; GFM; http(s) and workspace-relative images; Mermaid fenced blocks (flowchart, sequence, state, class, ER, XY chart via [beautiful-mermaid](https://www.npmjs.com/package/beautiful-mermaid)); workspace file links open in the editor; unsafe links are blocked
+- **Canvas**: `.canvas/<name>.canvas.tsx` under the workspace root; edit / preview / split like Markdown; host transpiles TSX, browser mounts a self-contained React component; **auto-open in preview** after Agent write/edit; manual open from the file tree defaults to preview too
 - Git working-tree diffs and commit diffs open as editor tabs
 - Image preview: png, jpg, jpeg, gif, webp, avif, bmp, ico
 - Table preview: csv, tsv, xlsx (UTF-8, then GB18030 if the file looks garbled). `.xls` is recognized but opens in an external app
@@ -134,7 +137,7 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 
 - Right-dock **Ultra Slash** tab (`/` icon). Chinese UI label: **插件命令**
 - Type `/` in the chat box: plugin commands sit in the **bottom** group, below a divider
-- Built-in, cannot be renamed or deleted: `/steer` (inject guidance), `/new` (blank session; `/new <text>` starts the new session with that first message), `/skill` (save a project skill after the task), `/docs` (write cause and fix under `docs/` after the task)
+- Built-in, cannot be renamed or deleted: `/steer` (inject guidance), `/new` (blank session; `/new <text>` starts the new session with that first message), `/skill` (save a project skill after the task), `/docs` (write cause and fix under `docs/` after the task), `/canvas` (create or update a Canvas under `.canvas/` after the task)
 - Custom `/name` shortcuts send a fixed `/steer` payload. Fill `review` in the panel — do not type the slash — and `/review` appears in the menu
 - **Does not interrupt** the current turn. If the model is running, the text is queued for the next model access; you do not need **Stop**
 - Stored on this machine at `~/.dsh/ultra-slash/commands.json`; every session shares the same list (at most 40 custom commands)
@@ -219,7 +222,7 @@ They inject text into the **next** model step. The current turn is **not** stopp
 
 ### Built-in commands
 
-These four cannot be renamed or deleted.
+These five cannot be renamed or deleted.
 
 | Command | What it does |
 | --- | --- |
@@ -227,19 +230,20 @@ These four cannot be renamed or deleted.
 | `/new [text]` | Switch to a blank session; text after the command is sent as the first message of the new session. A running turn is not stopped; switch back from the left session list |
 | `/skill` | After the current task, save the solution as a skill in this project. Same “do not interrupt” rule as `/steer` |
 | `/docs` | After the current task, write the cause and the fix as markdown under `docs/`. Same rule as `/steer` |
+| `/canvas [topic]` | After the current task, create or update a Canvas file under `.canvas/` in the workspace (product prototype, dashboard, analysis, or custom interactive UI). Append a topic after the command to steer filename and layout. Same rule as `/steer` |
 
 If `/steer` is sent with empty text, the UI tells you to write the guidance first and shows a usage example. Nothing is injected.
 
 ### Default prompts
 
-The **Default prompts** section of the panel lets you set a default text for `/new`, `/skill`, and `/docs` each (`/steer` stays manual and cannot be configured). Leaving a field empty uses the built-in text:
+The **Default prompts** section of the panel lets you set a default text for `/new`, `/skill`, `/docs`, and `/canvas` each (`/steer` stays manual and cannot be configured). Leaving a field empty uses the built-in text:
 
 - The `/new` default is sent as the **first message of the new session**; `/new <text>` still uses what you type.
-- The `/skill` and `/docs` defaults are injected into the next model step; text you append after the command is added after the default (e.g. `/skill also log the pitfalls`).
+- The `/skill`, `/docs`, and `/canvas` defaults are injected into the next model step; text you append after the command is added after the default (e.g. `/canvas order admin prototype`).
 
 Defaults are saved on this machine in the same `commands.json` as the custom commands and shared by every session; they survive a page refresh.
 
-Typing `/new`, `/skill`, `/docs`, or a custom command name highlights the name in the composer with the reference style (the same as DSH built-in commands and skill names), whether or not the session is running.
+Typing `/new`, `/skill`, `/docs`, `/canvas`, or a custom command name highlights the name in the composer with the reference style (the same as DSH built-in commands and skill names), whether or not the session is running.
 
 ### Custom commands
 
@@ -253,9 +257,43 @@ Give a short name to a `/steer` payload you use often. For example, fill `review
 Rules the panel enforces (you will see a Chinese or English reason under the field if something is wrong):
 
 - Name: start with a lowercase letter; then only letters, digits, hyphens, or underscores. Put Chinese or other languages in the guidance text, not the name.
-- Do not reuse `/steer`, `/new`, `/skill`, `/docs`, or DeepSeek Harness names such as `/help` and `/plan`.
+- Do not reuse `/steer`, `/new`, `/skill`, `/docs`, `/canvas`, or DeepSeek Harness names such as `/help` and `/plan`.
 - At most 40 custom commands. Description at most 80 characters; guidance at most 8000.
 - The list is stored on this machine at `~/.dsh/ultra-slash/commands.json` (or `$DSH_HOME/ultra-slash/commands.json`) and is shared by every session. A damaged file is not overwritten — fix or delete it, then try again.
+
+## Canvas
+
+Canvas is the workbench’s way to ship **standalone visual deliverables** — product prototypes, dashboards, architecture reviews, timelines, and other React layouts — beside chat, without dumping everything into markdown.
+
+### Where files live
+
+Unlike Cursor’s user-config `canvases/` folder, this plugin keeps Canvas **in the current workspace**:
+
+| Item | Rule |
+| --- | --- |
+| Directory | `.canvas/` at the **workspace root** |
+| Filename | `<descriptive-kebab-name>.canvas.tsx` (e.g. `.canvas/order-dashboard.canvas.tsx`) |
+| Format | One self-contained file per canvas: default-export a React component, inline `style` only, data embedded in the file (no `fetch`, no extra modules) |
+
+Only paths under `.canvas/` ending in `.canvas.tsx` use the Canvas preview pipeline. Other `.tsx` files stay plain text.
+
+### How to create one
+
+1. **Slash command** — `/canvas` or `/canvas <topic>` injects built-in guidance into the next model step **without stopping the current turn**. The model writes the file under `.canvas/`.
+2. **Manual** — create `.canvas/my-prototype.canvas.tsx` yourself and open it from the file tree.
+
+The **Default prompts** section in the Ultra Slash panel can override the shipped `/canvas` guidance.
+
+### Preview and auto-open
+
+When the Agent **writes or edits** a `.canvas/*.canvas.tsx` file, the workbench:
+
+1. **Auto-opens** the file in the editor
+2. Lands in **preview** mode and **renders the React component** (toolbar: edit / split / preview, same pattern as Markdown)
+
+Opening a Canvas file yourself also defaults to preview. Switch to **edit** to change TSX source, or **split** for side-by-side source and preview.
+
+Compilation runs on the workbench host (TSX → JS); the browser mounts the result with React hooks injected. Compile errors show in the preview pane with a short Chinese message.
 
 ## Capability matrix
 
@@ -268,6 +306,7 @@ Rules the panel enforces (you will see a Chinese or English reason under the fie
 | Editor | Keymaps | Plain / Emacs / Vim; persists; Emacs default | Supported |
 | Editor | Tabs and save | Multi-tab, dirty close confirm, close all / others / left / right | Supported |
 | Editor | Markdown | Edit / preview / split; images; Mermaid; safe file links | Supported |
+| Editor | Canvas | `.canvas/*.canvas.tsx`; edit / preview / split; React render; auto-open after Agent write | Supported |
 | Editor | Image preview | png / jpg / jpeg / gif / webp / avif / bmp / ico | Supported |
 | Editor | Table preview | csv / tsv / xlsx; `.xls` external only | Supported |
 | Editor | Diffs | Working-tree and commit diffs as tabs | Supported |
@@ -280,7 +319,7 @@ Rules the panel enforces (you will see a Chinese or English reason under the fie
 | Git | Model tools | `git_status` / `git_diff` / `git_log` / `git_branch` / `git_commit` | Supported |
 | Usage | Balance and tokens | Official balance; local observed spend; this-session tokens; context | Supported |
 | Usage | Pin | Above left Settings, including collapsed rail; status-bar ¥ / $ | Supported |
-| Ultra Slash | Built-in commands | `/steer` / `/new` / `/skill` / `/docs`; do not interrupt the current turn | Supported |
+| Ultra Slash | Built-in commands | `/steer` / `/new` / `/skill` / `/docs` / `/canvas`; do not interrupt the current turn | Supported |
 | Ultra Slash | `/` menu group | Bottom Ultra Slash group (Chinese: 插件命令), below a divider | Supported |
 | Ultra Slash | Custom commands | Named `/steer` shortcuts; local `commands.json`; at most 40 | Supported |
 | Status bar | Chrome | File tabs, Feedback, version, cwd, branch, dirty, editor mode | Supported |
@@ -303,11 +342,11 @@ Rules the panel enforces (you will see a Chinese or English reason under the fie
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.29** (npm tag `latest`) |
+| Version | **0.1.30** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.29
++ dsh-workbench-plugin@0.1.30
 ```
 
 Maintainers publish npm with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -322,13 +361,13 @@ The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbenc
 
 ### Procedure
 
-1. Install the plugin (pin the version; do not omit `@0.1.29`):
+1. Install the plugin (pin the version; do not omit `@0.1.30`):
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.29
+dsh plugin --profile web add dsh-workbench-plugin@0.1.30
 ```
 
-`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.29` requests that release explicitly.
+`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.30` requests that release explicitly.
 
 If a pinned install is still refused as too new, add this to `~/.dsh/profiles/web/pnpm-workspace.yaml` and run the command again:
 
@@ -364,7 +403,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.29 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.30 manually using the command above. Later releases will prompt in the UI.
 
 ## Workspace terminal
 

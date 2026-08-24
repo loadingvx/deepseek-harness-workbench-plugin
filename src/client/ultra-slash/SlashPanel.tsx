@@ -52,7 +52,10 @@ function configurableName(name: string): ConfigurableDefaultName | null {
 }
 
 function defaultLabelKey(name: ConfigurableDefaultName): string {
-  return name === 'new' ? 'defaults.labelNew' : name === 'skill' ? 'defaults.labelSkill' : 'defaults.labelDocs'
+  if (name === 'new') return 'defaults.labelNew'
+  if (name === 'skill') return 'defaults.labelSkill'
+  if (name === 'docs') return 'defaults.labelDocs'
+  return 'defaults.labelCanvas'
 }
 
 /** Shipped default prompt text per configurable builtin (localized). */

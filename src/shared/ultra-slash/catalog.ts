@@ -16,7 +16,7 @@ export const MAX_DESCRIPTION_LENGTH = 80
 export const MAX_STEER_TEXT_LENGTH = 8000
 
 /** Builtin commands whose default prompt the user may configure (everything except the steer primitive). */
-export const CONFIGURABLE_DEFAULT_NAMES = ['new', 'skill', 'docs'] as const
+export const CONFIGURABLE_DEFAULT_NAMES = ['new', 'skill', 'docs', 'canvas'] as const
 export type ConfigurableDefaultName = (typeof CONFIGURABLE_DEFAULT_NAMES)[number]
 
 /** User-configured default prompt per configurable builtin ('' = fall back to the shipped payload). */
@@ -80,6 +80,13 @@ export const BUILTIN_SLASH_COMMANDS: readonly BuiltinSlashCommand[] = [
     descriptionKey: 'docs.description',
     hintKey: 'alias.hint',
     payloadKey: 'docs.payload',
+  },
+  {
+    name: 'canvas',
+    kind: 'alias',
+    descriptionKey: 'canvas.description',
+    hintKey: 'canvas.hint',
+    payloadKey: 'canvas.payload',
   },
 ]
 

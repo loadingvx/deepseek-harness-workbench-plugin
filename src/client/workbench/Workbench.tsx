@@ -75,6 +75,9 @@ import { termIdFromTabId } from '../../shared/new-file-path.ts'
 import type { TermCleanExitAction } from './term-session.ts'
 import { createControlPlaneTab, createTerminalTab, nextBrowserTab, nextTerminalTab, TERMINAL_TAB_ID, CONTROL_PLANE_TAB_ID, type FileBuffer, type FileTab, type Translate, type WorkbenchInjected } from './types.ts'
 import { previewKindOfPath } from '../../shared/preview-kind.ts'
+import { isCanvasPath, type CanvasViewMode } from '../../shared/canvas-path.ts'
+import { requestCanvasView } from './canvas-view-prefs.ts'
+import { retainCanvasLive } from './canvas-live.ts'
 import { isTermAssistHotkey, isTermNewTabHotkey } from '../../shared/term-assist.ts'
 import { StatusBar } from './StatusBar.tsx'
 import { TerminalPanel } from './TerminalPanel.tsx'
@@ -658,6 +661,7 @@ function WorkbenchInner(props: WorkbenchProps) {
 
   const openFile = useCallback(async (path: string): Promise<void> => {
     if (workspaceId === undefined) return
+    if (isCanvasPath(path)) requestCanvasView(path, 'preview')
     patchWorkbenchChrome({ editorOpen: true })
     const id = fileTabId(path)
     const previewKind = previewKindOfPath(path)
@@ -690,7 +694,11 @@ function WorkbenchInner(props: WorkbenchProps) {
     }))
   }, [client, workspaceId])
 
-  /** Agent changes 面板打开文件：先打开，再请求编辑器跳到第一个 diff。 */
+  useEffect(() => retainCanvasLive(client, workspaceId, (path) => {
+    requestCanvasView(path, 'preview')
+    void openFile(path)
+  }), [client, workspaceId, openFile])
+
   const openFileFromReview = useCallback((path: string): void => {
     void openFile(path)
     setReviewJump(current => ({ path, stamp: (current?.stamp ?? 0) + 1 }))

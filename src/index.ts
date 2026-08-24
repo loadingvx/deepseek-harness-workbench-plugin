@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { registerControlPlane } from './host/control-plane/http.ts'
 import { GitService } from './host/git-service.ts'
 import { registerGitHttp } from './host/http.ts'
+import { CanvasOpenQueue, registerCanvasOpenQueue } from './host/canvas-open-queue.ts'
 import { PendingReviewStore, registerPendingReview } from './host/pending-review.ts'
 import { registerGitTools } from './host/tools.ts'
 import { applyUltraSlash } from './host/ultra-slash/apply.ts'
@@ -25,10 +26,12 @@ export function apply(ctx: Context): void {
   const git = new GitService()
   const fs = new WorkspaceFs()
   const review = new PendingReviewStore(fs)
-  ctx.effect(() => registerGitHttp(ctx, git, fs, review), 'workbench: http')
+  const canvasOpen = new CanvasOpenQueue()
+  ctx.effect(() => registerGitHttp(ctx, git, fs, review, undefined, undefined, canvasOpen), 'workbench: http')
   ctx.effect(() => registerControlPlane(ctx), 'workbench: control-plane')
   ctx.effect(() => registerGitTools(ctx, git), 'workbench: tools')
   ctx.effect(() => registerPendingReview(ctx, review), 'workbench: pending review')
+  ctx.effect(() => registerCanvasOpenQueue(ctx, canvasOpen, review), 'workbench: canvas open')
   applyUltraSlash(ctx)
   ctx.effect(() => {
     const server = ctx.webServer
