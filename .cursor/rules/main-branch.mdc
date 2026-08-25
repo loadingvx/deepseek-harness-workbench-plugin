@@ -1,0 +1,12 @@
+---
+description: 日常开发与提交都在 main 上进行；不要切到已废弃的 dev 分支
+alwaysApply: true
+---
+
+# 开发分支
+
+本仓库只在 `main` 上开发、提交和发布。原先的 `dev` 双分支流程已废弃。
+
+- 动手改代码前看当前分支。若还停在 `dev`（或其它非 `main` 分支），立刻 `git switch main`，不要在 `dev` 上改。
+- 不要再执行 `devops/sync-main-from-dev.sh`，也不要为了「避开 main」去新建或切回 `dev`。
+- `main` 是默认分支，需要跟踪构建产物：推 GitHub 前先 `bash devops/build.sh`，把 `lib/index.js` 和 `lib/client.js` 与源码一起提交（市场从 GitHub 安装，用户机器不会编译）。
