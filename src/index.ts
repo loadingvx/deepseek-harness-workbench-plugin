@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { registerAgentAssets } from './host/agent-assets/http.ts'
 import { registerControlPlane } from './host/control-plane/http.ts'
 import { GitService } from './host/git-service.ts'
 import { registerGitHttp } from './host/http.ts'
@@ -29,6 +30,7 @@ export function apply(ctx: Context): void {
   const canvasOpen = new CanvasOpenQueue()
   ctx.effect(() => registerGitHttp(ctx, git, fs, review, undefined, undefined, canvasOpen), 'workbench: http')
   ctx.effect(() => registerControlPlane(ctx), 'workbench: control-plane')
+  ctx.effect(() => registerAgentAssets(ctx, fs), 'workbench: agent-assets')
   ctx.effect(() => registerGitTools(ctx, git), 'workbench: tools')
   ctx.effect(() => registerPendingReview(ctx, review), 'workbench: pending review')
   ctx.effect(() => registerCanvasOpenQueue(ctx, canvasOpen, review), 'workbench: canvas open')

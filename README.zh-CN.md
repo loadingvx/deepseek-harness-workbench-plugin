@@ -136,7 +136,7 @@ DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作�
 
 - 右侧栏 **插件命令** 标签（`/` 图标）。英文界面写 **Ultra Slash**
 - 在对话输入框输入 `/`：插件命令在**最下面**一组，上面有一条分隔线，分组名是「插件命令」
-- 内置五条，不能改名或删除：`/steer`（注入引导）、`/new`（空白会话；`/new <内容>` 会用该内容作为第一句话发起新会话）、`/skill`（完成后存成项目 skill）、`/docs`（完成后把原因和方案写成 `docs/` 下的 md）、`/canvas`（完成后在工作区 `.canvas/` 创建或更新 Canvas 可视化）
+- 内置五条，不能改名或删除：`/steer`（注入引导）、`/new`（空白会话；`/new <内容>` 会用该内容作为第一句话发起新会话）、`/skill`（完成后存到工作区 `.dsh/skills/`）、`/docs`（完成后把原因和方案写成 `docs/` 下的 md）、`/canvas`（完成后在工作区 `.canvas/` 创建或更新 Canvas 可视化）
 - 自定义短命令等于发送一段固定的 `/steer` 内容。面板里填 `review`（不用写斜杠），之后输入 `/review` 就会出现在菜单里
 - **不会打断**当前对话。模型正在跑时，内容会排到下一次访问大模型；不必点「停止」
 - 保存在本机 `~/.dsh/ultra-slash/commands.json`，所有会话共用（最多 40 条自定义）
@@ -227,7 +227,7 @@ DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作�
 | --- | --- |
 | `/steer <引导内容>` | 把引导注入下一步，不打断当前对话。例如：`/steer 先不要改代码，只列出将要改的文件` |
 | `/new [内容]` | 切到空白会话；命令后面跟的内容会作为第一句话直接发出。正在跑的对话不会被停止，可在左侧列表点回去 |
-| `/skill` | 完成当前任务后，把刚才的方案存成当前项目的 skill。同样不打断对话 |
+| `/skill` | 完成当前任务后，把刚才的方案写成 `.dsh/skills/<name>/SKILL.md`，供 DeepSeek Harness 加载。同样不打断对话 |
 | `/docs` | 完成当前任务后，把问题原因和解决方案写成 md，放到 `docs/`。同样不打断对话 |
 | `/canvas [主题]` | 完成当前任务后，在工作区 `.canvas/` 创建或更新 Canvas（产品原型、看板、分析页等）。命令后可追加主题以指定文件名与布局重点。同样不打断对话 |
 
@@ -341,11 +341,11 @@ TSX 在 Host 端编译为 JS，浏览器注入 React 钩子后挂载。编译失
 | 项目 | 说明 |
 | --- | --- |
 | 包名 | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| 当前版本 | **0.1.30**（npm 标签 `latest`） |
+| 当前版本 | **0.1.31**（npm 标签 `latest`） |
 | 软件源 | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.30
++ dsh-workbench-plugin@0.1.31
 ```
 
 维护者发布 npm 请执行 `bash devops/release.sh`。该脚本使用本机已有的 `npm login` 会话；不得将账号或凭据写入仓库。
@@ -360,13 +360,13 @@ TSX 在 Host 端编译为 JS，浏览器注入 React 钩子后挂载。编译失
 
 ### 步骤
 
-1. 安装插件（必须带版本号，不要省略 `@0.1.30`）：
+1. 安装插件（必须带版本号，不要省略 `@0.1.31`）：
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.30
+dsh plugin --profile web add dsh-workbench-plugin@0.1.31
 ```
 
-`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.30` 才会明确要这一版。
+`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.31` 才会明确要这一版。
 
 若指定版本后仍提示太新、装不上，在 `~/.dsh/profiles/web/pnpm-workspace.yaml` 加上下面两行，再执行一次安装命令：
 
@@ -402,7 +402,7 @@ dsh plugin --profile web add github:loadingvx/deepseek-harness-workbench-plugin
 
 ### 从 0.1.1 升级
 
-**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.30；此后版本将通过界面提示。
+**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.31；此后版本将通过界面提示。
 
 ## 工作区终端
 

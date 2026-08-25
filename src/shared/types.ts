@@ -58,6 +58,7 @@ export type GitErrorCode =
   | 'REVIEW_STALE'
   | 'REVIEW_AMBIGUOUS'
   | 'REVIEW_FULL'
+  | 'ASSET_INVALID'
 
 export interface GitFail {
   ok: false

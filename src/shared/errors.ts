@@ -226,6 +226,10 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     messageZh: '待确认改动太多，已暂停跟踪新的 Agent 写入。',
     hintZh: '请先在「待确认」里 Keep 或 Undo 一些文件，再让 Agent 继续改。',
   },
+  ASSET_INVALID: {
+    messageZh: '这项内容没法保存。',
+    hintZh: '请按页面上的说明改好后再保存。名称只能用小写英文、数字和连字符，例如 my-skill。',
+  },
   BROWSER_SELF: {
     messageZh: '不能在这里打开工作台自己。',
     hintZh: '地址栏填的是当前工作台页面。请改成你要预览的网站，例如本地开发地址 http://127.0.0.1:5173 。',
@@ -241,8 +245,14 @@ export class GitError extends Error {
   constructor(code: GitErrorCode, detail?: string) {
     const copy = COPY[code]
     const safe = detail === undefined ? undefined : redactSecrets(detail)
-    const messageZh = safe && (code === 'GIT_FAILED' || code === 'LLM_FAILED' || code === 'TERM_FAILED' || code === 'BROWSER_FAILED')
-      ? `${copy.messageZh} ${safe}`
+    const messageZh = safe && (
+      code === 'GIT_FAILED'
+      || code === 'LLM_FAILED'
+      || code === 'TERM_FAILED'
+      || code === 'BROWSER_FAILED'
+      || code === 'ASSET_INVALID'
+    )
+      ? (code === 'ASSET_INVALID' ? safe : `${copy.messageZh} ${safe}`)
       : copy.messageZh
     super(`${code}: ${messageZh}`)
     this.name = 'GitError'

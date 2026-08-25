@@ -6,6 +6,7 @@ import type { GitClient } from '../api.ts'
 import { emptyKnobs, type ControlPlaneSnapshot } from '../../shared/control-plane.ts'
 import { buildCapabilitiesViewModel } from './control-plane-capabilities.ts'
 import { ControlPlaneCapabilitiesView } from './ControlPlaneCapabilitiesView.tsx'
+import { AgentAssetsView } from './AgentAssetsView.tsx'
 import type { Translate } from './types.ts'
 import { TrajectoryView } from './TrajectoryView.tsx'
 import css from './ControlPlanePanel.module.css'
@@ -19,6 +20,7 @@ export type ControlPlaneUseSession = <T>(selector: (state: {
 
 export interface ControlPlanePanelProps {
   client: GitClient
+  workspaceId?: string
   sessionId?: string
   useSession?: ControlPlaneUseSession
   t: Translate
@@ -26,17 +28,25 @@ export interface ControlPlanePanelProps {
 
 const PANEL_TAB_KEY = 'dsh-control-plane-tab'
 
-function readPanelTab(): 'trajectory' | 'topology' {
+type PanelTab = 'trajectory' | 'topology' | 'skills' | 'rules'
+
+function readPanelTab(): PanelTab {
   try {
     const saved = sessionStorage.getItem(PANEL_TAB_KEY)
-    return saved === 'topology' ? 'topology' : 'trajectory'
+    if (saved === 'topology' || saved === 'skills' || saved === 'rules' || saved === 'trajectory') return saved
+    return 'trajectory'
   } catch {
     return 'trajectory'
   }
 }
 
-export function ControlPlanePanel({ client, sessionId, useSession, t }: ControlPlanePanelProps) {
-  const [panelTab, setPanelTab] = useState<'trajectory' | 'topology'>(readPanelTab)
+function writePanelTab(tab: PanelTab): void {
+  try { sessionStorage.setItem(PANEL_TAB_KEY, tab) } catch { /* ignore */ }
+}
+
+export function ControlPlanePanel({ client, workspaceId, sessionId, useSession, t }: ControlPlanePanelProps) {
+  const [panelTab, setPanelTab] = useState<PanelTab>(readPanelTab)
+  const [assetReload, setAssetReload] = useState(0)
   const [snapshot, setSnapshot] = useState<ControlPlaneSnapshot | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -121,23 +131,40 @@ export function ControlPlanePanel({ client, sessionId, useSession, t }: ControlP
     || focusKnobs.promptAppend.trim() !== ''
     || focusKnobs.preStepReject
 
+  const tabHint = panelTab === 'trajectory'
+    ? t('controlPlane.trajHint')
+    : panelTab === 'topology'
+      ? t('controlPlane.topoHint')
+      : panelTab === 'skills'
+        ? t('controlPlane.skillsHint')
+        : t('controlPlane.rulesHint')
+
+  const selectTab = (tab: PanelTab): void => {
+    setPanelTab(tab)
+    writePanelTab(tab)
+  }
+
+  const onRefresh = (): void => {
+    if (panelTab === 'skills' || panelTab === 'rules') {
+      setAssetReload(n => n + 1)
+      return
+    }
+    void reload()
+  }
+
   return (
     <div className={css.root} data-git-ide-panel="control-plane">
       <header className={css.head}>
         <div className={css.headText}>
           <h1 className={css.title}>{t('controlPlane.title')}</h1>
-          <p className={css.subtitle}>
-            {panelTab === 'trajectory' ? t('controlPlane.trajHint') : t('controlPlane.topoHint')}
-          </p>
+          <p className={css.subtitle}>{tabHint}</p>
           <div className={css.panelTabs}>
             <button
               type="button"
               className={css.panelTab}
               data-active={panelTab === 'trajectory' || undefined}
-              onClick={() => {
-                setPanelTab('trajectory')
-                try { sessionStorage.setItem(PANEL_TAB_KEY, 'trajectory') } catch { /* ignore */ }
-              }}
+              aria-pressed={panelTab === 'trajectory'}
+              onClick={() => selectTab('trajectory')}
             >
               {t('controlPlane.tab.trajectory')}
             </button>
@@ -145,16 +172,32 @@ export function ControlPlanePanel({ client, sessionId, useSession, t }: ControlP
               type="button"
               className={css.panelTab}
               data-active={panelTab === 'topology' || undefined}
-              onClick={() => {
-                setPanelTab('topology')
-                try { sessionStorage.setItem(PANEL_TAB_KEY, 'topology') } catch { /* ignore */ }
-              }}
+              aria-pressed={panelTab === 'topology'}
+              onClick={() => selectTab('topology')}
             >
               {t('controlPlane.tab.topology')}
             </button>
+            <button
+              type="button"
+              className={css.panelTab}
+              data-active={panelTab === 'skills' || undefined}
+              aria-pressed={panelTab === 'skills'}
+              onClick={() => selectTab('skills')}
+            >
+              {t('controlPlane.tab.skills')}
+            </button>
+            <button
+              type="button"
+              className={css.panelTab}
+              data-active={panelTab === 'rules' || undefined}
+              aria-pressed={panelTab === 'rules'}
+              onClick={() => selectTab('rules')}
+            >
+              {t('controlPlane.tab.rules')}
+            </button>
           </div>
         </div>
-        {headerStats !== null ? (
+        {headerStats !== null && panelTab === 'topology' ? (
           <div className={css.headStats} aria-label={t('controlPlane.graphLabel')}>
             <span className={css.headStat} data-kind="tools">
               {t('controlPlane.stat.tools', { count: headerStats.tools })}
@@ -173,12 +216,12 @@ export function ControlPlanePanel({ client, sessionId, useSession, t }: ControlP
           </div>
         ) : null}
         <div className={css.headActions}>
-          {activeOverlay ? (
+          {activeOverlay && panelTab === 'topology' ? (
             <button type="button" className={css.btnGhost} disabled={busy} onClick={() => { void resetAll() }}>
               {t('controlPlane.reset')}
             </button>
           ) : null}
-          <button type="button" className={css.btn} disabled={busy} onClick={() => { void reload() }}>
+          <button type="button" className={css.btn} disabled={busy} onClick={onRefresh}>
             {t('controlPlane.refresh')}
           </button>
         </div>
@@ -187,6 +230,22 @@ export function ControlPlanePanel({ client, sessionId, useSession, t }: ControlP
       <div className={css.stage} data-tab={panelTab}>
         {panelTab === 'trajectory' ? (
           <TrajectoryView client={client} sessionId={sessionId} useSession={useSession} t={t} />
+        ) : panelTab === 'skills' ? (
+          <AgentAssetsView
+            client={client}
+            workspaceId={workspaceId}
+            family="skill"
+            reloadToken={assetReload}
+            t={t}
+          />
+        ) : panelTab === 'rules' ? (
+          <AgentAssetsView
+            client={client}
+            workspaceId={workspaceId}
+            family="rule"
+            reloadToken={assetReload}
+            t={t}
+          />
         ) : snapshot !== null ? (
           <ControlPlaneCapabilitiesView
             snapshot={snapshot}

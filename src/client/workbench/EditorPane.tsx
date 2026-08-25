@@ -449,6 +449,7 @@ export function EditorPane({
     body = (
       <ControlPlanePanel
         client={client}
+        workspaceId={workspaceId}
         sessionId={sessionId}
         useSession={useSession}
         t={t}

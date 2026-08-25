@@ -10,6 +10,7 @@ import type {
   CanvasOpenSnapshot,
 } from '../shared/types.ts'
 import type { ControlPlaneKnobPatch, ControlPlaneKnobs, ControlPlaneSnapshot } from '../shared/control-plane.ts'
+import type { AgentAsset, AgentAssetDraft, AgentAssetList } from '../shared/agent-assets.ts'
 import type { TrajectoryGraph } from '../shared/trajectory.ts'
 import type { PullMode, PushMode } from '../shared/git-sync-prefs.ts'
 import { isCurrentRepoId } from '../shared/git-nearby.ts'
@@ -182,6 +183,16 @@ export interface GitClient {
     sessionId: string,
     patch: ControlPlaneKnobPatch,
   ): Promise<GitResult<{ knobs: ControlPlaneKnobs; snapshot: ControlPlaneSnapshot }>>
+  listSkills(workspaceId: string): Promise<GitResult<AgentAssetList>>
+  listRules(workspaceId: string): Promise<GitResult<AgentAssetList>>
+  createSkill(workspaceId: string, draft: AgentAssetDraft): Promise<GitResult<AgentAsset>>
+  createRule(workspaceId: string, draft: AgentAssetDraft): Promise<GitResult<AgentAsset>>
+  updateSkill(workspaceId: string, name: string, patch: Partial<AgentAssetDraft>, relPath?: string): Promise<GitResult<AgentAsset>>
+  updateRule(workspaceId: string, name: string, patch: Partial<AgentAssetDraft>, relPath?: string): Promise<GitResult<AgentAsset>>
+  enableSkill(workspaceId: string, name: string, enabled: boolean, relPath?: string): Promise<GitResult<AgentAsset>>
+  enableRule(workspaceId: string, name: string, enabled: boolean, relPath?: string): Promise<GitResult<AgentAsset>>
+  deleteSkill(workspaceId: string, name: string, relPath?: string): Promise<GitResult<{ name: string }>>
+  deleteRule(workspaceId: string, name: string, relPath?: string): Promise<GitResult<{ name: string }>>
   assistTerm(
     workspaceId: string,
     text: string,
@@ -345,6 +356,40 @@ export function createGitClient(): GitClient {
     patchControlPlaneKnobs: (sessionId, patch) => request('/git/control-plane/knobs', {
       method: 'POST',
       body: JSON.stringify({ sessionId, ...patch }),
+    }),
+    listSkills: (workspaceId) => request(`/git/agent-assets/skills?${withRepoQuery(workspaceId)}`),
+    listRules: (workspaceId) => request(`/git/agent-assets/rules?${withRepoQuery(workspaceId)}`),
+    createSkill: (workspaceId, draft) => request('/git/agent-assets/create', {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId, family: 'skill', ...draft }),
+    }),
+    createRule: (workspaceId, draft) => request('/git/agent-assets/create', {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId, family: 'rule', ...draft }),
+    }),
+    updateSkill: (workspaceId, name, patch, relPath) => request('/git/agent-assets/update', {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId, family: 'skill', name, relPath, ...patch }),
+    }),
+    updateRule: (workspaceId, name, patch, relPath) => request('/git/agent-assets/update', {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId, family: 'rule', name, relPath, ...patch }),
+    }),
+    enableSkill: (workspaceId, name, enabled, relPath) => request('/git/agent-assets/enable', {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId, family: 'skill', name, enabled, relPath }),
+    }),
+    enableRule: (workspaceId, name, enabled, relPath) => request('/git/agent-assets/enable', {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId, family: 'rule', name, enabled, relPath }),
+    }),
+    deleteSkill: (workspaceId, name, relPath) => request('/git/agent-assets/delete', {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId, family: 'skill', name, relPath }),
+    }),
+    deleteRule: (workspaceId, name, relPath) => request('/git/agent-assets/delete', {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId, family: 'rule', name, relPath }),
     }),
     assistTerm: (workspaceId, text, options) => readLlmNdjsonStream(
       '/git/term/assist/stream',

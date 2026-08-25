@@ -137,7 +137,7 @@ The workbench uses a three-column layout. Conversation stays on the left. The tw
 
 - Right-dock **Ultra Slash** tab (`/` icon). Chinese UI label: **插件命令**
 - Type `/` in the chat box: plugin commands sit in the **bottom** group, below a divider
-- Built-in, cannot be renamed or deleted: `/steer` (inject guidance), `/new` (blank session; `/new <text>` starts the new session with that first message), `/skill` (save a project skill after the task), `/docs` (write cause and fix under `docs/` after the task), `/canvas` (create or update a Canvas under `.canvas/` after the task)
+- Built-in, cannot be renamed or deleted: `/steer` (inject guidance), `/new` (blank session; `/new <text>` starts the new session with that first message), `/skill` (save under `.dsh/skills/` after the task), `/docs` (write cause and fix under `docs/` after the task), `/canvas` (create or update a Canvas under `.canvas/` after the task)
 - Custom `/name` shortcuts send a fixed `/steer` payload. Fill `review` in the panel — do not type the slash — and `/review` appears in the menu
 - **Does not interrupt** the current turn. If the model is running, the text is queued for the next model access; you do not need **Stop**
 - Stored on this machine at `~/.dsh/ultra-slash/commands.json`; every session shares the same list (at most 40 custom commands)
@@ -228,7 +228,7 @@ These five cannot be renamed or deleted.
 | --- | --- |
 | `/steer <guidance>` | Inject the guidance into the next model step without interrupting the turn. Example: `/steer list the files you would change, do not edit yet` |
 | `/new [text]` | Switch to a blank session; text after the command is sent as the first message of the new session. A running turn is not stopped; switch back from the left session list |
-| `/skill` | After the current task, save the solution as a skill in this project. Same “do not interrupt” rule as `/steer` |
+| `/skill` | After the current task, write the solution to `.dsh/skills/<name>/SKILL.md` so DeepSeek Harness can load it. Same “do not interrupt” rule as `/steer` |
 | `/docs` | After the current task, write the cause and the fix as markdown under `docs/`. Same rule as `/steer` |
 | `/canvas [topic]` | After the current task, create or update a Canvas file under `.canvas/` in the workspace (product prototype, dashboard, analysis, or custom interactive UI). Append a topic after the command to steer filename and layout. Same rule as `/steer` |
 
@@ -342,11 +342,11 @@ Compilation runs on the workbench host (TSX → JS); the browser mounts the resu
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.30** (npm tag `latest`) |
+| Version | **0.1.31** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.30
++ dsh-workbench-plugin@0.1.31
 ```
 
 Maintainers publish npm with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -361,13 +361,13 @@ The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbenc
 
 ### Procedure
 
-1. Install the plugin (pin the version; do not omit `@0.1.30`):
+1. Install the plugin (pin the version; do not omit `@0.1.31`):
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.30
+dsh plugin --profile web add dsh-workbench-plugin@0.1.31
 ```
 
-`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.30` requests that release explicitly.
+`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.31` requests that release explicitly.
 
 If a pinned install is still refused as too new, add this to `~/.dsh/profiles/web/pnpm-workspace.yaml` and run the command again:
 
@@ -403,7 +403,7 @@ If the registry lookup fails, no notice is shown. Dismissing the notice skips on
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.30 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.31 manually using the command above. Later releases will prompt in the UI.
 
 ## Workspace terminal
 

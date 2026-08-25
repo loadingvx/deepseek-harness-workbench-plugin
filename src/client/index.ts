@@ -16,6 +16,7 @@ import { en, NS, zh } from './locales.ts'
 import { selectSvgTailGated } from './workbench/svg-render-settings.ts'
 import { svgRenderEn, svgRenderZh } from './workbench/svg-render-locales.ts'
 import { reviewSettingsEn, reviewSettingsZh } from './workbench/review-settings-locales.ts'
+import { agentAssetsEn, agentAssetsZh } from './workbench/agent-assets-locales.ts'
 import { SvgTailView } from './workbench/SvgTailView.tsx'
 
 export const inject = ['slots', 'locale', 'inputTriggers', 'sessions']
@@ -26,8 +27,8 @@ function registerWorkbenchLocale(locale: {
 }): () => void {
   // SVG 渲染翻译外移到独立模块（svg-render-locales.ts），注册时运行时合并进
   // workbench 命名空间，避免逐行插入 locales.ts（缩小上游合并冲突面）。
-  const fullZh = { ...zh, ...svgRenderZh, ...reviewSettingsZh }
-  const fullEn = { ...en, ...svgRenderEn, ...reviewSettingsEn }
+  const fullZh = { ...zh, ...svgRenderZh, ...reviewSettingsZh, ...agentAssetsZh }
+  const fullEn = { ...en, ...svgRenderEn, ...reviewSettingsEn, ...agentAssetsEn }
   const table = locale.dicts?.get(NS)
   if (table !== undefined && (table.has('zh') || table.has('en'))) {
     const zhDict = table.get('zh')

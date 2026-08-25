@@ -8,6 +8,7 @@
 
 import type { CatalogIssue } from './catalog.ts'
 import { CANVAS_PAYLOAD_EN, CANVAS_PAYLOAD_ZH } from './canvas-payload.ts'
+import { SKILL_PAYLOAD_EN, SKILL_PAYLOAD_ZH } from './skill-payload.ts'
 
 /** Dictionary namespace registered with `ctx.locale.register`. */
 export const LOCALE_NS = 'ultra-slash'
@@ -35,8 +36,8 @@ export const zh = {
   'new.started': '已创建新会话，正在发送你的输入：\n{quoted}',
   'new.unavailable': '现在还不能从这里开新会话。请点左侧栏的「新会话」按钮。',
   'alias.hint': '<补充说明，可空>',
-  'skill.description': '完成后把刚才的方案存成当前项目的 skill，不打断对话',
-  'skill.payload': '完成任务后将刚才的方案创建保存为当前项目下的skill备用',
+  'skill.description': '完成后把方案存到 .dsh/skills/，供 DeepSeek Harness 加载，不打断对话',
+  'skill.payload': SKILL_PAYLOAD_ZH,
   'docs.description': '完成后把问题原因和解决方案写成 md，放到 docs 目录，不打断对话',
   'docs.payload': '完成任务后将问题原因和解决方案输出为md文档写入到docs目录下',
   'canvas.description': '在工作区 .canvas 目录创建可视化 Canvas（原型、看板等），不打断对话',
@@ -131,8 +132,8 @@ export const en = {
   'new.started': 'Created a new session; sending your input now:\n{quoted}',
   'new.unavailable': 'A new session cannot be started from here. Use the New session button in the sidebar.',
   'alias.hint': '<optional extra>',
-  'skill.description': 'After the task, save the solution as a project skill, without interrupting the turn',
-  'skill.payload': 'After you finish this task, create and save the solution you just used as a skill in the current project for later reuse',
+  'skill.description': 'After the task, save the solution under .dsh/skills/ so DeepSeek Harness can load it, without interrupting the turn',
+  'skill.payload': SKILL_PAYLOAD_EN,
   'docs.description': 'After the task, write the cause and fix to docs/ as markdown, without interrupting the turn',
   'docs.payload': 'After you finish this task, write the root cause and the solution as a markdown document under the docs directory',
   'canvas.description': 'Create a Canvas visualization under .canvas/ in the workspace (prototypes, dashboards, etc.), without interrupting the turn',
