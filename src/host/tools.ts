@@ -66,9 +66,10 @@ export function registerGitTools(ctx: Context, git: GitService): () => void {
 
   const disposeLog = ctx.tools.register(defineTool({
     name: 'git_log',
-    description: 'Show recent git commits in the current workspace.',
+    description: 'Show recent git commits. Default is the current checkout (HEAD). Set all=true to include every local branch, remote-tracking branch, and tag.',
     parameters: {
-      limit: { type: 'number', description: 'Number of commits, default 20, max 100. Includes local branches, remotes, and tags.' },
+      limit: { type: 'number', description: 'Number of commits, default 20, max 100. Count applies to the chosen scope, not the whole repo.' },
+      all: { type: 'boolean', description: 'If true, show all local branches, remotes, and tags. Default false: current checkout only.' },
     },
     output: {
       schema: { type: 'object', additionalProperties: true, properties: {} },
@@ -77,7 +78,8 @@ export function registerGitTools(ctx: Context, git: GitService): () => void {
     async execute(args, exec) {
       try {
         const limit = typeof args.limit === 'number' ? args.limit : 20
-        return { ok: true, entries: await git.log(cwdOf(ctx, exec), limit, exec.signal) }
+        const scope = args.all === true ? 'all' : 'head'
+        return { ok: true, entries: await git.log(cwdOf(ctx, exec), limit, exec.signal, scope) }
       } catch (error) {
         return failPayload(error)
       }

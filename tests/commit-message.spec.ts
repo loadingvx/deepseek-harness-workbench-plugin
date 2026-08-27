@@ -57,6 +57,42 @@ describe('parseDecorations', () => {
       ],
     })
   })
+
+  it('keeps slash local branches as branches when Git prints full ref names', () => {
+    expect(parseDecorations('HEAD -> refs/heads/feature/login, refs/remotes/origin/feature/login')).toEqual({
+      head: true,
+      refs: [
+        { name: 'feature/login', kind: 'branch' },
+        { name: 'origin/feature/login', kind: 'remote' },
+      ],
+    })
+    expect(parseDecorations('refs/heads/feature/login, tag: refs/tags/v1.0.0')).toEqual({
+      head: false,
+      refs: [
+        { name: 'feature/login', kind: 'branch' },
+        { name: 'v1.0.0', kind: 'tag' },
+      ],
+    })
+  })
+
+  it('treats HEAD -> feature/login as a local branch even in short decorate output', () => {
+    expect(parseDecorations('HEAD -> feature/login')).toEqual({
+      head: true,
+      refs: [{ name: 'feature/login', kind: 'branch' }],
+    })
+  })
+
+  it('hides refs/remotes/*/HEAD from full decorate output', () => {
+    expect(parseDecorations(
+      'HEAD -> refs/heads/main, refs/remotes/origin/HEAD, refs/remotes/origin/main',
+    )).toEqual({
+      head: true,
+      refs: [
+        { name: 'main', kind: 'branch' },
+        { name: 'origin/main', kind: 'remote' },
+      ],
+    })
+  })
 })
 
 describe('sanitizeCommitMessage', () => {

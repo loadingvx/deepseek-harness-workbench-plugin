@@ -14,6 +14,7 @@ import {
   invalidGitUserEmail, invalidGitUserName, invalidInitBranch,
   normalizeGitUserEmail, normalizeGitUserName, normalizeInitBranch,
 } from '../shared/git-identity.ts'
+import type { GitLogScope } from '../shared/git-log-scope.ts'
 import { gitAvailable, runGit } from './git-exec.ts'
 import { GitMutex } from './mutex.ts'
 
@@ -38,7 +39,28 @@ function letterKind(letter: string): FileStatusKind {
   }
 }
 
-/** Parse `git log --format=%D` decorations into HEAD + typed ref marks. */
+const REF_HEADS = 'refs/heads/'
+const REF_REMOTES = 'refs/remotes/'
+const REF_TAGS = 'refs/tags/'
+
+/** Strip Git decorate prefixes so pills show `feature/login`, not `refs/heads/feature/login`. */
+function shortRefName(raw: string): string {
+  if (raw.startsWith(REF_HEADS)) return raw.slice(REF_HEADS.length)
+  if (raw.startsWith(REF_REMOTES)) return raw.slice(REF_REMOTES.length)
+  if (raw.startsWith(REF_TAGS)) return raw.slice(REF_TAGS.length)
+  return raw
+}
+
+function isSymbolicRemoteHead(name: string): boolean {
+  return name.endsWith('/HEAD')
+}
+
+/**
+ * Parse `git log --format=%D` decorations into HEAD + typed ref marks.
+ * Prefers `--decorate=full` namespaces (`refs/heads|remotes|tags`); still
+ * accepts `--decorate=short` so older fixtures and mixed output keep working.
+ * `HEAD -> …` is always the current local branch — even when the name contains `/`.
+ */
 export function parseDecorations(raw: string): { head: boolean; refs: GitRefMark[] } {
   if (raw.trim() === '') return { head: false, refs: [] }
   let head = false
@@ -50,16 +72,33 @@ export function parseDecorations(raw: string): { head: boolean; refs: GitRefMark
     }
     if (part.startsWith('HEAD -> ')) {
       head = true
-      refs.push({ name: part.slice('HEAD -> '.length), kind: 'branch' })
+      const name = shortRefName(part.slice('HEAD -> '.length))
+      if (name !== '') refs.push({ name, kind: 'branch' })
       continue
     }
-    if (part.startsWith('tag: ')) {
-      refs.push({ name: part.slice('tag: '.length), kind: 'tag' })
+    let body = part
+    let tagged = false
+    if (body.startsWith('tag: ')) {
+      tagged = true
+      body = body.slice('tag: '.length)
+    }
+    const name = shortRefName(body)
+    if (name === '') continue
+    if (body.startsWith(REF_HEADS)) {
+      refs.push({ name, kind: 'branch' })
       continue
     }
-    // origin/HEAD is a symbolic remote tip, not a real branch to draw.
-    if (part.includes('/') && part.endsWith('/HEAD')) continue
-    refs.push({ name: part, kind: part.includes('/') ? 'remote' : 'branch' })
+    if (body.startsWith(REF_REMOTES)) {
+      if (!isSymbolicRemoteHead(name)) refs.push({ name, kind: 'remote' })
+      continue
+    }
+    if (tagged || body.startsWith(REF_TAGS)) {
+      refs.push({ name, kind: 'tag' })
+      continue
+    }
+    // --decorate=short leftovers: origin/HEAD is a pointer, not a branch pill.
+    if (isSymbolicRemoteHead(name)) continue
+    refs.push({ name, kind: name.includes('/') ? 'remote' : 'branch' })
   }
   return { head, refs }
 }
@@ -403,7 +442,7 @@ export class GitService {
     return { staged, text, empty: text.trim() === '', ...safePath !== undefined ? { path: safePath } : {} }
   }
 
-  async log(root: string, limit = 80, signal?: AbortSignal): Promise<GitLogEntry[]> {
+  async log(root: string, limit = 80, signal?: AbortSignal, scope: GitLogScope = 'head'): Promise<GitLogEntry[]> {
     await this.requireRepo(root, signal)
     const safeLimit = Math.min(Math.max(1, Math.floor(limit)), 100)
     const result = await runGit({
@@ -411,14 +450,12 @@ export class GitService {
       args: [
         'log',
         `--max-count=${safeLimit}`,
-        '--decorate=short',
+        '--decorate=full',
         '--topo-order',
         '--format=%H%x1f%h%x1f%an%x1f%ad%x1f%s%x1f%D%x1f%P',
         '--date=iso-strict',
         'HEAD',
-        '--branches',
-        '--remotes',
-        '--tags',
+        ...scope === 'all' ? ['--branches', '--remotes', '--tags'] : [],
       ],
       signal,
       allowNonZero: true,

@@ -258,7 +258,7 @@ describe('GitService', () => {
     expect((await git.status(root)).probe.ahead).toBe(0)
   })
 
-  it('includes remote-only commits and origin/* marks in the graph log', async () => {
+  it('keeps current-branch log on HEAD, and includes remote-only commits only in the all-refs graph', async () => {
     const parent = await tempDir('dsh-graph-remote-')
     const remote = join(parent, 'remote.git')
     const a = join(parent, 'a')
@@ -287,16 +287,44 @@ describe('GitService', () => {
     await git.commit(b, 'remote only')
     await git.push(b)
     await runGit({ cwd: a, args: ['fetch'] })
-    const log = await git.log(a, 20)
-    const local = log.find(entry => entry.subject === 'local only')
-    const remoteOnly = log.find(entry => entry.subject === 'remote only')
+    const headLog = await git.log(a, 20)
+    const local = headLog.find(entry => entry.subject === 'local only')
+    const remoteOnlyOnHead = headLog.find(entry => entry.subject === 'remote only')
     expect(local?.head).toBe(true)
     expect(local?.refs.some(ref => ref.name === 'main' && ref.kind === 'branch')).toBe(true)
+    expect(remoteOnlyOnHead).toBeUndefined()
+
+    const allLog = await git.log(a, 20, undefined, 'all')
+    const remoteOnly = allLog.find(entry => entry.subject === 'remote only')
     expect(remoteOnly).toBeDefined()
     expect(remoteOnly?.head).toBe(false)
     expect(remoteOnly?.refs.some(ref => ref.name === 'origin/main' && ref.kind === 'remote')).toBe(true)
     expect(local?.parents.length).toBeGreaterThan(0)
     expect(remoteOnly?.parents.length).toBeGreaterThan(0)
+  })
+
+  it('defaults to the current branch and keeps slash local branches as branches', async () => {
+    const root = await initRepo()
+    await writeFile(join(root, 'a.txt'), 'base\n')
+    await git.stage(root, ['a.txt'])
+    await git.commit(root, 'seed')
+    await git.createBranch(root, 'feature/login')
+    await writeFile(join(root, 'a.txt'), 'feature\n')
+    await git.stage(root, ['a.txt'])
+    await git.commit(root, 'on feature/login')
+    await git.switchBranch(root, 'main')
+
+    const headLog = await git.log(root, 10)
+    expect(headLog.some(entry => entry.subject === 'on feature/login')).toBe(false)
+    expect(headLog[0]?.subject).toBe('seed')
+    expect(headLog[0]?.refs.some(ref => ref.name === 'main' && ref.kind === 'branch')).toBe(true)
+
+    const allLog = await git.log(root, 10, undefined, 'all')
+    const feature = allLog.find(entry => entry.subject === 'on feature/login')
+    expect(feature).toBeDefined()
+    expect(feature?.head).toBe(false)
+    expect(feature?.refs.some(ref => ref.name === 'feature/login' && ref.kind === 'branch')).toBe(true)
+    expect(feature?.refs.some(ref => ref.name === 'feature/login' && ref.kind === 'remote')).toBe(false)
   })
 
   it('pulls fast-forward updates and refuses when the worktree is dirty', async () => {

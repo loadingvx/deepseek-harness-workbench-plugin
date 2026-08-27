@@ -31,8 +31,8 @@ import { readDocumentColorScheme } from './surface-scheme.ts'
 import type { Translate } from './types.ts'
 import { clampGraphHeight, GRAPH_DEFAULT_H, GRAPH_MIN_H, measureReservedAboveGraph } from './graph-layout.ts'
 import {
-  CHANGES_OPEN_KEY, DEFAULT_CHANGES_OPEN, DEFAULT_GIT_SETTINGS_OPEN, DEFAULT_GRAPH_COMPACT,
-  DEFAULT_GRAPH_OPEN, GIT_SETTINGS_OPEN_KEY, GRAPH_COMPACT_KEY, GRAPH_OPEN_KEY,
+  CHANGES_OPEN_KEY, DEFAULT_CHANGES_OPEN, DEFAULT_GIT_SETTINGS_OPEN, DEFAULT_GRAPH_ALL, DEFAULT_GRAPH_COMPACT,
+  DEFAULT_GRAPH_OPEN, GIT_SETTINGS_OPEN_KEY, GRAPH_ALL_KEY, GRAPH_COMPACT_KEY, GRAPH_OPEN_KEY,
   readBoolFlag, writeBoolFlag,
 } from './ui-flags.ts'
 import css from './GitSidebar.module.css'
@@ -220,6 +220,10 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const [changesOpen, setChangesOpen] = useState(() => readBoolFlag(CHANGES_OPEN_KEY, DEFAULT_CHANGES_OPEN))
   const [graphOpen, setGraphOpen] = useState(() => readBoolFlag(GRAPH_OPEN_KEY, DEFAULT_GRAPH_OPEN))
   const [graphCompact, setGraphCompact] = useState(() => readBoolFlag(GRAPH_COMPACT_KEY, DEFAULT_GRAPH_COMPACT))
+  const [graphAll, setGraphAll] = useState(() => readBoolFlag(GRAPH_ALL_KEY, DEFAULT_GRAPH_ALL))
+  const graphAllRef = useRef(graphAll)
+  graphAllRef.current = graphAll
+  const refreshGen = useRef(0)
   const [prompt, setPrompt] = useState<GraphPrompt>(null)
   const [restoreAsk, setRestoreAsk] = useState<RestoreAsk>(null)
   const [promptValue, setPromptValue] = useState('')
@@ -247,13 +251,16 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
 
   const refresh = async (): Promise<GitStatusSnapshot | null> => {
     if (workspaceId === undefined) {
+      refreshGen.current += 1
       setStatus(null)
       setError(null)
       hasRemoteRef.current = false
       return null
     }
+    const gen = ++refreshGen.current
     setLoading(true)
     const statusResult = await client.status(workspaceId, repoId)
+    if (gen !== refreshGen.current) return null
     if (!statusResult.ok) {
       setLoading(false)
       if (statusResult.code === 'BUSY') return status
@@ -293,15 +300,21 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     }
     const [branchResult, logResult] = await Promise.all([
       client.branches(workspaceId, repoId),
-      client.log(workspaceId, repoId),
+      client.log(workspaceId, repoId, graphAllRef.current ? 'all' : 'head'),
     ])
+    if (gen !== refreshGen.current) return null
     setLoading(false)
     setError(null)
     setStatus(statusResult.value)
     hasRemoteRef.current = statusResult.value.probe.remote !== undefined
     headSeenRef.current = headKeyOf(statusResult.value.probe)
     setBranches(branchResult.ok ? branchResult.value : [])
-    setLog(logResult.ok ? logResult.value : [])
+    if (logResult.ok) {
+      setLog(logResult.value)
+    } else {
+      setLog([])
+      if (logResult.code !== 'BUSY') setError(logResult)
+    }
     return statusResult.value
   }
 
@@ -541,6 +554,13 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       writeBoolFlag(GRAPH_COMPACT_KEY, !on)
       return !on
     })
+  }
+  const toggleGraphAll = (): void => {
+    const next = !graphAll
+    writeBoolFlag(GRAPH_ALL_KEY, next)
+    graphAllRef.current = next
+    setGraphAll(next)
+    void refresh()
   }
   const closePrompt = (): void => {
     setPrompt(null)
@@ -1005,6 +1025,23 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                 <span className={css.sectionTitle}>{t('section.graph')}</span>
                 {log.length > 0 ? <span className={css.sectionCount}>{log.length}</span> : null}
               </button>
+              <button
+                type="button"
+                className={css.sectionScope}
+                data-all={graphAll || undefined}
+                title={graphAll
+                  ? t('graph.scopeAllOn')
+                  : (status?.probe.detached === true
+                    ? t('graph.scopeHeadOnDetached')
+                    : t('graph.scopeHeadOn', { branch: status?.probe.branch ?? t('graph.scopeHead') }))}
+                aria-pressed={graphAll}
+                disabled={loading}
+                onClick={toggleGraphAll}
+              >
+                {graphAll
+                  ? t('graph.scopeAll')
+                  : (status?.probe.detached === true ? t('graph.detached') : t('graph.scopeHead'))}
+              </button>
               <div className={css.sectionActions}>
                 <IconButton
                   dense
@@ -1059,7 +1096,18 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
             </div>
             {graphOpen ? (
               <div className={css.paneBody}>
-                <GitGraph entries={log} emptyLabel={t('graph.empty')} compact={graphCompact} client={client} workspaceId={workspaceId} repo={repoId} onOpenCommitDiff={(hash, path) => { onOpenCommitDiff(hash, path, repoId) }} t={t} />
+                <GitGraph
+                  entries={log}
+                  emptyLabel={graphAll
+                    ? t('graph.emptyAll')
+                    : (status?.probe.detached === true ? t('graph.emptyDetached') : t('graph.empty'))}
+                  compact={graphCompact}
+                  client={client}
+                  workspaceId={workspaceId}
+                  repo={repoId}
+                  onOpenCommitDiff={(hash, path) => { onOpenCommitDiff(hash, path, repoId) }}
+                  t={t}
+                />
               </div>
             ) : null}
           </section>

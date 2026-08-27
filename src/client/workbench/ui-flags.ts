@@ -14,6 +14,7 @@ export function writeBoolFlag(key: string, value: boolean): void {
 }
 
 export const GRAPH_COMPACT_KEY = 'dsh-workbench-graph-compact'
+export const GRAPH_ALL_KEY = 'dsh-workbench-graph-all'
 export const GRAPH_OPEN_KEY = 'dsh-workbench-graph-open'
 export const CHANGES_OPEN_KEY = 'dsh-workbench-changes-open'
 export const GIT_SETTINGS_OPEN_KEY = 'dsh-workbench-git-settings-open'
@@ -28,6 +29,8 @@ export const SETTINGS_REVIEW_OPEN_KEY = 'dsh-workbench-settings-review-open'
 
 /** Compact GRAPH (message-only rows) is the factory default. */
 export const DEFAULT_GRAPH_COMPACT = true
+/** GRAPH defaults to the current checkout, not every branch/tag. */
+export const DEFAULT_GRAPH_ALL = false
 export const DEFAULT_GRAPH_OPEN = true
 export const DEFAULT_CHANGES_OPEN = true
 export const DEFAULT_GIT_SETTINGS_OPEN = false

@@ -12,8 +12,9 @@ import type {
 import type { ControlPlaneKnobPatch, ControlPlaneKnobs, ControlPlaneSnapshot } from '../shared/control-plane.ts'
 import type { AgentAsset, AgentAssetDraft, AgentAssetList } from '../shared/agent-assets.ts'
 import type { TrajectoryGraph } from '../shared/trajectory.ts'
-import type { PullMode, PushMode } from '../shared/git-sync-prefs.ts'
+import type { GitLogScope } from '../shared/git-log-scope.ts'
 import { isCurrentRepoId } from '../shared/git-nearby.ts'
+import type { PullMode, PushMode } from '../shared/git-sync-prefs.ts'
 
 async function request<T>(path: string, init?: RequestInit): Promise<GitResult<T>> {
   try {
@@ -138,7 +139,7 @@ export interface GitClient {
   identity(workspaceId: string, repo?: string): Promise<GitResult<GitIdentity>>
   initRepo(workspaceId: string, input: GitInitInput): Promise<GitResult<GitStatusSnapshot>>
   diff(workspaceId: string, path?: string, staged?: boolean, repo?: string): Promise<GitResult<GitDiffSnapshot>>
-  log(workspaceId: string, repo?: string): Promise<GitResult<GitLogEntry[]>>
+  log(workspaceId: string, repo?: string, scope?: GitLogScope): Promise<GitResult<GitLogEntry[]>>
   branches(workspaceId: string, repo?: string): Promise<GitResult<GitBranchInfo[]>>
   stage(workspaceId: string, paths: string[], repo?: string): Promise<GitResult<{ done: boolean }>>
   unstage(workspaceId: string, paths: string[], repo?: string): Promise<GitResult<{ done: boolean }>>
@@ -228,7 +229,7 @@ export function createGitClient(): GitClient {
       if (staged) extra.staged = '1'
       return request(`/git/diff?${withRepoQuery(workspaceId, extra, repo)}`)
     },
-    log: (workspaceId, repo) => request(`/git/log?${withRepoQuery(workspaceId, { limit: '80' }, repo)}`),
+    log: (workspaceId, repo, scope) => request(`/git/log?${withRepoQuery(workspaceId, { limit: '80', scope: scope === 'all' ? 'all' : 'head' }, repo)}`),
     branches: (workspaceId, repo) => request(`/git/branches?${withRepoQuery(workspaceId, undefined, repo)}`),
     stage: (workspaceId, paths, repo) => request('/git/stage', {
       method: 'POST', body: withRepoBody(workspaceId, { paths }, repo),

@@ -344,6 +344,41 @@
   font-weight: 500;
 }
 
+.sectionScope {
+  flex: none;
+  max-width: 7.5em;
+  height: 22px;
+  padding: 0 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.sectionScope:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.sectionScope[data-all] {
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-button-ghost-active-fill);
+  color: var(--dsw-alias-label-primary);
+}
+
+.sectionScope:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .sectionGrow {
   flex: 1;
 }

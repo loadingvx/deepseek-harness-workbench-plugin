@@ -14,6 +14,16 @@ describe('toRefMark', () => {
     expect(toRefMark('origin/main')).toEqual({ name: 'origin/main', kind: 'remote' })
   })
 
+  it('uses Git ref namespaces instead of guessing from slashes', () => {
+    expect(toRefMark('refs/heads/feature/login')).toEqual({ name: 'feature/login', kind: 'branch' })
+    expect(toRefMark('refs/remotes/origin/feature/login')).toEqual({ name: 'origin/feature/login', kind: 'remote' })
+    expect(toRefMark('refs/tags/v1.0.0')).toEqual({ name: 'v1.0.0', kind: 'tag' })
+    expect(toRefMark({ name: 'refs/heads/release/v2', kind: 'branch' })).toEqual({
+      name: 'release/v2',
+      kind: 'branch',
+    })
+  })
+
   it('drops empty values so the pill is not blank', () => {
     expect(toRefMark('')).toBeNull()
     expect(toRefMark({ name: '  ', kind: 'tag' })).toBeNull()
