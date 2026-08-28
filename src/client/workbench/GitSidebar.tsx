@@ -1270,31 +1270,29 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                 <legend>{t('gitSettings.graphLimitTitle')}</legend>
                 <p className={css.choiceLead}>{t('gitSettings.graphLimitHint')}</p>
                 <div className={css.limitRow}>
-                  <label className={css.field}>
-                    <span>{t('gitSettings.graphLimitLabel')}</span>
-                    <input
-                      className={`${css.fieldInput} ${css.limitInput}`}
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      spellCheck={false}
-                      min={GRAPH_LIMIT_MIN}
-                      max={GRAPH_LIMIT_MAX}
-                      value={graphLimitDraft}
-                      aria-invalid={settingsError !== null || undefined}
-                      onChange={(event) => {
-                        setGraphLimitDraft(event.target.value)
-                        setSettingsError(null)
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault()
-                          saveTemplate()
-                        }
-                        if (event.key === 'Escape') closeTemplate()
-                      }}
-                    />
-                  </label>
+                  <input
+                    className={`${css.fieldInput} ${css.limitInput}`}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    spellCheck={false}
+                    min={GRAPH_LIMIT_MIN}
+                    max={GRAPH_LIMIT_MAX}
+                    value={graphLimitDraft}
+                    aria-label={t('gitSettings.graphLimitLabel')}
+                    aria-invalid={settingsError !== null || undefined}
+                    onChange={(event) => {
+                      setGraphLimitDraft(event.target.value)
+                      setSettingsError(null)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        saveTemplate()
+                      }
+                      if (event.key === 'Escape') closeTemplate()
+                    }}
+                  />
                   <div className={css.limitPresets}>
                     {GRAPH_LIMIT_PRESETS.map((preset) => (
                       <button

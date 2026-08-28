@@ -1064,31 +1064,36 @@
   gap: 8px;
 }
 
-.limitRow .field {
-  margin: 0;
-}
-
 .limitInput {
+  box-sizing: border-box;
   width: 96px;
   flex: none;
+  height: 30px;
+  line-height: 28px;
 }
 
 .limitPresets {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
 }
 
 .limitPreset {
-  height: 26px;
-  padding: 0 10px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 12px;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 999px;
+  border-radius: 8px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -1150,6 +1155,7 @@
 }
 
 .fieldInput {
+  box-sizing: border-box;
   height: 30px;
   padding: 0 8px;
   border: 1px solid var(--dsw-alias-border-l2);
