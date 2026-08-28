@@ -94,6 +94,26 @@ describe('WorkspaceFs', () => {
     await expect(fs.read(root, 'link.txt')).rejects.toMatchObject({ code: 'INVALID_PATH' })
   })
 
+  it('reads and writes when the workspace root is a symlink or an unrepathed tmpdir', async () => {
+    // macOS: tmpdir() is often /var/folders → /private/var/folders.
+    // WSL: workspace may be a bind-mount or a user-created symlink.
+    const raw = await mkdtemp(join(tmpdir(), 'dsh-fs-raw-'))
+    await writeFile(join(raw, 'a.txt'), 'raw')
+    expect((await fs.read(raw, 'a.txt')).content).toBe('raw')
+    await fs.write(raw, 'b.txt', 'created\n')
+    expect((await fs.read(raw, 'b.txt')).content).toBe('created\n')
+
+    const real = await tempRoot()
+    await writeFile(join(real, 'note.txt'), 'ok')
+    const aliasParent = await tempRoot()
+    const alias = join(aliasParent, 'ws')
+    await symlink(real, alias)
+    expect((await fs.read(alias, 'note.txt')).content).toBe('ok')
+    await fs.write(alias, 'note.txt', '新\n')
+    expect((await fs.read(real, 'note.txt')).content).toBe('新\n')
+    expect(await fs.resolveAbsolute(alias, 'note.txt')).toBe(join(real, 'note.txt'))
+  })
+
   it('reads real images with their MIME type and rejects fakes', async () => {
     const root = await tempRoot()
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])

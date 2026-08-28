@@ -26,6 +26,42 @@ type InputMachineInstance = {
 type InputMachineCtor = new () => InputMachineInstance
 type ReferenceDraftText = (reference: Pick<{ label: string }, 'label'>) => string
 
+type HarnessMachineMod = {
+  InputMachine: InputMachineCtor
+  /** Current harness: draft holds one U+FFFC per chip. */
+  PLACEHOLDER?: string
+  /** Older harness: chip text was a serialized label string. */
+  referenceDraftText?: ReferenceDraftText
+}
+
+/**
+ * Chip token as it appears in the draft. Current InputMachine uses PLACEHOLDER;
+ * older checkouts still export referenceDraftText. Keep both so macOS / WSL
+ * checkouts of different harness revisions stay green.
+ */
+function chipInDraft(mod: HarnessMachineMod, reference: { label: string }): string {
+  if (typeof mod.PLACEHOLDER === 'string' && mod.PLACEHOLDER.length > 0) {
+    return mod.PLACEHOLDER
+  }
+  if (typeof mod.referenceDraftText === 'function') {
+    return mod.referenceDraftText(reference)
+  }
+  throw new Error('harness InputMachine 缺少 PLACEHOLDER / referenceDraftText，无法断言 chip 草稿形态')
+}
+
+function countSubstr(haystack: string, needle: string): number {
+  if (needle.length === 0) return 0
+  let count = 0
+  let from = 0
+  while (from <= haystack.length) {
+    const at = haystack.indexOf(needle, from)
+    if (at < 0) break
+    count += 1
+    from = at + needle.length
+  }
+  return count
+}
+
 /**
  * Integration against the real harness InputMachine.
  * Needs a local deepseek-harness checkout (ln -s ../deepseek-harness .) or DSH_HARNESS=.
@@ -33,15 +69,11 @@ type ReferenceDraftText = (reference: Pick<{ label: string }, 'label'>) => strin
  */
 describe.skipIf(!hasHarnessMachine)('harness input machine accepts net-ref chips', () => {
   let InputMachine: InputMachineCtor
-  let referenceDraftText: ReferenceDraftText
+  let harnessMod: HarnessMachineMod
 
   beforeAll(async () => {
-    const mod = await import(pathToFileURL(machinePath).href) as {
-      InputMachine: InputMachineCtor
-      referenceDraftText: ReferenceDraftText
-    }
-    InputMachine = mod.InputMachine
-    referenceDraftText = mod.referenceDraftText
+    harnessMod = await import(pathToFileURL(machinePath).href) as HarnessMachineMod
+    InputMachine = harnessMod.InputMachine
   })
 
   it('mints an occurrence for a workbench-net reference at the cursor', () => {
@@ -56,7 +88,7 @@ describe.skipIf(!hasHarnessMachine)('harness input machine accepts net-ref chips
       span: { start: 11, end: 11, draftRev: before.draftRev },
     })
     const after = machine.state
-    expect(after.draft).toBe('hello world' + referenceDraftText(ref!) + ' ')
+    expect(after.draft).toBe('hello world' + chipInDraft(harnessMod, ref!) + ' ')
     expect(after.occurrences.length).toBe(1)
     expect(after.occurrences[0]!.ref).toBe(encodeNetRef({ method: 'POST', url: 'https://example.com/api' }))
     expect(after.occurrences[0]!.label).toContain('curl')
@@ -90,7 +122,13 @@ describe.skipIf(!hasHarnessMachine)('harness input machine accepts net-ref chips
     const spanB = { start: machine.state.draft.length, end: machine.state.draft.length, draftRev: machine.state.draftRev }
     machine.dispatch({ type: 'insert-ref', reference: refB!, span: spanB })
     expect(machine.state.occurrences.length).toBe(2)
-    expect(machine.state.draft).toContain(referenceDraftText(refA!))
-    expect(machine.state.draft).toContain(referenceDraftText(refB!))
+    const chipA = chipInDraft(harnessMod, refA!)
+    const chipB = chipInDraft(harnessMod, refB!)
+    if (chipA === chipB) {
+      expect(countSubstr(machine.state.draft, chipA)).toBe(2)
+    } else {
+      expect(machine.state.draft).toContain(chipA)
+      expect(machine.state.draft).toContain(chipB)
+    }
   })
 })
