@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { GitError, toFail } from '../shared/errors.ts'
+import { clampGitLogLimit } from '../shared/git-graph-limit.ts'
 import type { GitService } from './git-service.ts'
 import { resolveWorkspacePath } from './workspace.ts'
 
@@ -68,7 +69,7 @@ export function registerGitTools(ctx: Context, git: GitService): () => void {
     name: 'git_log',
     description: 'Show recent git commits. Default is the current checkout (HEAD). Set all=true to include every local branch, remote-tracking branch, and tag.',
     parameters: {
-      limit: { type: 'number', description: 'Number of commits, default 20, max 100. Count applies to the chosen scope, not the whole repo.' },
+      limit: { type: 'number', description: 'Number of commits, default 20, max 2000. Count applies to the chosen scope, not the whole repo.' },
       all: { type: 'boolean', description: 'If true, show all local branches, remotes, and tags. Default false: current checkout only.' },
     },
     output: {
@@ -77,7 +78,7 @@ export function registerGitTools(ctx: Context, git: GitService): () => void {
     },
     async execute(args, exec) {
       try {
-        const limit = typeof args.limit === 'number' ? args.limit : 20
+        const limit = typeof args.limit === 'number' ? clampGitLogLimit(args.limit) : 20
         const scope = args.all === true ? 'all' : 'head'
         return { ok: true, entries: await git.log(cwdOf(ctx, exec), limit, exec.signal, scope) }
       } catch (error) {

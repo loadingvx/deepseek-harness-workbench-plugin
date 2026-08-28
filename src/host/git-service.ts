@@ -14,6 +14,7 @@ import {
   invalidGitUserEmail, invalidGitUserName, invalidInitBranch,
   normalizeGitUserEmail, normalizeGitUserName, normalizeInitBranch,
 } from '../shared/git-identity.ts'
+import { clampGitLogLimit, GRAPH_LIMIT_DEFAULT } from '../shared/git-graph-limit.ts'
 import type { GitLogScope } from '../shared/git-log-scope.ts'
 import { gitAvailable, runGit } from './git-exec.ts'
 import { GitMutex } from './mutex.ts'
@@ -442,9 +443,9 @@ export class GitService {
     return { staged, text, empty: text.trim() === '', ...safePath !== undefined ? { path: safePath } : {} }
   }
 
-  async log(root: string, limit = 80, signal?: AbortSignal, scope: GitLogScope = 'head'): Promise<GitLogEntry[]> {
+  async log(root: string, limit = GRAPH_LIMIT_DEFAULT, signal?: AbortSignal, scope: GitLogScope = 'head'): Promise<GitLogEntry[]> {
     await this.requireRepo(root, signal)
-    const safeLimit = Math.min(Math.max(1, Math.floor(limit)), 100)
+    const safeLimit = clampGitLogLimit(limit)
     const result = await runGit({
       cwd: root,
       args: [

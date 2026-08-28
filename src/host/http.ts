@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { fail, toFail } from '../shared/errors.ts'
+import { GRAPH_LIMIT_MAX, parseHttpLogLimit } from '../shared/git-graph-limit.ts'
 import { parseGitLogScope } from '../shared/git-log-scope.ts'
 import { isCurrentRepoId } from '../shared/git-nearby.ts'
 import { parsePullMode, parsePushMode } from '../shared/git-sync-prefs.ts'
@@ -239,12 +240,14 @@ export function registerGitHttp(
         const staged = query(url, 'staged') === '1'
         result = await wrap(async () => git.diff(await gitRootOf(), path, staged))
       } else if (method === 'GET' && route === '/git/log') {
-        const limit = Number(query(url, 'limit') ?? '80')
         const scope = parseGitLogScope(query(url, 'scope'))
+        const limit = parseHttpLogLimit(query(url, 'limit'))
         if (scope === null) {
           result = fail('GIT_FAILED', '提交图范围只能是 head（当前分支）或 all（全部分支）。')
+        } else if (limit === null) {
+          result = fail('GIT_FAILED', `提交图条数必须是 1 到 ${GRAPH_LIMIT_MAX} 之间的整数。`)
         } else {
-          result = await wrap(async () => git.log(await gitRootOf(), Number.isFinite(limit) ? limit : 80, undefined, scope))
+          result = await wrap(async () => git.log(await gitRootOf(), limit, undefined, scope))
         }
       } else if (method === 'GET' && route === '/git/branches') {
         result = await wrap(async () => git.branches(await gitRootOf()))

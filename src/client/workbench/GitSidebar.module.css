@@ -1057,6 +1057,52 @@
   line-height: 18px;
 }
 
+.limitRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.limitRow .field {
+  margin: 0;
+}
+
+.limitInput {
+  width: 96px;
+  flex: none;
+}
+
+.limitPresets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.limitPreset {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.limitPreset:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.limitPreset[data-active] {
+  border-color: var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-button-ghost-active-fill);
+  color: var(--dsw-alias-label-primary);
+}
+
 .templateInput {
   box-sizing: border-box;
   display: block;
@@ -1137,6 +1183,11 @@ select.branchSelect option {
   color: var(--dsw-alias-state-error-primary);
   font-size: 12px;
   line-height: 18px;
+}
+
+.dialog p.fieldError {
+  margin: 8px 0 0;
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .dialogRow {

@@ -17,6 +17,10 @@ import {
   writeGitSyncPrefs,
   type GitSyncPrefs, type PullMode, type PushMode,
 } from '../../shared/git-sync-prefs.ts'
+import {
+  GRAPH_LIMIT_DEFAULT, GRAPH_LIMIT_MAX, GRAPH_LIMIT_MIN, GRAPH_LIMIT_PRESETS,
+  parseGraphLimitInput, readGraphLimit, writeGraphLimit,
+} from '../../shared/git-graph-limit.ts'
 import { invalidBranchName } from '../../shared/branch-name.ts'
 import { IconAutoRefresh, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRestore, IconSparkle, IconTune } from './icons.tsx'
 import { readNearbyGit, retainNearbyGit, setNearbyRepo, setParentGitDecision, subscribeNearbyGit } from './nearby-git.ts'
@@ -214,6 +218,11 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const [templateDraft, setTemplateDraft] = useState('')
   const [syncPrefs, setSyncPrefs] = useState<GitSyncPrefs>(readGitSyncPrefs)
   const [prefsDraft, setPrefsDraft] = useState<GitSyncPrefs>(readGitSyncPrefs)
+  const [graphLimit, setGraphLimit] = useState(readGraphLimit)
+  const [graphLimitDraft, setGraphLimitDraft] = useState(() => String(readGraphLimit()))
+  const [settingsError, setSettingsError] = useState<string | null>(null)
+  const graphLimitRef = useRef(graphLimit)
+  graphLimitRef.current = graphLimit
   const localeDefault = t('commit.templateDefault')
   const template = customTemplate ?? localeDefault
   const messageRef = useRef<HTMLTextAreaElement>(null)
@@ -247,6 +256,8 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     settingsHydrated.current = true
     setTemplateDraft(template)
     setPrefsDraft(readGitSyncPrefs())
+    setGraphLimitDraft(String(readGraphLimit()))
+    setSettingsError(null)
   }, [templateOpen, template])
 
   const refresh = async (): Promise<GitStatusSnapshot | null> => {
@@ -300,7 +311,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     }
     const [branchResult, logResult] = await Promise.all([
       client.branches(workspaceId, repoId),
-      client.log(workspaceId, repoId, graphAllRef.current ? 'all' : 'head'),
+      client.log(workspaceId, repoId, graphAllRef.current ? 'all' : 'head', graphLimitRef.current),
     ])
     if (gen !== refreshGen.current) return null
     setLoading(false)
@@ -696,12 +707,15 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     setPrompt(null)
     setTemplateDraft(template)
     setPrefsDraft(readGitSyncPrefs())
+    setGraphLimitDraft(String(readGraphLimit()))
+    setSettingsError(null)
     writeBoolFlag(GIT_SETTINGS_OPEN_KEY, true)
     setTemplateOpen(true)
   }
 
   const closeTemplate = (): void => {
     writeBoolFlag(GIT_SETTINGS_OPEN_KEY, false)
+    setSettingsError(null)
     setTemplateOpen(false)
   }
 
@@ -717,10 +731,20 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   }
 
   const saveTemplate = (): void => {
+    const parsed = parseGraphLimitInput(graphLimitDraft)
+    if (!parsed.ok) {
+      setSettingsError(t(`gitSettings.graphLimit.${parsed.error}`))
+      return
+    }
+    const nextLimit = writeGraphLimit(parsed.value)
+    graphLimitRef.current = nextLimit
+    setGraphLimit(nextLimit)
     setCustomTemplate(writeCustomTemplate(templateDraft, localeDefault))
     setSyncPrefs(writeGitSyncPrefs(prefsDraft))
     writeBoolFlag(GIT_SETTINGS_OPEN_KEY, false)
+    setSettingsError(null)
     setTemplateOpen(false)
+    void refresh()
   }
 
   const openFileDiff = (path: string, staged: boolean): void => {
@@ -1108,6 +1132,9 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                   onOpenCommitDiff={(hash, path) => { onOpenCommitDiff(hash, path, repoId) }}
                   t={t}
                 />
+                {log.length >= graphLimit && log.length > 0 ? (
+                  <p className={css.hint}>{t('graph.capped', { limit: graphLimit })}</p>
+                ) : null}
               </div>
             ) : null}
           </section>
@@ -1239,6 +1266,54 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                   </label>
                 ))}
               </fieldset>
+              <fieldset className={css.choiceSet}>
+                <legend>{t('gitSettings.graphLimitTitle')}</legend>
+                <p className={css.choiceLead}>{t('gitSettings.graphLimitHint')}</p>
+                <div className={css.limitRow}>
+                  <label className={css.field}>
+                    <span>{t('gitSettings.graphLimitLabel')}</span>
+                    <input
+                      className={`${css.fieldInput} ${css.limitInput}`}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      spellCheck={false}
+                      min={GRAPH_LIMIT_MIN}
+                      max={GRAPH_LIMIT_MAX}
+                      value={graphLimitDraft}
+                      aria-invalid={settingsError !== null || undefined}
+                      onChange={(event) => {
+                        setGraphLimitDraft(event.target.value)
+                        setSettingsError(null)
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          saveTemplate()
+                        }
+                        if (event.key === 'Escape') closeTemplate()
+                      }}
+                    />
+                  </label>
+                  <div className={css.limitPresets}>
+                    {GRAPH_LIMIT_PRESETS.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        className={css.limitPreset}
+                        data-active={graphLimitDraft === String(preset) || undefined}
+                        onClick={() => {
+                          setGraphLimitDraft(String(preset))
+                          setSettingsError(null)
+                        }}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {settingsError !== null ? <p className={css.fieldError}>{settingsError}</p> : null}
+              </fieldset>
               <label className={css.field}>
                 <span>{t('commit.templateTitle')}</span>
                 <textarea
@@ -1258,6 +1333,8 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                 onClick={() => {
                   setTemplateDraft(localeDefault)
                   setPrefsDraft({ ...DEFAULT_GIT_SYNC_PREFS })
+                  setGraphLimitDraft(String(GRAPH_LIMIT_DEFAULT))
+                  setSettingsError(null)
                 }}
               >
                 {t('commit.templateReset')}
