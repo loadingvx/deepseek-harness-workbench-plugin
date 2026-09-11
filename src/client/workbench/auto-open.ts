@@ -48,7 +48,8 @@ export function parseWorkbenchChrome(raw: unknown): WorkbenchChrome {
   if (typeof raw !== 'object' || raw === null) return base
   const rec = raw as Record<string, unknown>
   return {
-    enabled: asBool(rec.enabled, base.enabled),
+    // Header toggle removed — StatusBar / host chrome stay on permanently.
+    enabled: true,
     chatOpen: asBool(rec.chatOpen, base.chatOpen),
     // Always collapse the retired workbench editor column.
     editorOpen: false,
@@ -109,16 +110,16 @@ export function resetWorkbenchChrome(): void {
 }
 
 /**
- * Split as soon as the user left workbench on. The blank new-session hero
- * still mounts the workbench host; the legacy SideDock starts collapsed
- * (official right Sidebar carries Files/Git). Column collapse is remembered globally.
+ * Host chrome (StatusBar) is always mounted. Column collapse is remembered
+ * globally; the legacy SideDock starts collapsed (official right Sidebar).
  */
-export function shouldSplitWorkbench(enabled: boolean, _blank = false): boolean {
-  return enabled
+export function shouldSplitWorkbench(_enabled = true, _blank = false): boolean {
+  return true
 }
 
-export function workbenchShowsToggle(mount: WorkbenchMount): boolean {
-  return mount === 'toggle'
+/** Header 「工作台」toggle was removed; keep the helper for mount typing. */
+export function workbenchShowsToggle(_mount: WorkbenchMount): boolean {
+  return false
 }
 
 export function workbenchOwnsPortal(mount: WorkbenchMount): boolean {

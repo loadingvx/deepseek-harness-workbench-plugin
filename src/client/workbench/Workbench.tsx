@@ -11,7 +11,6 @@ import {
   shouldSplitWorkbench,
   subscribeWorkbenchChrome,
   workbenchOwnsPortal,
-  workbenchShowsToggle,
 } from './auto-open.ts'
 import { ColSash } from './ColSash.tsx'
 import {
@@ -59,7 +58,7 @@ import { browserElExisting } from './browser-el-client.ts'
 import { DevToolsPanel } from './DevToolsPanel.tsx'
 import { loadEditorMode, saveEditorMode, type EditorModeId } from './editor-mode.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconChat, IconLayout } from './icons.tsx'
+import { IconChat } from './icons.tsx'
 import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
 import { openOfficialSidebarTab } from './official-sidebar.ts'
@@ -81,6 +80,7 @@ import { requestCanvasView } from './canvas-view-prefs.ts'
 import { retainCanvasLive } from './canvas-live.ts'
 import { isTermAssistHotkey, isTermNewTabHotkey } from '../../shared/term-assist.ts'
 import { StatusBar } from './StatusBar.tsx'
+import { UsageNavPortal } from './UsagePanel.tsx'
 import { TerminalPanel } from './TerminalPanel.tsx'
 import { STATUS_BAR_H } from './status-bar.ts'
 import { DEFAULT_TERM_AI_OPEN, TERM_AI_OPEN_KEY, readBoolFlag, writeBoolFlag } from './ui-flags.ts'
@@ -89,6 +89,7 @@ import { usePluginUpdate, visibleUpdate } from './UpdateBanner.tsx'
 import { updateTermSeed } from '../../shared/version.ts'
 import { useWorkspace } from './useWorkspace.ts'
 import { useAttentionCounts, useSessionBeep, playWorkbenchSound } from './useSessionMonitor.ts'
+import { bindUsageLiveSession } from './usage-live.ts'
 import {
   composerSeatOf,
   composerSelection,
@@ -112,7 +113,7 @@ import type { EditorRefSnapshot } from '../../shared/editor-ref.ts'
 import css from './Workbench.module.css'
 
 export type WorkbenchProps =
-  PropsRuntime<'conversation.session.header.utilities'>
+  PropsRuntime<'conversation.input.overlay'>
   & WorkbenchInjected
   & PropsLocale<'workbench'>
 
@@ -166,10 +167,9 @@ class WorkbenchGate extends Component<{ children: ReactNode; t: Translate }, { e
   }
 }
 
-/** Header toggle + portal: native chat stays left; editor and files/git split to the right. */
+/** Always-on host portal: StatusBar + chrome; files/git live in official sidebar. */
 export function Workbench(props: WorkbenchProps) {
-  const mount = props.mount ?? 'toggle'
-  if (workbenchShowsToggle(mount)) return <WorkbenchToggle t={props.t} />
+  const mount = props.mount ?? 'host'
   if (!workbenchOwnsPortal(mount)) return null
   return (
     <WorkbenchGate t={props.t}>
@@ -178,35 +178,11 @@ export function Workbench(props: WorkbenchProps) {
   )
 }
 
-function WorkbenchToggle({ t }: Pick<WorkbenchProps, 't'>) {
-  const chrome = useSyncExternalStore(subscribeWorkbenchChrome, getWorkbenchChrome, defaultWorkbenchChrome)
-  return (
-    <div className={css.host}>
-      <button
-        type="button"
-        className={css.toggle}
-        data-active={chrome.enabled || undefined}
-        title={t('ide.toggle')}
-        aria-label={t('ide.toggle')}
-        aria-pressed={chrome.enabled}
-        onClick={() => { patchWorkbenchChrome({ enabled: !chrome.enabled }) }}
-      >
-        <IconLayout />
-        <span>{t('ide.toggleLabel')}</span>
-      </button>
-      {chrome.enabled && !chrome.chatOpen ? (
-        <IconButton label={t('ide.showChat')} onClick={() => { patchWorkbenchChrome({ chatOpen: true }) }}>
-          <IconChat />
-        </IconButton>
-      ) : null}
-    </div>
-  )
-}
-
 function WorkbenchInner(props: WorkbenchProps) {
   const { client, t, useSessions, useWorkspaces, sessionId, fileRefs, browserEls, netRefs, termRefs, editorRefs } = props
   const chrome = useSyncExternalStore(subscribeWorkbenchChrome, getWorkbenchChrome, defaultWorkbenchChrome)
   const { enabled, chatOpen, editorOpen, sideOpen, sideTab } = chrome
+  const currentSession = useSessions(state => state.current) as string | undefined
   const [host, setHost] = useState<HTMLElement | null>(null)
   const [controlPlaneOn] = useControlPlaneVisible()
   const [tabs, setTabs] = useState<FileTab[]>(() => [])
@@ -247,6 +223,11 @@ function WorkbenchInner(props: WorkbenchProps) {
       patchWorkbenchChrome({ sideTab: 'files' })
     }
   }, [])
+
+  // Usage balance follows harness current session, not whichever Workbench retain() ran last.
+  useEffect(() => {
+    bindUsageLiveSession(currentSession)
+  }, [currentSession])
   const changeEditorMode = useCallback((mode: EditorModeId): void => {
     saveEditorMode(mode)
     setEditorMode(mode)
@@ -1055,6 +1036,13 @@ function WorkbenchInner(props: WorkbenchProps) {
           onAddTextToChat={sendTextToChat}
         />
       ) : null}
+      <UsageNavPortal
+        client={client}
+        sessionId={sessionId}
+        running={running}
+        useProjection={props.useProjection}
+        t={t}
+      />
       <div data-git-ide-panel="bottom">
         <StatusBar
           client={client}

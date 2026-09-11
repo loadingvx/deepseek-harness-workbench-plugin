@@ -26,22 +26,19 @@ function installStorage(initial: Record<string, string> = {}): Map<string, strin
 }
 
 describe('shouldSplitWorkbench', () => {
-  it('opens on a blank new-session hero, not only after the first prompt', () => {
+  it('keeps the StatusBar host mounted even if chrome.enabled was previously false', () => {
     expect(shouldSplitWorkbench(true, true)).toBe(true)
     expect(shouldSplitWorkbench(true, false)).toBe(true)
-  })
-
-  it('stays closed when the user turned workbench off', () => {
-    expect(shouldSplitWorkbench(false, true)).toBe(false)
-    expect(shouldSplitWorkbench(false, false)).toBe(false)
+    expect(shouldSplitWorkbench(false, true)).toBe(true)
+    expect(shouldSplitWorkbench(false, false)).toBe(true)
   })
 })
 
 describe('workbench mounts', () => {
-  it('puts the IDE portal on the host and the button on the header toggle', () => {
+  it('puts the IDE portal on the host and no longer mounts a header toggle', () => {
     expect(workbenchOwnsPortal('host')).toBe(true)
     expect(workbenchOwnsPortal('toggle')).toBe(false)
-    expect(workbenchShowsToggle('toggle')).toBe(true)
+    expect(workbenchShowsToggle('toggle')).toBe(false)
     expect(workbenchShowsToggle('host')).toBe(false)
   })
 })
@@ -122,5 +119,12 @@ describe('parseWorkbenchChrome', () => {
     expect(isSideTab('files')).toBe(false)
     expect(isSideTab('usage')).toBe(false)
     expect(isSideTab('nope')).toBe(false)
+  })
+
+  it('ignores persisted enabled:false so StatusBar cannot be turned off', () => {
+    expect(parseWorkbenchChrome({ enabled: false, chatOpen: false })).toEqual({
+      ...DEFAULT_WORKBENCH_CHROME,
+      chatOpen: false,
+    })
   })
 })

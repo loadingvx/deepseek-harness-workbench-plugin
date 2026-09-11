@@ -20,15 +20,22 @@ import { svgRenderEn, svgRenderZh } from './workbench/svg-render-locales.ts'
 import { reviewSettingsEn, reviewSettingsZh } from './workbench/review-settings-locales.ts'
 import { agentAssetsEn, agentAssetsZh } from './workbench/agent-assets-locales.ts'
 import { SvgTailView } from './workbench/SvgTailView.tsx'
+import { MIN_HARNESS_VERSION, PLUGIN_NAME } from '../shared/version.ts'
 
-export const inject = ['slots', 'locale', 'inputTriggers', 'sessions', 'sidebarRightTabs', 'sidebarRight']
+/**
+ * Hard inject must NOT include sidebarRight*.
+ * Listing them makes cordis park the whole entry as
+ * "pending (waiting for services…)" on harness &lt; 0.1.5 and blocks web boot.
+ * We nest-inject those services below so the parent entry always activates.
+ */
+export const inject = ['slots', 'locale', 'inputTriggers', 'sessions']
+
+const SIDEBAR_RIGHT_INJECT = ['sidebarRightTabs', 'sidebarRight'] as const
 
 function registerWorkbenchLocale(locale: {
   dicts?: Map<string, Map<string, Record<string, string>>>
   register: (ns: string, dicts: unknown) => unknown
 }): () => void {
-  // SVG 渲染翻译外移到独立模块（svg-render-locales.ts），注册时运行时合并进
-  // workbench 命名空间，避免逐行插入 locales.ts（缩小上游合并冲突面）。
   const fullZh = { ...zh, ...svgRenderZh, ...reviewSettingsZh, ...agentAssetsZh }
   const fullEn = { ...en, ...svgRenderEn, ...reviewSettingsEn, ...agentAssetsEn }
   const table = locale.dicts?.get(NS)
@@ -56,8 +63,8 @@ function registerWorkbenchLocale(locale: {
   }
 }
 
-/** Browser half: native-chat split workbench, keyed git tool cards, and Ultra Slash. */
-export function apply(ctx: ClientContext): void {
+/** Real workbench body — only runs once official sidebar services exist. */
+function applyWorkbench(ctx: ClientContext): void {
   ctx.effect(() => registerWorkbenchLocale(ctx.locale as {
     dicts?: Map<string, Map<string, Record<string, string>>>
     register: (ns: string, dicts: unknown) => unknown
@@ -74,9 +81,6 @@ export function apply(ctx: ClientContext): void {
     client,
   }
 
-  // Host lives in the composer overlay so a blank new-session hero still
-  // mounts the workbench. The header utilities seat is hidden until the
-  // first message, so it can only carry the toggle.
   ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
     name: 'conversation.input.overlay',
     id: 'workbench-host',
@@ -92,16 +96,6 @@ export function apply(ctx: ClientContext): void {
     }),
   }, Workbench))
 
-  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
-    name: 'conversation.session.header.utilities',
-    id: 'workbench',
-    locale: NS,
-    inject: () => ({
-      ...injected,
-      mount: 'toggle' as const,
-    }),
-  }, Workbench))
-
   ctx.slots.inject('tool.call.toolview', function* () {
     for (const key of ['git_status', 'git_diff', 'git_log', 'git_branch', 'git_commit']) {
       yield ctx.slots.register({
@@ -112,8 +106,6 @@ export function apply(ctx: ClientContext): void {
     }
   })
 
-  // 会话渲染增强：回答尾部渲染标准 SVG（conversation.chat.turnTail 扩展点）。
-  // select 内部按设置开关门控：关闭时返回 null（不匹配、不渲染），与无 SVG 时不渲染的行为一致。
   ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
     name: 'conversation.chat.turnTail',
     id: 'workbench-svg-tail',
@@ -122,4 +114,36 @@ export function apply(ctx: ClientContext): void {
   }, SvgTailView))
 
   installOfficialSidebarTabs(ctx, client)
+}
+
+/**
+ * Browser half: activate immediately; mount workbench only when
+ * ui-sidebar-right services are available (harness ≥ 0.1.5).
+ */
+export function apply(ctx: ClientContext): void {
+  // Nested inject: parent entry activates even if sidebar services never appear
+  // (old harness). Do not probe ctx.sidebarRight* here — that throws
+  // "cannot get property … without inject".
+  let armed = false
+  const warnTimer = typeof window !== 'undefined'
+    ? window.setTimeout(() => {
+      if (armed) return
+      console.error(
+        `[${PLUGIN_NAME}] official ui-sidebar-right did not become available `
+        + `(need DeepSeek Harness ≥ ${MIN_HARNESS_VERSION}). `
+        + 'Workbench stays inactive; the rest of the web UI keeps running. '
+        + 'Upgrade dsh and restart to use this plugin.',
+      )
+    }, 4000)
+    : 0
+
+  ctx.effect(() => () => {
+    if (warnTimer !== 0) window.clearTimeout(warnTimer)
+  }, 'ui-workbench: sidebar-gate-timer')
+
+  ctx.inject([...SIDEBAR_RIGHT_INJECT], (scoped) => {
+    armed = true
+    if (warnTimer !== 0) window.clearTimeout(warnTimer)
+    applyWorkbench(scoped)
+  })
 }

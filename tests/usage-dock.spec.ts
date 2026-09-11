@@ -10,6 +10,7 @@ import {
   navHostIsSeated,
   readUsageDock,
   releaseNavDockHost,
+  resetNavDockBootstrapForTests,
   USAGE_DOCK_HOST,
   USAGE_DOCK_KEY,
   usageTabVisible,
@@ -39,6 +40,7 @@ function mountSettings(label = 'Settings'): HTMLButtonElement {
 
 afterEach(() => {
   releaseNavDockHost()
+  resetNavDockBootstrapForTests()
   document.body.innerHTML = ''
   try { localStorage.removeItem(USAGE_DOCK_KEY) } catch { /* ignore */ }
 })

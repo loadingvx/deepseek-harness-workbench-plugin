@@ -258,9 +258,50 @@ export function navHostIsSeated(host: HTMLElement): boolean {
   return area !== null && host.nextElementSibling === area
 }
 
+/** Drop every nav usage host (including non-empty orphans from older builds). */
+export function purgeNavDockHosts(): void {
+  for (const node of document.querySelectorAll(`[${USAGE_DOCK_HOST}]`)) {
+    node.remove()
+  }
+  setNavHostReady(false)
+}
+
+/**
+ * Keep at most one connected host. Removes disconnected leftovers and any
+ * extras so session switches / upgrades cannot stack balance panels.
+ */
+function retainSingletonHost(): HTMLElement | null {
+  const nodes = document.querySelectorAll(`[${USAGE_DOCK_HOST}]`)
+  let keeper: HTMLElement | null = null
+  for (const node of nodes) {
+    if (!(node instanceof HTMLElement)) continue
+    if (node.isConnected && keeper === null) {
+      keeper = node
+      continue
+    }
+    node.remove()
+  }
+  return keeper
+}
+
+let dockBootstrapped = false
+
+/** First ensure after load: wipe leaked hosts from prior plugin versions. */
+export function bootstrapNavDockHosts(): void {
+  if (dockBootstrapped) return
+  dockBootstrapped = true
+  purgeNavDockHosts()
+}
+
+/** Test-only: allow bootstrap to run again after a simulated reload. */
+export function resetNavDockBootstrapForTests(): void {
+  dockBootstrapped = false
+}
+
 export function ensureNavDockHost(): HTMLElement | null {
-  const live = document.querySelector(`[${USAGE_DOCK_HOST}]`)
-  if (live instanceof HTMLElement && live.isConnected) {
+  bootstrapNavDockHosts()
+  const live = retainSingletonHost()
+  if (live !== null) {
     syncNavDockHostBox(live)
     setNavHostReady(true)
     return live
@@ -287,13 +328,40 @@ export function ensureNavDockHost(): HTMLElement | null {
   return host
 }
 
+/** Unpin / tear-down: always remove hosts, even when they still have children. */
 export function releaseNavDockHost(): void {
-  for (const node of document.querySelectorAll(`[${USAGE_DOCK_HOST}]`)) {
-    if (node instanceof HTMLElement && node.childElementCount === 0) node.remove()
-  }
-  setNavHostReady(false)
+  purgeNavDockHosts()
 }
 
 export function tryPinToNav(): HTMLElement | null {
   return ensureNavDockHost()
+}
+
+/* ── Single portal owner across session-scoped Workbench mounts ─────────── */
+
+let navPortalLease = 0
+const leaseListeners = new Set<() => void>()
+
+function emitLease(): void {
+  for (const listener of leaseListeners) listener()
+}
+
+/** Latest UsageNavPortal claim wins; older mounts stop portaling. */
+export function claimNavPortalLease(): number {
+  navPortalLease += 1
+  emitLease()
+  return navPortalLease
+}
+
+export function readNavPortalLease(): number {
+  return navPortalLease
+}
+
+export function subscribeNavPortalLease(listener: () => void): () => void {
+  leaseListeners.add(listener)
+  return () => { leaseListeners.delete(listener) }
+}
+
+export function isNavPortalOwner(lease: number): boolean {
+  return lease !== 0 && lease === navPortalLease
 }

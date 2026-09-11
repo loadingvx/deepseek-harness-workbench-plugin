@@ -32,13 +32,18 @@ import {
   subscribeUsageLive,
 } from './usage-live.ts'
 import {
+  bootstrapNavDockHosts,
+  claimNavPortalLease,
   ensureNavDockHost,
   findNavSidebarRoot,
+  isNavPortalOwner,
   measureNavSettingsHeight,
   navHostIsSeated,
   defaultUsageDock,
+  readNavPortalLease,
   readUsageDock,
   releaseNavDockHost,
+  subscribeNavPortalLease,
   subscribeUsageDock,
   syncNavDockHostBox,
   writeUsageDock,
@@ -55,21 +60,33 @@ type UsagePanelProps = {
   running?: boolean
   useProjection?: (key: string, selector?: (value: unknown) => unknown) => unknown
   t: Translate
-  /** StatusBar bubble: no nav-pin chrome, fixed panel layout. */
+  /** StatusBar bubble: fixed panel layout (pin still available). */
   variant?: 'panel' | 'popover'
 }
 
+/**
+ * Pins Usage into the left session rail. Session-scoped Workbench may mount
+ * many of these; only the latest lease owner portals so one balance panel remains.
+ */
 export function UsageNavPortal(props: UsagePanelProps) {
   const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
+  const liveLease = useSyncExternalStore(subscribeNavPortalLease, readNavPortalLease, () => 0)
+  const [myLease, setMyLease] = useState(0)
   const [host, setHost] = useState<HTMLElement | null>(null)
+  const owner = isNavPortalOwner(myLease) && myLease === liveLease
 
   useLayoutEffect(() => {
+    bootstrapNavDockHosts()
     if (dock !== 'nav') {
+      setMyLease(0)
       setHost(null)
       releaseNavDockHost()
       return
     }
+    const mine = claimNavPortalLease()
+    setMyLease(mine)
     const sync = (): void => {
+      if (!isNavPortalOwner(mine)) return
       const next = ensureNavDockHost()
       setHost((current) => {
         if (current !== null && next === current && navHostIsSeated(current)) return current
@@ -90,10 +107,16 @@ export function UsageNavPortal(props: UsagePanelProps) {
     return () => {
       observer.disconnect()
       if (raf !== 0) window.cancelAnimationFrame(raf)
+      // Last owner leaving: drop host after React clears the portal children.
+      if (isNavPortalOwner(mine)) {
+        queueMicrotask(() => {
+          if (isNavPortalOwner(mine)) releaseNavDockHost()
+        })
+      }
     }
   }, [dock])
 
-  if (dock !== 'nav' || host === null) return null
+  if (dock !== 'nav' || !owner || host === null) return null
   return createPortal(<UsagePanel {...props} />, host)
 }
 
@@ -303,7 +326,8 @@ export function UsagePanel({
   }
 
   const statusText = moneyStatus(snapshot, t)
-  const parked = !popover && dock === 'nav'
+  const pinned = dock === 'nav'
+  const parked = !popover && pinned
   const compact = parked && nav.compact
 
   return (
@@ -355,17 +379,15 @@ export function UsagePanel({
       <header className={css.head}>
         <span className={css.title}>{t('usage.title')}</span>
         {model !== '' ? <span className={css.model} title={model}>{model}</span> : <span className={css.model} />}
-        {popover ? null : (
-          <IconButton label={pinTitle} active={parked} onClick={toggleDock}>
-            <IconPin />
-          </IconButton>
-        )}
+        <IconButton label={pinTitle} active={pinned} onClick={toggleDock}>
+          <IconPin />
+        </IconButton>
         <IconButton label={t('usage.refresh')} disabled={loading} onClick={() => { load() }}>
           {loading ? <span className={css.spinner} aria-hidden /> : <IconRefresh />}
         </IconButton>
       </header>
       <div className={css.body}>
-        {pinError && dock !== 'nav' && !popover ? (
+        {pinError && dock !== 'nav' ? (
           <p className={css.warn} role="alert">{t('usage.dock.missing')}</p>
         ) : null}
         <section className={css.money} aria-label={t('usage.section.money')} data-idle={!moneyOk || undefined}>

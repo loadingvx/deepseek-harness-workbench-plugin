@@ -28,41 +28,16 @@ import {
   WORKBENCH_TERMINAL_ID,
   WORKBENCH_USAGE_ID,
 } from './ids.ts'
+import {
+  hasOfficialSidebarServices,
+  resolveSidebarRight,
+  resolveSidebarRightTabs,
+} from './services.ts'
 
-type SidebarRightTabs = {
-  register: (definition: unknown) => () => void
-}
-
-type SidebarRight = {
-  openTab: (kind: string) => void
-}
+export { hasOfficialSidebarServices } from './services.ts'
 
 type LocaleBind = {
   bind: (ns: string) => Translate
-}
-
-function resolveTabs(ctx: ClientContext): SidebarRightTabs | undefined {
-  const fromField = (ctx as { sidebarRightTabs?: unknown }).sidebarRightTabs
-  if (fromField !== null && typeof fromField === 'object' && 'register' in fromField) {
-    return fromField as SidebarRightTabs
-  }
-  const fromGet = ctx.get('sidebarRightTabs')
-  if (fromGet !== null && typeof fromGet === 'object' && 'register' in fromGet) {
-    return fromGet as SidebarRightTabs
-  }
-  return undefined
-}
-
-function resolveSidebar(ctx: ClientContext): SidebarRight | undefined {
-  const fromField = (ctx as { sidebarRight?: unknown }).sidebarRight
-  if (fromField !== null && typeof fromField === 'object' && 'openTab' in fromField) {
-    return fromField as SidebarRight
-  }
-  const fromGet = ctx.get('sidebarRight')
-  if (fromGet !== null && typeof fromGet === 'object' && 'openTab' in fromGet) {
-    return fromGet as SidebarRight
-  }
-  return undefined
 }
 
 function registerBody(
@@ -82,7 +57,7 @@ function registerBody(
 
 /** Install workbench page tabs when the official right Sidebar is present. */
 export function installOfficialSidebarTabs(ctx: ClientContext, client: GitClient): void {
-  const tabs = resolveTabs(ctx)
+  const tabs = resolveSidebarRightTabs(ctx)
   if (tabs === undefined) return
 
   const locale = ctx.locale as LocaleBind
@@ -103,7 +78,7 @@ export function installOfficialSidebarTabs(ctx: ClientContext, client: GitClient
   registerBody(ctx, WORKBENCH_BROWSER_ID, 'ui-workbench: sidebar-right browser body', BrowserPane)
   registerBody(ctx, WORKBENCH_CONTROL_PLANE_ID, 'ui-workbench: sidebar-right control-plane body', ControlPlanePane, withClient)
 
-  const sidebar = resolveSidebar(ctx)
+  const sidebar = resolveSidebarRight(ctx)
   if (sidebar !== undefined) {
     ctx.effect(() => bindOfficialSidebar({
       openTab: (kind) => { sidebar.openTab(kind) },

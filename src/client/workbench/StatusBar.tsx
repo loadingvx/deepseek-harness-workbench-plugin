@@ -26,6 +26,7 @@ import { readGitLiveStatus, retainGitLive, subscribeGitLive } from './git-live.t
 import { fileName, showEditorStatusChrome, statusMenuAnchorStyle, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
 import { browserTabLabel, controlPlaneTabLabel, terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import { readUsageLive, retainUsageLive, subscribeUsageLive } from './usage-live.ts'
+import { readUsageDock, subscribeUsageDock } from './usage-dock.ts'
 import { UsagePanel } from './UsagePanel.tsx'
 import css from './StatusBar.module.css'
 
@@ -160,6 +161,11 @@ export function StatusBar({
   useEffect(() => retainUsageLive(client, sessionId), [client, sessionId])
   useEffect(() => retainNearbyGit(client, workspaceId), [client, workspaceId])
   useEffect(() => retainGitLive(client, workspaceId, repoId), [client, workspaceId, repoId])
+
+  // Pin from the bubble seats the panel in the left rail — close the popover.
+  useEffect(() => subscribeUsageDock(() => {
+    if (readUsageDock() === 'nav') setUsageOpen(false)
+  }), [])
 
   useEffect(() => {
     if (!editorOpen) setModeMenuOpen(false)
