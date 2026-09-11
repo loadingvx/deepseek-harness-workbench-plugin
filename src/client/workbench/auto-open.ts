@@ -2,7 +2,7 @@
 
 export type WorkbenchMount = 'host' | 'toggle'
 
-export const WORKBENCH_SIDE_TABS = ['files', 'git', 'review', 'usage', 'settings', 'devtools'] as const
+export const WORKBENCH_SIDE_TABS = ['review', 'settings', 'devtools'] as const
 export type SideTab = (typeof WORKBENCH_SIDE_TABS)[number]
 
 export interface WorkbenchChrome {
@@ -18,9 +18,10 @@ export const WORKBENCH_CHROME_KEY = 'dsh-workbench-chrome'
 export const DEFAULT_WORKBENCH_CHROME: WorkbenchChrome = {
   enabled: true,
   chatOpen: true,
+  // Editor column removed — files / terminal / browser live in official ui-sidebar-right.
   editorOpen: false,
-  sideOpen: true,
-  sideTab: 'files',
+  sideOpen: false,
+  sideTab: 'settings',
 }
 
 const listeners = new Set<() => void>()
@@ -49,7 +50,8 @@ export function parseWorkbenchChrome(raw: unknown): WorkbenchChrome {
   return {
     enabled: asBool(rec.enabled, base.enabled),
     chatOpen: asBool(rec.chatOpen, base.chatOpen),
-    editorOpen: asBool(rec.editorOpen, base.editorOpen),
+    // Always collapse the retired workbench editor column.
+    editorOpen: false,
     sideOpen: asBool(rec.sideOpen, base.sideOpen),
     sideTab: isSideTab(rec.sideTab) ? rec.sideTab : base.sideTab,
   }
@@ -108,8 +110,8 @@ export function resetWorkbenchChrome(): void {
 
 /**
  * Split as soon as the user left workbench on. The blank new-session hero
- * still shows the files/Git sidebar; the editor starts collapsed until
- * the user opens it. Column collapse itself is remembered globally.
+ * still mounts the workbench host; the legacy SideDock starts collapsed
+ * (official right Sidebar carries Files/Git). Column collapse is remembered globally.
  */
 export function shouldSplitWorkbench(enabled: boolean, _blank = false): boolean {
   return enabled

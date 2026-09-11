@@ -9,19 +9,24 @@ import {
   BOTTOM_SPANS,
   DEFAULT_BOTTOM_SPAN,
   DEFAULT_TERM_DOCK,
-  TERM_DOCKS,
   bottomSpanDisabledReason,
   statusBarVisibleTabs,
   type BottomSpan,
   type TermDock,
 } from './bottom-layout.ts'
 import { EDITOR_MODES, type EditorModeId } from './editor-mode.ts'
-import { IconChevron, IconFeedback, IconGithub, IconNpm, IconSparkle } from './icons.tsx'
+import { IconButton } from './IconButton.tsx'
+import {
+  IconChevron, IconDevtools, IconFeedback, IconFiles, IconGit, IconGithub, IconGlobe,
+  IconLayout, IconNpm, IconSettings, IconSparkle, IconTerminal,
+} from './icons.tsx'
+import { openOfficialSidebarTab } from './official-sidebar.ts'
 import { readNearbyGit, retainNearbyGit, subscribeNearbyGit } from './nearby-git.ts'
 import { readGitLiveStatus, retainGitLive, subscribeGitLive } from './git-live.ts'
 import { fileName, showEditorStatusChrome, statusMenuAnchorStyle, tabStripOverflow, tabStripScrollDelta } from './status-bar.ts'
 import { browserTabLabel, controlPlaneTabLabel, terminalTabLabel, type FileTab, type Translate } from './types.ts'
 import { readUsageLive, retainUsageLive, subscribeUsageLive } from './usage-live.ts'
+import { UsagePanel } from './UsagePanel.tsx'
 import css from './StatusBar.module.css'
 
 function openExternal(url: string): void {
@@ -90,6 +95,8 @@ export function StatusBar({
   client,
   workspaceId,
   sessionId,
+  running,
+  useProjection,
   active,
   plugin,
   tabs,
@@ -104,11 +111,16 @@ export function StatusBar({
   onBottomSpanChange,
   onActivate,
   onPrepareUpdate,
+  showDevtools = false,
+  onOpenSettings,
+  onOpenDevtools,
   t,
 }: {
   client: GitClient
   workspaceId?: string
   sessionId?: string
+  running?: boolean
+  useProjection?: (key: string, selector?: (value: unknown) => unknown) => unknown
   active?: FileTab | null
   plugin: PluginUpdateSnapshot | null
   tabs?: FileTab[]
@@ -124,17 +136,22 @@ export function StatusBar({
   onBottomSpanChange?: (span: BottomSpan) => void
   onActivate?: (id: string) => void
   onPrepareUpdate?: () => void
+  showDevtools?: boolean
+  onOpenSettings?: () => void
+  onOpenDevtools?: () => void
   t: Translate
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [modeMenuOpen, setModeMenuOpen] = useState(false)
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false)
+  const [usageOpen, setUsageOpen] = useState(false)
   const [updateNote, setUpdateNote] = useState<string | null>(null)
   // Anchors for the popup menus: the bar's menus are pinned to the viewport so
   // they stay visible when the bottom strip collapses (terminal as editor tab).
   const warnWrapRef = useRef<HTMLSpanElement>(null)
   const modeWrapRef = useRef<HTMLSpanElement>(null)
   const layoutWrapRef = useRef<HTMLSpanElement>(null)
+  const balanceWrapRef = useRef<HTMLSpanElement>(null)
   const usage = useSyncExternalStore(subscribeUsageLive, readUsageLive, () => null)
   const nearby = useSyncExternalStore(subscribeNearbyGit, readNearbyGit, readNearbyGit)
   const status = useSyncExternalStore(subscribeGitLive, readGitLiveStatus, () => null)
@@ -149,15 +166,16 @@ export function StatusBar({
   }, [editorOpen])
 
   useEffect(() => {
-    if (!modeMenuOpen && !layoutMenuOpen) return
+    if (!modeMenuOpen && !layoutMenuOpen && !usageOpen) return
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       setModeMenuOpen(false)
       setLayoutMenuOpen(false)
+      setUsageOpen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => { window.removeEventListener('keydown', onKey) }
-  }, [layoutMenuOpen, modeMenuOpen])
+  }, [layoutMenuOpen, modeMenuOpen, usageOpen])
 
   const probe = status?.probe
   const dirty = (status?.staged.length ?? 0) + (status?.unstaged.length ?? 0) + (status?.untracked.length ?? 0)
@@ -188,10 +206,62 @@ export function StatusBar({
       {openTabs.length > 0 ? (
         <StatusTabs tabs={openTabs} activeId={active?.id} aiTermIds={aiTermIds} onActivate={onActivate} t={t} />
       ) : null}
+      <span className={css.actions} role="toolbar" aria-label={t('status.actions')}>
+        <IconButton dense label={t('ide.files')} onClick={() => { openOfficialSidebarTab('files') }}>
+          <IconFiles />
+        </IconButton>
+        <IconButton dense label={t('ide.git')} onClick={() => { openOfficialSidebarTab('git') }}>
+          <IconGit />
+        </IconButton>
+        <IconButton dense label={t('ide.terminal')} onClick={() => { openOfficialSidebarTab('terminal') }}>
+          <IconTerminal />
+        </IconButton>
+        <IconButton dense label={t('ide.browser')} onClick={() => { openOfficialSidebarTab('browser') }}>
+          <IconGlobe />
+        </IconButton>
+        <IconButton dense label={t('ide.controlPlane')} onClick={() => { openOfficialSidebarTab('control-plane') }}>
+          <IconLayout />
+        </IconButton>
+        {showDevtools ? (
+          <IconButton dense label={t('ide.devtools')} onClick={() => { onOpenDevtools?.() }}>
+            <IconDevtools />
+          </IconButton>
+        ) : null}
+        <IconButton dense label={t('ide.settings')} onClick={() => { onOpenSettings?.() }}>
+          <IconSettings />
+        </IconButton>
+      </span>
       <span className={css.grow} />
       <span className={`${css.item} ${css.itemLead}`}>
-        <span className={css.balance} title={balanceTitle} aria-label={balanceTitle}>
-          {balanceText}
+        <span className={css.balanceWrap} ref={balanceWrapRef}>
+          <button
+            type="button"
+            className={css.balance}
+            data-open={usageOpen || undefined}
+            title={balanceTitle}
+            aria-label={balanceTitle}
+            aria-haspopup="dialog"
+            aria-expanded={usageOpen}
+            onClick={() => { setUsageOpen(open => !open) }}
+          >
+            {balanceText}
+          </button>
+          <StatusMenu
+            open={usageOpen}
+            anchor={balanceWrapRef.current}
+            extraClass={css.usagePopover}
+            label={t('usage.title')}
+            onClose={() => { setUsageOpen(false) }}
+          >
+            <UsagePanel
+              client={client}
+              sessionId={sessionId}
+              running={running}
+              useProjection={useProjection}
+              t={t}
+              variant="popover"
+            />
+          </StatusMenu>
         </span>
         <button
           type="button"
@@ -218,8 +288,17 @@ export function StatusBar({
             <button
               type="button"
               className={css.warn}
-              title={updateNote ?? t('status.updateTitle', { latest: plugin.latest })}
-              aria-label={t('status.updateTitle', { latest: plugin.latest })}
+              title={
+                updateNote
+                ?? (plugin.installAllowed
+                  ? t('status.updateTitle', { latest: plugin.latest })
+                  : t('status.updateRunBlockedHint', { minHarness: plugin.minHarness }))
+              }
+              aria-label={
+                plugin.installAllowed
+                  ? t('status.updateTitle', { latest: plugin.latest })
+                  : t('status.updateRunBlocked', { minHarness: plugin.minHarness })
+              }
               onClick={() => { openExternal(PLUGIN_PAGE_URL) }}
             >
               <IconNpm size={12} />
@@ -260,10 +339,16 @@ export function StatusBar({
                 type="button"
                 className={css.menuItem}
                 role="menuitem"
-                disabled={workspaceId === undefined}
-                title={workspaceId === undefined ? t('status.updateNoWorkspace') : t('status.updateRunHint')}
+                disabled={workspaceId === undefined || !plugin.installAllowed}
+                title={
+                  !plugin.installAllowed
+                    ? t('status.updateRunBlockedHint', { minHarness: plugin.minHarness })
+                    : workspaceId === undefined
+                      ? t('status.updateNoWorkspace')
+                      : t('status.updateRunHint')
+                }
                 onClick={() => {
-                  if (workspaceId === undefined) return
+                  if (workspaceId === undefined || !plugin.installAllowed) return
                   setMenuOpen(false)
                   onPrepareUpdate?.()
                   window.setTimeout(() => {
@@ -274,7 +359,9 @@ export function StatusBar({
                   }, 80)
                 }}
               >
-                {t('status.updateRun', { latest: plugin.latest })}
+                {plugin.installAllowed
+                  ? t('status.updateRun', { latest: plugin.latest })
+                  : t('status.updateRunBlocked', { minHarness: plugin.minHarness })}
               </button>
             </StatusMenu>
           </span>
@@ -291,9 +378,7 @@ export function StatusBar({
       <LayoutMenu
         open={layoutMenuOpen}
         anchorRef={layoutWrapRef}
-        termDock={termDock}
         bottomSpan={bottomSpan}
-        editorOpen={editorOpen}
         sideOpen={sideOpen}
         onToggle={() => {
           setLayoutMenuOpen(open => !open)
@@ -301,7 +386,6 @@ export function StatusBar({
           setMenuOpen(false)
         }}
         onClose={() => { setLayoutMenuOpen(false) }}
-        onTermDockChange={onTermDockChange}
         onBottomSpanChange={onBottomSpanChange}
         t={t}
       />
@@ -477,29 +561,23 @@ function StatusTabs({
 function LayoutMenu({
   open,
   anchorRef,
-  termDock,
   bottomSpan,
-  editorOpen,
   sideOpen,
   onToggle,
   onClose,
-  onTermDockChange,
   onBottomSpanChange,
   t,
 }: {
   open: boolean
   anchorRef: RefObject<HTMLSpanElement>
-  termDock: TermDock
   bottomSpan: BottomSpan
-  editorOpen: boolean
   sideOpen: boolean
   onToggle: () => void
   onClose: () => void
-  onTermDockChange?: (dock: TermDock) => void
   onBottomSpanChange?: (span: BottomSpan) => void
   t: Translate
 }) {
-  const columns = { editor: editorOpen, side: sideOpen }
+  const columns = { side: sideOpen }
   return (
     <span className={css.layoutWrap} ref={anchorRef}>
       <button
@@ -522,49 +600,29 @@ function LayoutMenu({
         label={t('layout.menu')}
         onClose={onClose}
       >
-            <div className={css.layoutSection}>{t('layout.termSection')}</div>
-            {TERM_DOCKS.map(dock => (
-              <button
-                key={dock}
-                type="button"
-                role="menuitem"
-                className={`${css.menuItem} ${css.layoutItem}`}
-                data-active={termDock === dock || undefined}
-                title={t(`layout.term.${dock}Hint`)}
-                onClick={() => {
-                  onClose()
-                  onTermDockChange?.(dock)
-                }}
-              >
-                <span className={css.layoutName}>{t(`layout.term.${dock}`)}</span>
-                <span className={css.layoutHint}>{t(`layout.term.${dock}Hint`)}</span>
-              </button>
-            ))}
-            <div className={css.layoutSection}>{t('layout.spanSection')}</div>
-            {termDock !== 'bottom' ? (
-              <div className={css.layoutNote}>{t('layout.span.tabLocked')}</div>
-            ) : BOTTOM_SPANS.map(span => {
-              const disabled = bottomSpanDisabledReason(span, columns, t, termDock)
-              return (
-                <button
-                  key={span}
-                  type="button"
-                  role="menuitem"
-                  className={`${css.menuItem} ${css.layoutItem}`}
-                  data-active={bottomSpan === span || undefined}
-                  disabled={disabled !== null}
-                  title={disabled ?? t(`layout.span.${span}Hint`)}
-                  onClick={() => {
-                    if (disabled !== null) return
-                    onClose()
-                    onBottomSpanChange?.(span)
-                  }}
-                >
-                  <span className={css.layoutName}>{t(`layout.span.${span}`)}</span>
-                  <span className={css.layoutHint}>{disabled ?? t(`layout.span.${span}Hint`)}</span>
-                </button>
-              )
-            })}
+        <div className={css.layoutSection}>{t('layout.spanSection')}</div>
+        {BOTTOM_SPANS.map(span => {
+          const disabled = bottomSpanDisabledReason(span, columns, t)
+          return (
+            <button
+              key={span}
+              type="button"
+              role="menuitem"
+              className={`${css.menuItem} ${css.layoutItem}`}
+              data-active={bottomSpan === span || undefined}
+              disabled={disabled !== null}
+              title={disabled ?? t(`layout.span.${span}Hint`)}
+              onClick={() => {
+                if (disabled !== null) return
+                onClose()
+                onBottomSpanChange?.(span)
+              }}
+            >
+              <span className={css.layoutName}>{t(`layout.span.${span}`)}</span>
+              <span className={css.layoutHint}>{disabled ?? t(`layout.span.${span}Hint`)}</span>
+            </button>
+          )
+        })}
       </StatusMenu>
     </span>
   )

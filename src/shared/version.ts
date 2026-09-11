@@ -3,6 +3,12 @@ export const PLUGIN_PAGE_URL = `https://www.npmjs.com/package/${PLUGIN_NAME}`
 export const PLUGIN_REPO_URL = 'https://github.com/loadingvx/deepseek-harness-workbench-plugin'
 export const PLUGIN_ISSUES_URL = `${PLUGIN_REPO_URL}/issues`
 
+/**
+ * Host deepseek-harness / `@deepseek-ai/dsh` floor for the current plugin line.
+ * 0.1.5 introduced official `ui-sidebar-right`; older hosts break if this plugin is installed.
+ */
+export const MIN_HARNESS_VERSION = '0.1.5'
+
 export function parseSemver(version: string): [number, number, number] | null {
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version.trim())
   if (match === null) return null
@@ -19,6 +25,16 @@ export function isNewer(latest: string, current: string): boolean {
   return next[2] > now[2]
 }
 
+/** True when `actual` is at least `min` (prerelease suffix ignored; `0.1.5-rc.2` counts as 0.1.5). */
+export function meetsMinVersion(actual: string, min: string): boolean {
+  const a = parseSemver(actual)
+  const m = parseSemver(min)
+  if (a === null || m === null) return false
+  if (a[0] !== m[0]) return a[0] > m[0]
+  if (a[1] !== m[1]) return a[1] > m[1]
+  return a[2] >= m[2]
+}
+
 export function upgradeCommand(latest: string): string {
   return `dsh plugin --profile web add ${PLUGIN_NAME}@${latest}`
 }
@@ -27,5 +43,6 @@ export function upgradeCommand(latest: string): string {
 export function updateTermSeed(command: string, hint: string): string {
   const cleanHint = hint.replace(/^\s*#\s?/, '').trim()
   const cleanCommand = command.replace(/^\s*#\s?/, '').trim()
+  if (cleanCommand === '') return `# ${cleanHint}`
   return `# ${cleanHint}\n# ${cleanCommand}`
 }

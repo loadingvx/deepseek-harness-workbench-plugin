@@ -82,7 +82,19 @@ declare module '@deepseek-ai/cordis' {
       inject(name: string, factory: () => unknown | Generator<unknown>): () => void
       register(spec: Record<string, unknown>, component: unknown): () => void
     }
+    /** Official right Sidebar navigation face (ui-sidebar-right). */
+    sidebarRight?: {
+      openTab(kind: string, options?: Record<string, unknown>): void
+    }
+    /** Official right Sidebar tab-type registry (stage one). */
+    sidebarRightTabs?: {
+      register(definition: unknown): () => void
+    }
   }
+}
+
+declare module '@deepseek-ai/dsh-client-ui-sidebar-right/client' {
+  export {}
 }
 
 declare module '@deepseek-ai/dsh-tools' {
@@ -123,9 +135,7 @@ declare module '@deepseek-ai/dsh-tools' {
   }): unknown
 }
 
-declare module '@deepseek-ai/dsh-client-runtime/client' {
-  export type SessionId = string
-  export type ClientContext = import('@deepseek-ai/cordis').Context
+declare module '@deepseek-ai/dsh-client-ui-chat/client' {
   export interface ToolCallBlock {
     callId: string
     toolName?: string
@@ -196,7 +206,7 @@ declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
 
 declare module '@deepseek-ai/dsh-client-ui-tool/client' {
   export type ToolCallViewProps = import('@deepseek-ai/dsh-client-ui-slots').PropsRuntime<'tool.call.toolview'> & {
-    block: import('@deepseek-ai/dsh-client-runtime/client').ToolCallBlock
+    block: import('@deepseek-ai/dsh-client-ui-chat/client').ToolCallBlock
     inspect?: () => void
     toolName: string
     callId: string

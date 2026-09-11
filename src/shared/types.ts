@@ -295,6 +295,15 @@ export interface PluginUpdateSnapshot {
   latest: string | null
   outdated: boolean
   command: string
+  /** Detected `@deepseek-ai/dsh` (or tools) version; null when unresolved. */
+  harnessVersion: string | null
+  /** Minimum host version required to safely install `latest`. */
+  minHarness: string
+  /**
+   * False when the host is too old (or unknown without sidebar-right) to install
+   * the offered plugin. UI may still show “update available” but must refuse install.
+   */
+  installAllowed: boolean
 }
 
 /** How the host learned the session's current model. */

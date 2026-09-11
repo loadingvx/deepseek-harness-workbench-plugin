@@ -42,6 +42,6 @@ export const DEFAULT_SETTINGS_SOUND_OPEN = true
 export const DEFAULT_SETTINGS_COMMANDS_OPEN = true
 export const DEFAULT_SETTINGS_SVG_RENDER_OPEN = true
 export const DEFAULT_SETTINGS_CONTROL_PLANE_OPEN = true
-/** Agent Control Plane 编辑器首 Tab：默认开启。 */
-export const DEFAULT_CONTROL_PLANE_VISIBLE = true
+/** Agent Control Plane 编辑器首 Tab：默认关闭（能力改走官方侧栏 / 设置）。 */
+export const DEFAULT_CONTROL_PLANE_VISIBLE = false
 export const DEFAULT_SETTINGS_REVIEW_OPEN = true

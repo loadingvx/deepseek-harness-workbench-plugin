@@ -53,9 +53,17 @@ export function UpdateBanner({
 }) {
   if (info === null || info.latest === null) return null
 
+  const title = info.installAllowed
+    ? t('update.title', { latest: info.latest, current: info.current })
+    : t('update.titleBlocked', {
+      latest: info.latest,
+      current: info.current,
+      minHarness: info.minHarness,
+    })
+
   return (
     <div className={css.bar} role="status">
-      <div className={css.text}>{t('update.title', { latest: info.latest, current: info.current })}</div>
+      <div className={css.text}>{title}</div>
       <button
         type="button"
         className={css.close}

@@ -11,8 +11,8 @@ import { TERMINAL_TAB_ID, type FileTab } from './types.ts'
 export const TERM_DOCKS = ['tab', 'bottom'] as const
 export type TermDock = (typeof TERM_DOCKS)[number]
 
-/** How far the bottom chrome stretches when the terminal is docked at the bottom. */
-export const BOTTOM_SPANS = ['editor', 'right', 'full'] as const
+/** How far the bottom StatusBar stretches across the workbench host. */
+export const BOTTOM_SPANS = ['chat', 'side', 'full'] as const
 export type BottomSpan = (typeof BOTTOM_SPANS)[number]
 
 export const DEFAULT_TERM_DOCK: TermDock = 'bottom'
@@ -24,7 +24,8 @@ export const BOTTOM_TOOL_KEY = 'dsh-workbench-bottom-tool-v1'
 export const BOTTOM_DEVTOOLS_TAB_ID = 'devtools:panel'
 
 export const TERM_DOCK_KEY = 'dsh-workbench-term-dock-v2'
-export const BOTTOM_SPAN_KEY = 'dsh-workbench-bottom-span-v2'
+/** v3: chat | side | full (replaces editor | right | full). */
+export const BOTTOM_SPAN_KEY = 'dsh-workbench-bottom-span-v3'
 export const TERM_H_KEY = 'dsh-workbench-term-h'
 export const TERM_PANEL_OPEN_KEY = 'dsh-workbench-term-panel-open'
 
@@ -73,7 +74,13 @@ export function saveTermDock(dock: TermDock): void {
 
 export function loadBottomSpan(): BottomSpan {
   const raw = readStorage(BOTTOM_SPAN_KEY)
-  return raw !== null && isBottomSpan(raw) ? raw : DEFAULT_BOTTOM_SPAN
+  if (raw !== null && isBottomSpan(raw)) return raw
+  // Migrate retired v2 keys written before the editor column was removed.
+  const legacy = readStorage('dsh-workbench-bottom-span-v2')
+  if (legacy === 'editor') return 'chat'
+  if (legacy === 'right') return 'side'
+  if (legacy === 'full') return 'full'
+  return DEFAULT_BOTTOM_SPAN
 }
 
 export function saveBottomSpan(span: BottomSpan): void {
@@ -106,40 +113,33 @@ export function termPanelVisible(dock: TermDock, _panelOpen?: boolean): boolean 
 }
 
 /**
- * A 36px rail cannot host an editor-only bottom strip.
- * Fall back so the bar never becomes a sliver the user cannot read.
+ * A SideDock-only bottom strip needs the legacy side column open.
+ * Fall back to full width so the bar never becomes an unreadably narrow rail.
  */
 export function effectiveBottomSpan(
   span: BottomSpan,
-  open: { editor: boolean; side: boolean },
+  open: { side: boolean },
 ): BottomSpan {
-  if (span === 'editor' && !open.editor) return open.side ? 'right' : 'full'
-  if (span === 'right' && !open.editor && !open.side) return 'full'
+  if (span === 'side' && !open.side) return 'full'
   return span
 }
 
-/**
- * Actual bottom-strip width: status bar is locked to the terminal.
- * Editor-tab mode always sits under editor + sidebar; bottom mode uses the chosen span.
- */
+/** Resolved StatusBar span for the current chrome. */
 export function layoutBottomSpan(
-  dock: TermDock,
+  _dock: TermDock,
   span: BottomSpan,
-  open: { editor: boolean; side: boolean },
+  open: { editor?: boolean; side: boolean },
 ): BottomSpan {
-  if (dock !== 'bottom') return effectiveBottomSpan('right', open)
-  return effectiveBottomSpan(span, open)
+  return effectiveBottomSpan(span, { side: open.side })
 }
 
 export function bottomSpanDisabledReason(
   span: BottomSpan,
-  open: { editor: boolean; side: boolean },
+  open: { editor?: boolean; side: boolean },
   t: (key: string) => string,
-  dock: TermDock = 'bottom',
+  _dock: TermDock = 'bottom',
 ): string | null {
-  if (dock !== 'bottom') return t('layout.span.tabLocked')
-  if (span === 'editor' && !open.editor) return t('layout.span.editorDisabled')
-  if (span === 'right' && !open.editor && !open.side) return t('layout.span.rightDisabled')
+  if (span === 'side' && !open.side) return t('layout.span.sideDisabled')
   return null
 }
 

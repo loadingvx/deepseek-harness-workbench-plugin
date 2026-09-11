@@ -15,6 +15,7 @@ import {
   type FileRefOccurrence,
 } from '../../shared/file-ref.ts'
 import type { Translate } from './types.ts'
+import { resolveInsertSpan } from './composer-span.ts'
 
 const MENU_ORDER = 3
 const MENU_LIMIT = 40
@@ -267,7 +268,7 @@ export function installFileRefClient(ctx: FileRefContext, client: GitClient): Fi
       }
       const applied = actx.bail(actx, INSERT_EVENT, {
         reference,
-        span: request.span,
+        span: resolveInsertSpan(actx, request.span),
       }) === true
       if (!applied) {
         notifyComposer(actx, t('fileRef.failed'))
@@ -302,11 +303,35 @@ export function composerSeatOf(target: EventTarget | null): HTMLElement | null {
 }
 
 export function composerSelection(seat: HTMLElement, draftLength: number): { start: number; end: number } {
+  // dsh ≤ 0.1.0: native <textarea>. dsh ≥ 0.1.5: Lexical contenteditable.
+  // Prefer the shell caret via resolveInsertSpan when inserting; this DOM
+  // helper is only a coarse fallback for callers that lack a session scope.
   const textarea = seat.querySelector<HTMLTextAreaElement>('textarea')
-  if (textarea === null) return { start: draftLength, end: draftLength }
-  const start = textarea.selectionStart ?? draftLength
-  const end = textarea.selectionEnd ?? start
-  return { start, end }
+  if (textarea !== null) {
+    const start = textarea.selectionStart ?? draftLength
+    const end = textarea.selectionEnd ?? start
+    return { start, end }
+  }
+  const editable = seat.querySelector<HTMLElement>('[contenteditable="true"]')
+  if (editable !== null && typeof window !== 'undefined' && typeof window.getSelection === 'function') {
+    const selection = window.getSelection()
+    if (selection !== null && selection.rangeCount > 0 && editable.contains(selection.anchorNode)) {
+      // Without Lexical projection we cannot map DOM offsets to detect
+      // coordinates; insert at end so span CAS still accepts.
+      return { start: draftLength, end: draftLength }
+    }
+  }
+  return { start: draftLength, end: draftLength }
+}
+
+/** Focus the Lexical composer (or legacy textarea) inside a seat. */
+export function focusComposer(seat: HTMLElement): void {
+  const editable = seat.querySelector<HTMLElement>('[contenteditable="true"]')
+  if (editable !== null) {
+    editable.focus()
+    return
+  }
+  seat.querySelector<HTMLTextAreaElement>('textarea')?.focus()
 }
 
 export function fileRefExisting(occurrences: ReadonlyArray<{ source?: string; ref?: string; label?: string }>): FileRefOccurrence[] {

@@ -54,11 +54,12 @@ afterEach(() => {
 describe('term dock and bottom span ids', () => {
   it('accepts the two docks and three spans', () => {
     expect(TERM_DOCKS).toEqual(['tab', 'bottom'])
-    expect(BOTTOM_SPANS).toEqual(['editor', 'right', 'full'])
+    expect(BOTTOM_SPANS).toEqual(['chat', 'side', 'full'])
     expect(isTermDock('tab')).toBe(true)
     expect(isTermDock('side')).toBe(false)
     expect(isBottomSpan('full')).toBe(true)
-    expect(isBottomSpan('chat')).toBe(false)
+    expect(isBottomSpan('chat')).toBe(true)
+    expect(isBottomSpan('editor')).toBe(false)
   })
 })
 
@@ -75,14 +76,21 @@ describe('persistence', () => {
   it('round-trips dock, span and panel collapse', () => {
     installStorage()
     saveTermDock('bottom')
-    saveBottomSpan('full')
+    saveBottomSpan('chat')
     saveTermPanelOpen(false)
     expect(loadTermDock()).toBe('bottom')
-    expect(loadBottomSpan()).toBe('full')
+    expect(loadBottomSpan()).toBe('chat')
     expect(loadTermPanelOpen()).toBe(false)
     expect(TERM_DOCK_KEY).toContain('term-dock')
     expect(BOTTOM_SPAN_KEY).toContain('bottom-span')
     expect(TERM_PANEL_OPEN_KEY).toContain('term-panel')
+  })
+
+  it('migrates retired v2 span keys', () => {
+    installStorage({ 'dsh-workbench-bottom-span-v2': 'editor' })
+    expect(loadBottomSpan()).toBe('chat')
+    installStorage({ 'dsh-workbench-bottom-span-v2': 'right' })
+    expect(loadBottomSpan()).toBe('side')
   })
 
   it('ignores junk in storage', () => {
@@ -93,53 +101,38 @@ describe('persistence', () => {
 })
 
 describe('layoutBottomSpan', () => {
-  it('pins the status bar under editor and sidebar while the terminal is an editor tab', () => {
-    expect(layoutBottomSpan('tab', 'full', { editor: true, side: true })).toBe('right')
-    expect(layoutBottomSpan('tab', 'editor', { editor: true, side: true })).toBe('right')
+  it('keeps the chosen span when columns allow it', () => {
+    expect(layoutBottomSpan('bottom', 'full', { side: true })).toBe('full')
+    expect(layoutBottomSpan('bottom', 'chat', { side: true })).toBe('chat')
+    expect(layoutBottomSpan('bottom', 'side', { side: true })).toBe('side')
   })
 
-  it('matches the terminal span when the terminal is at the bottom', () => {
-    expect(layoutBottomSpan('bottom', 'full', { editor: true, side: true })).toBe('full')
-    expect(layoutBottomSpan('bottom', 'editor', { editor: true, side: true })).toBe('editor')
-    expect(layoutBottomSpan('bottom', 'right', { editor: true, side: true })).toBe('right')
-  })
-
-  it('still avoids a 36px rail when the editor tab forces editor+sidebar', () => {
-    expect(layoutBottomSpan('tab', 'full', { editor: false, side: false })).toBe('full')
+  it('falls back from side when the side dock is closed', () => {
+    expect(layoutBottomSpan('bottom', 'side', { side: false })).toBe('full')
   })
 })
 
 describe('effectiveBottomSpan', () => {
   it('keeps the choice when the matching columns are open', () => {
-    expect(effectiveBottomSpan('editor', { editor: true, side: true })).toBe('editor')
-    expect(effectiveBottomSpan('right', { editor: true, side: false })).toBe('right')
-    expect(effectiveBottomSpan('full', { editor: false, side: false })).toBe('full')
+    expect(effectiveBottomSpan('chat', { side: true })).toBe('chat')
+    expect(effectiveBottomSpan('side', { side: true })).toBe('side')
+    expect(effectiveBottomSpan('full', { side: false })).toBe('full')
   })
 
-  it('does not park the bar on a 36px editor rail', () => {
-    expect(effectiveBottomSpan('editor', { editor: false, side: true })).toBe('right')
-    expect(effectiveBottomSpan('editor', { editor: false, side: false })).toBe('full')
-  })
-
-  it('stretches full width when both right columns are rails', () => {
-    expect(effectiveBottomSpan('right', { editor: false, side: false })).toBe('full')
+  it('does not park the bar on a missing side column', () => {
+    expect(effectiveBottomSpan('side', { side: false })).toBe('full')
   })
 })
 
 describe('bottomSpanDisabledReason', () => {
-  it('explains why editor-only is unavailable while the editor is collapsed', () => {
-    expect(bottomSpanDisabledReason('editor', { editor: false, side: true }, t)).toBe('layout.span.editorDisabled')
-    expect(bottomSpanDisabledReason('editor', { editor: true, side: false }, t)).toBe(null)
+  it('explains why side-only needs the side dock', () => {
+    expect(bottomSpanDisabledReason('side', { side: false }, t)).toBe('layout.span.sideDisabled')
+    expect(bottomSpanDisabledReason('side', { side: true }, t)).toBe(null)
   })
 
-  it('explains why right-span needs at least one open right column', () => {
-    expect(bottomSpanDisabledReason('right', { editor: false, side: false }, t)).toBe('layout.span.rightDisabled')
-    expect(bottomSpanDisabledReason('right', { editor: false, side: true }, t)).toBe(null)
-  })
-
-  it('locks width while the terminal is an editor tab', () => {
-    expect(bottomSpanDisabledReason('full', { editor: true, side: true }, t, 'tab')).toBe('layout.span.tabLocked')
-    expect(bottomSpanDisabledReason('full', { editor: true, side: true }, t, 'bottom')).toBe(null)
+  it('never locks chat or full', () => {
+    expect(bottomSpanDisabledReason('chat', { side: false }, t)).toBe(null)
+    expect(bottomSpanDisabledReason('full', { side: false }, t)).toBe(null)
   })
 })
 

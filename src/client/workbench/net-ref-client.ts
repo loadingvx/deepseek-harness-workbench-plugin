@@ -17,6 +17,7 @@ import {
   type NetRefSnapshot,
 } from '../../shared/browser-net-ref.ts'
 import type { Translate } from './types.ts'
+import { resolveInsertSpan } from './composer-span.ts'
 
 const INSERT_EVENT = 'slash/input-insert-reference'
 const INSERT_TEXT_EVENT = 'slash/input-insert-text'
@@ -260,7 +261,7 @@ export function installNetRefClient(ctx: NetRefContext): NetRefApi {
       }
       const applied = actx.bail(actx, INSERT_EVENT, {
         reference,
-        span: request.span,
+        span: resolveInsertSpan(actx, request.span),
       }) === true
       if (!applied) {
         notifyComposer(actx, t('netRef.failed'))
@@ -280,7 +281,7 @@ export function installNetRefClient(ctx: NetRefContext): NetRefApi {
       if (text === '') return false
       return actx.bail(actx, INSERT_TEXT_EVENT, {
         text,
-        span: request.span,
+        span: resolveInsertSpan(actx, request.span),
       }) === true
     },
   }

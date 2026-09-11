@@ -1,6 +1,6 @@
 {
   "name": "dsh-workbench-plugin",
-  "version": "0.1.32",
+  "version": "0.1.33",
   "description": "DeepSeek Harness Web UI 工作台：聊天 / 编辑器（语法高亮） / 文件与 Git、侧边栏、模型工具",
   "type": "module",
   "main": "lib/index.js",
@@ -22,11 +22,11 @@
     "client": {
       "platform": "web",
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-tool",
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-input-trigger"
+        "@deepseek-ai/dsh-client-ui-input-trigger",
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
       ]
     }
   },
@@ -41,8 +41,8 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": ">=0.1.0-rc.5",
-    "@deepseek-ai/dsh-tools": ">=0.1.0-rc.5",
+    "@deepseek-ai/cordis": ">=4.0.2",
+    "@deepseek-ai/dsh-tools": ">=0.1.5-rc.2",
     "react": "^18.2.0"
   },
   "peerDependenciesMeta": {

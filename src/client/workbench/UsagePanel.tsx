@@ -55,6 +55,8 @@ type UsagePanelProps = {
   running?: boolean
   useProjection?: (key: string, selector?: (value: unknown) => unknown) => unknown
   t: Translate
+  /** StatusBar bubble: no nav-pin chrome, fixed panel layout. */
+  variant?: 'panel' | 'popover'
 }
 
 export function UsageNavPortal(props: UsagePanelProps) {
@@ -203,11 +205,12 @@ function useNavUsageFrame(enabled: boolean): {
 }
 
 export function UsagePanel({
-  client, sessionId, running, useProjection, t,
+  client, sessionId, running, useProjection, t, variant = 'panel',
 }: UsagePanelProps) {
   const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
   const snapshot = useSyncExternalStore(subscribeUsageLive, readUsageLive, () => null)
-  const nav = useNavUsageFrame(dock === 'nav')
+  const popover = variant === 'popover'
+  const nav = useNavUsageFrame(!popover && dock === 'nav')
   const [loading, setLoading] = useState(true)
   const [observed, setObserved] = useState<ObservedSpend | undefined>(undefined)
   const [pinError, setPinError] = useState(false)
@@ -300,7 +303,7 @@ export function UsagePanel({
   }
 
   const statusText = moneyStatus(snapshot, t)
-  const parked = dock === 'nav'
+  const parked = !popover && dock === 'nav'
   const compact = parked && nav.compact
 
   return (
@@ -308,7 +311,7 @@ export function UsagePanel({
       ref={nav.rootRef}
       className={css.root}
       data-git-chrome="usage"
-      data-dock={parked ? 'nav' : 'side'}
+      data-dock={popover ? 'popover' : parked ? 'nav' : 'side'}
       data-compact={compact || undefined}
     >
       {parked ? (
@@ -352,15 +355,17 @@ export function UsagePanel({
       <header className={css.head}>
         <span className={css.title}>{t('usage.title')}</span>
         {model !== '' ? <span className={css.model} title={model}>{model}</span> : <span className={css.model} />}
-        <IconButton label={pinTitle} active={parked} onClick={toggleDock}>
-          <IconPin />
-        </IconButton>
+        {popover ? null : (
+          <IconButton label={pinTitle} active={parked} onClick={toggleDock}>
+            <IconPin />
+          </IconButton>
+        )}
         <IconButton label={t('usage.refresh')} disabled={loading} onClick={() => { load() }}>
           {loading ? <span className={css.spinner} aria-hidden /> : <IconRefresh />}
         </IconButton>
       </header>
       <div className={css.body}>
-        {pinError && dock !== 'nav' ? (
+        {pinError && dock !== 'nav' && !popover ? (
           <p className={css.warn} role="alert">{t('usage.dock.missing')}</p>
         ) : null}
         <section className={css.money} aria-label={t('usage.section.money')} data-idle={!moneyOk || undefined}>

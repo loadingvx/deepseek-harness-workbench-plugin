@@ -1,8 +1,9 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { buildNetReference, encodeNetRef } from '../src/shared/browser-net-ref.ts'
+import { resolveInsertSpan } from '../src/client/workbench/composer-span.ts'
 
 /** Optional override; otherwise ./deepseek-harness (gitignored symlink) beside this repo. */
 const harnessRoot = process.env.DSH_HARNESS
@@ -13,7 +14,10 @@ const machinePath = join(
   harnessRoot,
   'packages/client/ui-conversation/src/client/input/machine.ts',
 )
-const hasHarnessMachine = existsSync(machinePath)
+const hasHarnessMachineFile = existsSync(machinePath)
+/** dsh ≥ 0.1.5 replaced InputMachine with SubmitMachine in the same file. */
+const hasInputMachineExport = hasHarnessMachineFile
+  && /\bexport class InputMachine\b/.test(readFileSync(machinePath, 'utf8'))
 
 type InputMachineInstance = {
   state: {
@@ -28,7 +32,7 @@ type ReferenceDraftText = (reference: Pick<{ label: string }, 'label'>) => strin
 
 type HarnessMachineMod = {
   InputMachine: InputMachineCtor
-  /** Current harness: draft holds one U+FFFC per chip. */
+  /** Legacy harness: draft holds one U+FFFC per chip. */
   PLACEHOLDER?: string
   /** Older harness: chip text was a serialized label string. */
   referenceDraftText?: ReferenceDraftText
@@ -40,20 +44,16 @@ type HarnessMachineMod = {
  * checkouts of different harness revisions stay green.
  */
 function chipInDraft(mod: HarnessMachineMod, reference: { label: string }): string {
-  if (typeof mod.PLACEHOLDER === 'string' && mod.PLACEHOLDER.length > 0) {
-    return mod.PLACEHOLDER
-  }
-  if (typeof mod.referenceDraftText === 'function') {
-    return mod.referenceDraftText(reference)
-  }
+  if (typeof mod.PLACEHOLDER === 'string') return mod.PLACEHOLDER
+  if (typeof mod.referenceDraftText === 'function') return mod.referenceDraftText(reference)
   throw new Error('harness InputMachine 缺少 PLACEHOLDER / referenceDraftText，无法断言 chip 草稿形态')
 }
 
 function countSubstr(haystack: string, needle: string): number {
-  if (needle.length === 0) return 0
+  if (needle === '') return 0
   let count = 0
   let from = 0
-  while (from <= haystack.length) {
+  for (;;) {
     const at = haystack.indexOf(needle, from)
     if (at < 0) break
     count += 1
@@ -62,12 +62,45 @@ function countSubstr(haystack: string, needle: string): number {
   return count
 }
 
+describe('resolveInsertSpan prefers Lexical caretSpan', () => {
+  it('uses shell caret + draftRev when conversation.input exposes them', () => {
+    const actx = {
+      bail: () => true,
+      get: () => ({
+        input: {
+          for: () => ({
+            snapshot: { draftRev: 7 },
+            caretSpan: () => ({ start: 3, end: 5 }),
+          }),
+        },
+      }),
+    }
+    expect(resolveInsertSpan(actx, { start: 0, end: 0, draftRev: 1 })).toEqual({
+      start: 3,
+      end: 5,
+      draftRev: 7,
+    })
+  })
+
+  it('falls back when the shell face is missing', () => {
+    const actx = { bail: () => true, get: () => undefined }
+    expect(resolveInsertSpan(actx, { start: 9, end: 9, draftRev: 2 })).toEqual({
+      start: 9,
+      end: 9,
+      draftRev: 2,
+    })
+  })
+})
+
 /**
- * Integration against the real harness InputMachine.
- * Needs a local deepseek-harness checkout (ln -s ../deepseek-harness .) or DSH_HARNESS=.
- * Without it the suite is skipped so release/CI still pass.
+ * Integration against the real harness InputMachine (dsh ≤ 0.1.0-rc.*).
+ * dsh ≥ 0.1.5 replaced InputMachine with Lexical SessionInputShell; importing
+ * facade.ts pulls the full editor graph and is not loaded here. Capsule
+ * compatibility on 0.1.5+ is covered by resolveInsertSpan + Web smoke.
+ * Without a local deepseek-harness checkout (or when InputMachine is gone)
+ * the suite is skipped so release/CI still pass.
  */
-describe.skipIf(!hasHarnessMachine)('harness input machine accepts net-ref chips', () => {
+describe.skipIf(!hasInputMachineExport)('harness InputMachine accepts net-ref chips', () => {
   let InputMachine: InputMachineCtor
   let harnessMod: HarnessMachineMod
 

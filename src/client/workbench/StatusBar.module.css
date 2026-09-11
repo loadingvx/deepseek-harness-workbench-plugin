@@ -29,12 +29,37 @@
   overflow: visible;
 }
 
+.balanceWrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
 .balance {
   flex: none;
   min-width: 2.5em;
+  height: 20px;
   padding: 0 8px 0 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-tertiary));
+  font: inherit;
+  font-size: 12px;
+  line-height: 20px;
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.balance:hover,
+.balance[data-open] {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.balance:focus-visible {
+  outline: 1px solid var(--dsw-alias-label-secondary, currentColor);
+  outline-offset: 1px;
 }
 
 .version {
@@ -66,6 +91,14 @@
 .grow {
   flex: 1;
   min-width: 8px;
+}
+
+.actions {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  margin-right: 4px;
 }
 
 .tabStrip {
@@ -278,6 +311,13 @@
    by [data-git-ide-panel=bottom] overflow:hidden and not trapped in its z-index. */
 .menuFixed {
   position: fixed;
+}
+
+.usagePopover {
+  min-width: 320px;
+  max-width: min(360px, calc(100vw - 16px));
+  padding: 0;
+  overflow: hidden;
 }
 
 .menuItem {

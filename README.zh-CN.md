@@ -1,5 +1,11 @@
 ![preview](docs/img/social-preview.jpg)
 
+> **需要 DeepSeek Harness ≥ 0.1.5（已做 0.1.5 兼容改动）**
+>
+> 本插件线已针对 **DeepSeek Harness 0.1.5+** 做兼容适配：该版本起提供官方右侧栏（`ui-sidebar-right`）。工作台能力（Git、用量、终端、浏览器、控制面等）会挂到官方侧栏，而不再只依赖插件自建界面。
+>
+> 在更旧的 harness 上仍可能看到「有新版本」提示，但会**拒绝安装**，以免破坏当前环境。请先将 DeepSeek Harness 升级到 **0.1.5 或更高**，再安装或升级本插件。
+
 DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作台后，对话保留在左侧；右侧两栏分别是编辑器（含 **Agent Control Plane**、语法高亮与**智能终端**），以及文件、Git、**用量**面板和**插件命令**面板。
 
 请先认这些特色能力：
@@ -35,6 +41,13 @@ DeepSeek Harness Web UI 工作台插件。在「对话」视图中打开工作�
 ## 界面
 
 工作台为三栏布局。左侧为系统对话；右侧两栏为能力区：中央为编辑器（含 **Agent Control Plane**、语法高亮与智能终端），最右侧为文件树、Git、用量与插件命令。右侧栏标签依次是 **文件**、**源代码管理**、**用量**、**插件命令**。编辑器默认首标签为 **控制面**。
+
+
+### DeepSeek-Harness >= V0.1.5
+
+![screen_8](docs/img/screen_shot_8.png)
+
+### Previous Version
 
 ![screen_0](docs/img/screen_shot_0.png)
 ![screen_1](docs/img/screen_shot_1.png)
@@ -341,11 +354,11 @@ TSX 在 Host 端编译为 JS，浏览器注入 React 钩子后挂载。编译失
 | 项目 | 说明 |
 | --- | --- |
 | 包名 | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| 当前版本 | **0.1.32**（npm 标签 `latest`） |
+| 当前版本 | **0.1.33**（npm 标签 `latest`） |
 | 软件源 | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.32
++ dsh-workbench-plugin@0.1.33
 ```
 
 维护者发布 npm 请执行 `bash devops/release.sh`。该脚本使用本机已有的 `npm login` 会话；不得将账号或凭据写入仓库。
@@ -356,17 +369,17 @@ TSX 在 Host 端编译为 JS，浏览器注入 React 钩子后挂载。编译失
 
 ### 前置条件
 
-已安装 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)，并且能够启动 `dsh web`。
+已安装 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) **0.1.5 或更高**（含官方右侧栏 / `ui-sidebar-right`），并且能够启动 `dsh web`。更旧的宿主不在本插件线支持范围内，见文首说明。
 
 ### 步骤
 
-1. 安装插件（必须带版本号，不要省略 `@0.1.32`）：
+1. 安装插件（必须带版本号，不要省略 `@0.1.33`）：
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.32
+dsh plugin --profile web add dsh-workbench-plugin@0.1.33
 ```
 
-`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.32` 才会明确要这一版。
+`dsh plugin add` 底层是 pnpm。pnpm 11 默认要等一个版本**发布满 24 小时**才会把它当成 `latest`。只写 `dsh-workbench-plugin`、不带 `@版本号` 时，可能静默装上 **0.1.0**，而且命令仍然成功退出。写上 `@0.1.33` 才会明确要这一版。
 
 若指定版本后仍提示太新、装不上，在 `~/.dsh/profiles/web/pnpm-workspace.yaml` 加上下面两行，再执行一次安装命令：
 
@@ -392,17 +405,19 @@ dsh plugin --profile web add github:loadingvx/deepseek-harness-workbench-plugin
 
 ### 自动提示
 
-若当前环境已安装较低版本，文件与 Git 侧栏顶部将显示可关闭的升级提示。升级说明及安装命令会写入工作区终端，并以 `#` 开头（作为注释，不会被执行）。去掉行首 `#` 后按回车即可安装；安装完成后须重启 `dsh web`。
+若当前环境已安装较低版本，界面会显示可关闭的升级提示（状态栏也会标出新版本）。当宿主为 **DeepSeek Harness ≥ 0.1.5** 时，升级说明及安装命令会写入工作区终端，并以 `#` 开头（作为注释，不会被执行）。去掉行首 `#` 后按回车即可安装；安装完成后须重启 `dsh web`。
 
 ```bash
 # dsh plugin --profile web add dsh-workbench-plugin@<最新版本号>
 ```
 
+若宿主 **低于 0.1.5**，仍可能看到「有新版本」提示，但会**拒绝安装**（不写入安装命令；状态栏「执行更新」保持禁用），以免破坏环境。请先升级 harness。
+
 查询软件源失败时不显示提示。关闭提示仅忽略当前这一次最新版本；此后若出现更新的版本，仍会再次提示。
 
 ### 从 0.1.1 升级
 
-**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.32；此后版本将通过界面提示。
+**0.1.1 未包含升级检查逻辑，因此不会显示上述提示。** 请按安装命令手动升级至 0.1.33；此后版本将通过界面提示。
 
 ## 工作区终端
 

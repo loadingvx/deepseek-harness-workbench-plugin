@@ -52,26 +52,26 @@ describe('workbench chrome', () => {
     vi.unstubAllGlobals()
   })
 
-  it('starts with the editor collapsed and the files sidebar open', () => {
+  it('starts with the editor and legacy SideDock collapsed', () => {
     expect(defaultWorkbenchChrome()).toEqual({
       enabled: true,
       chatOpen: true,
       editorOpen: false,
-      sideOpen: true,
-      sideTab: 'files',
+      sideOpen: false,
+      sideTab: 'settings',
     })
     expect(DEFAULT_WORKBENCH_CHROME).toEqual(defaultWorkbenchChrome())
   })
 
   it('keeps collapsed columns when a new session would previously have reset them', () => {
     installStorage()
-    patchWorkbenchChrome({ chatOpen: false, editorOpen: false, sideOpen: false, sideTab: 'git' })
+    patchWorkbenchChrome({ chatOpen: false, editorOpen: true, sideOpen: false, sideTab: 'settings' })
     expect(getWorkbenchChrome()).toEqual({
       enabled: true,
       chatOpen: false,
       editorOpen: false,
       sideOpen: false,
-      sideTab: 'git',
+      sideTab: 'settings',
     })
   })
 
@@ -80,9 +80,9 @@ describe('workbench chrome', () => {
     patchWorkbenchChrome({
       enabled: true,
       chatOpen: false,
-      editorOpen: false,
+      editorOpen: true,
       sideOpen: false,
-      sideTab: 'git',
+      sideTab: 'settings',
     })
     const saved = JSON.parse(localStorage.getItem(WORKBENCH_CHROME_KEY) ?? 'null') as unknown
     expect(parseWorkbenchChrome(saved)).toEqual({
@@ -90,7 +90,7 @@ describe('workbench chrome', () => {
       chatOpen: false,
       editorOpen: false,
       sideOpen: false,
-      sideTab: 'git',
+      sideTab: 'settings',
     })
     resetWorkbenchChrome()
     expect(getWorkbenchChrome()).toEqual(defaultWorkbenchChrome())
@@ -100,7 +100,7 @@ describe('workbench chrome', () => {
       chatOpen: false,
       editorOpen: false,
       sideOpen: false,
-      sideTab: 'git',
+      sideTab: 'settings',
     })
   })
 })
@@ -110,15 +110,17 @@ describe('parseWorkbenchChrome', () => {
     expect(parseWorkbenchChrome(null)).toEqual(DEFAULT_WORKBENCH_CHROME)
     expect(parseWorkbenchChrome({ editorOpen: true })).toEqual({
       ...DEFAULT_WORKBENCH_CHROME,
-      editorOpen: true,
+      editorOpen: false,
     })
     expect(parseWorkbenchChrome({ sideTab: 'nope', sideOpen: false })).toEqual({
       ...DEFAULT_WORKBENCH_CHROME,
       sideOpen: false,
     })
-    expect(isSideTab('usage')).toBe(true)
+    expect(parseWorkbenchChrome({ sideTab: 'files' })).toEqual(DEFAULT_WORKBENCH_CHROME)
     expect(isSideTab('settings')).toBe(true)
     expect(isSideTab('devtools')).toBe(true)
+    expect(isSideTab('files')).toBe(false)
+    expect(isSideTab('usage')).toBe(false)
     expect(isSideTab('nope')).toBe(false)
   })
 })

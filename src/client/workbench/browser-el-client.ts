@@ -12,6 +12,7 @@ import {
   type BrowserElSnapshot,
 } from '../../shared/browser-el.ts'
 import type { Translate } from './types.ts'
+import { resolveInsertSpan } from './composer-span.ts'
 
 const INSERT_EVENT = 'slash/input-insert-reference'
 
@@ -240,7 +241,7 @@ export function installBrowserElClient(ctx: BrowserElContext): BrowserElApi {
       }
       const applied = actx.bail(actx, INSERT_EVENT, {
         reference,
-        span: request.span,
+        span: resolveInsertSpan(actx, request.span),
       }) === true
       if (!applied) {
         notifyComposer(actx, t('browser.el.failed'))

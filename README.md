@@ -1,6 +1,12 @@
 
 ![preview](docs/img/social-preview.jpg)
 
+> **Requires DeepSeek Harness ≥ 0.1.5 (compatibility update)**
+>
+> This plugin line is adapted for **DeepSeek Harness 0.1.5+**, which ships the official right sidebar (`ui-sidebar-right`). Workbench panels (Git, Usage, terminal, browser, control plane, and more) dock into that host sidebar instead of only using the plugin’s own chrome.
+>
+> On older harness versions you may still see an **update available** notice, but **install is refused** so your environment is not broken. Upgrade DeepSeek Harness to **0.1.5 or newer** first, then install or upgrade this plugin.
+
 A workbench plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. After Workbench is opened in Conversation, chat stays on the left. Two columns appear on the right: the editor (**Agent Control Plane**, syntax highlighting, and **smart terminal**) and the side dock for files, Git, the **Usage** panel, and the **Ultra Slash** panel.
 
 Look for these first:
@@ -36,6 +42,12 @@ Look for these first:
 ## Interface
 
 The workbench uses a three-column layout. Conversation stays on the left. The two columns on the right are the capability area: editor (**Agent Control Plane**, syntax highlighting, smart terminal) in the center; file tree, Git, Usage, and Ultra Slash on the far right. The right dock tabs are **Files**, **Source Control**, **Usage**, and **Ultra Slash**. The editor’s first tab is **Control Plane** by default.
+
+### DeepSeek-Harness >= V0.1.5
+
+![screen_8](docs/img/screen_shot_8.png)
+
+### Previous Version
 
 ![screen_0](docs/img/screen_shot_0.png)
 ![screen_1](docs/img/screen_shot_1.png)
@@ -342,11 +354,11 @@ Compilation runs on the workbench host (TSX → JS); the browser mounts the resu
 | Item | Description |
 | --- | --- |
 | Package | [`dsh-workbench-plugin`](https://www.npmjs.com/package/dsh-workbench-plugin) |
-| Version | **0.1.32** (npm tag `latest`) |
+| Version | **0.1.33** (npm tag `latest`) |
 | Registry | https://registry.npmjs.org |
 
 ```
-+ dsh-workbench-plugin@0.1.32
++ dsh-workbench-plugin@0.1.33
 ```
 
 Maintainers publish npm with `bash devops/release.sh`. The script uses the existing `npm login` session on this machine. Credentials must not be stored in the repository.
@@ -357,17 +369,17 @@ The app market installs from GitHub (`github:loadingvx/deepseek-harness-workbenc
 
 ### Prerequisites
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) is installed, and `dsh web` can be started.
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) **0.1.5 or newer** is installed (official right sidebar / `ui-sidebar-right`), and `dsh web` can be started. Older hosts are not supported for this plugin line; see the notice at the top of this page.
 
 ### Procedure
 
-1. Install the plugin (pin the version; do not omit `@0.1.32`):
+1. Install the plugin (pin the version; do not omit `@0.1.33`):
 
 ```bash
-dsh plugin --profile web add dsh-workbench-plugin@0.1.32
+dsh plugin --profile web add dsh-workbench-plugin@0.1.33
 ```
 
-`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.32` requests that release explicitly.
+`dsh plugin add` is implemented with pnpm. pnpm 11 waits **24 hours** after a version is published before it will pick it as `latest`. A bare `dsh-workbench-plugin` (no `@version`) can therefore install **0.1.0** and still exit 0. Pinning `@0.1.33` requests that release explicitly.
 
 If a pinned install is still refused as too new, add this to `~/.dsh/profiles/web/pnpm-workspace.yaml` and run the command again:
 
@@ -393,17 +405,19 @@ This only works when the default branch already contains built `lib/index.js` an
 
 ### Automatic notice
 
-When a lower version is already installed, a dismissible notice appears at the top of the Files / Git sidebar. The upgrade description and install command are written to the workspace terminal as `#` comments and are not executed. Remove the leading `#`, press Enter, then restart `dsh web`.
+When a lower version is already installed, a dismissible notice appears (and StatusBar shows the newer version). If the host is **DeepSeek Harness ≥ 0.1.5**, the upgrade description and install command are written to the workspace terminal as `#` comments and are not executed. Remove the leading `#`, press Enter, then restart `dsh web`.
 
 ```bash
 # dsh plugin --profile web add dsh-workbench-plugin@<latest>
 ```
 
+If the host is **below 0.1.5**, the same “update available” notice may still appear, but **install is refused** (no install command is written; StatusBar “Run update” stays disabled) so the environment is not broken. Upgrade harness first.
+
 If the registry lookup fails, no notice is shown. Dismissing the notice skips only that latest version; a subsequent newer release will prompt again.
 
 ### Upgrading from 0.1.1
 
-**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.32 manually using the command above. Later releases will prompt in the UI.
+**Version 0.1.1 does not include the upgrade checker and will not display the notice.** Install 0.1.33 manually using the command above. Later releases will prompt in the UI.
 
 ## Workspace terminal
 

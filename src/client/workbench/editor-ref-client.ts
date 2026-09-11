@@ -14,6 +14,7 @@ import {
   type EditorRefSnapshot,
 } from '../../shared/editor-ref.ts'
 import type { Translate } from './types.ts'
+import { resolveInsertSpan } from './composer-span.ts'
 
 const INSERT_EVENT = 'slash/input-insert-reference'
 
@@ -248,7 +249,7 @@ export function installEditorRefClient(ctx: EditorRefContext): EditorRefApi {
       }
       const applied = actx.bail(actx, INSERT_EVENT, {
         reference,
-        span: request.span,
+        span: resolveInsertSpan(actx, request.span),
       }) === true
       if (!applied) {
         notifyComposer(actx, t('editorRef.failed'))

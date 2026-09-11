@@ -39,6 +39,7 @@ import {
   SETTINGS_SVG_RENDER_OPEN_KEY,
   writeBoolFlag,
 } from './ui-flags.ts'
+import { openOfficialSidebarTab } from './official-sidebar.ts'
 import { useControlPlaneVisible } from './control-plane-settings.ts'
 import css from './SettingsPanel.module.css'
 
@@ -230,7 +231,10 @@ export function SettingsPanel({ t }: { t: Translate }) {
                   on={controlPlaneOn}
                   label={controlPlaneOn ? t('settings.controlPlaneOff') : t('settings.controlPlaneOn')}
                   title={controlPlaneOn ? t('settings.controlPlaneOnHint') : t('settings.controlPlaneOffHint')}
-                  onToggle={setControlPlaneOn}
+                  onToggle={(on) => {
+                    setControlPlaneOn(on)
+                    if (on) openOfficialSidebarTab('control-plane')
+                  }}
                 />
               </div>
               <p className={css.svgRenderTipText}>{t('settings.controlPlaneTip')}</p>

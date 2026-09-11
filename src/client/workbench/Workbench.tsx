@@ -53,16 +53,17 @@ import {
 } from './browser-dock.ts'
 import {
   dropBrowserTab,
-  ensureBrowserTab,
   setActiveBrowserId,
 } from './browser-session.ts'
 import { browserElExisting } from './browser-el-client.ts'
 import { DevToolsPanel } from './DevToolsPanel.tsx'
 import { loadEditorMode, saveEditorMode, type EditorModeId } from './editor-mode.ts'
 import { IconButton } from './IconButton.tsx'
-import { IconChat, IconDevtools, IconEditor, IconFiles, IconGit, IconGlobe, IconLayout, IconSettings, IconUsage } from './icons.tsx'
+import { IconChat, IconLayout } from './icons.tsx'
 import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
+import { openOfficialSidebarTab } from './official-sidebar.ts'
+import { registerWorkbenchActions } from './workbench-actions.ts'
 import { SideDock } from './SideDock.tsx'
 import {
   applyReviewLiveSnapshot,
@@ -73,7 +74,7 @@ import {
 import { getReviewOn, subscribeReviewOn } from './review-settings.ts'
 import { termIdFromTabId } from '../../shared/new-file-path.ts'
 import type { TermCleanExitAction } from './term-session.ts'
-import { createControlPlaneTab, createTerminalTab, nextBrowserTab, nextTerminalTab, TERMINAL_TAB_ID, CONTROL_PLANE_TAB_ID, type FileBuffer, type FileTab, type Translate, type WorkbenchInjected } from './types.ts'
+import { TERMINAL_TAB_ID, CONTROL_PLANE_TAB_ID, type FileBuffer, type FileTab, type Translate, type WorkbenchInjected } from './types.ts'
 import { previewKindOfPath } from '../../shared/preview-kind.ts'
 import { isCanvasPath, type CanvasViewMode } from '../../shared/canvas-path.ts'
 import { requestCanvasView } from './canvas-view-prefs.ts'
@@ -81,11 +82,9 @@ import { retainCanvasLive } from './canvas-live.ts'
 import { isTermAssistHotkey, isTermNewTabHotkey } from '../../shared/term-assist.ts'
 import { StatusBar } from './StatusBar.tsx'
 import { TerminalPanel } from './TerminalPanel.tsx'
-import { UsageNavPortal } from './UsagePanel.tsx'
-import { defaultUsageDock, isNavHostReady, readUsageDock, subscribeNavHost, subscribeUsageDock, usageTabVisible } from './usage-dock.ts'
 import { STATUS_BAR_H } from './status-bar.ts'
 import { DEFAULT_TERM_AI_OPEN, TERM_AI_OPEN_KEY, readBoolFlag, writeBoolFlag } from './ui-flags.ts'
-import { getControlPlaneVisible, useControlPlaneVisible } from './control-plane-settings.ts'
+import { useControlPlaneVisible } from './control-plane-settings.ts'
 import { usePluginUpdate, visibleUpdate } from './UpdateBanner.tsx'
 import { updateTermSeed } from '../../shared/version.ts'
 import { useWorkspace } from './useWorkspace.ts'
@@ -93,6 +92,7 @@ import { useAttentionCounts, useSessionBeep, playWorkbenchSound } from './useSes
 import {
   composerSeatOf,
   composerSelection,
+  focusComposer,
   dragCarriesFileRef,
   fileRefExisting,
   markLongFileRefChips,
@@ -207,19 +207,10 @@ function WorkbenchInner(props: WorkbenchProps) {
   const { client, t, useSessions, useWorkspaces, sessionId, fileRefs, browserEls, netRefs, termRefs, editorRefs } = props
   const chrome = useSyncExternalStore(subscribeWorkbenchChrome, getWorkbenchChrome, defaultWorkbenchChrome)
   const { enabled, chatOpen, editorOpen, sideOpen, sideTab } = chrome
-  const usageDock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
-  const navReady = useSyncExternalStore(subscribeNavHost, isNavHostReady, () => false)
-  const showUsageTab = usageTabVisible(usageDock, navReady)
   const [host, setHost] = useState<HTMLElement | null>(null)
   const [controlPlaneOn] = useControlPlaneVisible()
-  const [tabs, setTabs] = useState<FileTab[]>(() => (
-    getControlPlaneVisible()
-      ? [createControlPlaneTab(), createTerminalTab()]
-      : [createTerminalTab()]
-  ))
-  const [activeId, setActiveId] = useState<string | null>(() => (
-    getControlPlaneVisible() ? CONTROL_PLANE_TAB_ID : TERMINAL_TAB_ID
-  ))
+  const [tabs, setTabs] = useState<FileTab[]>(() => [])
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [buffers, setBuffers] = useState<Record<string, FileBuffer>>({})
   const [selectedDiff, setSelectedDiff] = useState<{ path: string; staged: boolean } | null>(null)
   const [fileError, setFileError] = useState<GitFail | null>(null)
@@ -289,10 +280,19 @@ function WorkbenchInner(props: WorkbenchProps) {
   const updateInfo = updateHidden ? null : visibleUpdate(pluginInfo)
   const termSeed = updateInfo === null || updateInfo.latest === null
     ? undefined
-    : updateTermSeed(
-      updateInfo.command,
-      t('update.termHint', { latest: updateInfo.latest, current: updateInfo.current }),
-    )
+    : updateInfo.installAllowed
+      ? updateTermSeed(
+        updateInfo.command,
+        t('update.termHint', { latest: updateInfo.latest, current: updateInfo.current }),
+      )
+      : updateTermSeed(
+        '',
+        t('update.termHintBlocked', {
+          latest: updateInfo.latest,
+          current: updateInfo.current,
+          minHarness: updateInfo.minHarness,
+        }),
+      )
 
   const workspace = useWorkspace(useSessions, useWorkspaces)
   const workspaceId = workspace?.workspaceId
@@ -416,31 +416,11 @@ function WorkbenchInner(props: WorkbenchProps) {
     if (running || pending > 0) patchWorkbenchChrome({ chatOpen: true })
   }, [running, pending])
 
-  // Keep the Control Plane tab pinned as the first editor tab when enabled.
+  // Control plane / terminal / browser live in the official right Sidebar — never pin them as editor tabs.
   useEffect(() => {
-    setTabs((current) => {
-      const has = current.some(tab => tab.id === CONTROL_PLANE_TAB_ID)
-      if (controlPlaneOn) {
-        if (!has) return [createControlPlaneTab(), ...current]
-        if (current[0]?.id === CONTROL_PLANE_TAB_ID) return current
-        return [createControlPlaneTab(), ...current.filter(tab => tab.id !== CONTROL_PLANE_TAB_ID)]
-      }
-      if (!has) return current
-      return current.filter(tab => tab.id !== CONTROL_PLANE_TAB_ID)
-    })
-    setActiveId((current) => {
-      if (controlPlaneOn) {
-        if (current === null || current === TERMINAL_TAB_ID) return CONTROL_PLANE_TAB_ID
-        return current === CONTROL_PLANE_TAB_ID || tabsRef.current.some(tab => tab.id === current)
-          ? current
-          : CONTROL_PLANE_TAB_ID
-      }
-      if (current === CONTROL_PLANE_TAB_ID) {
-        const fallback = tabsRef.current.find(tab => tab.id !== CONTROL_PLANE_TAB_ID)
-        return fallback?.id ?? TERMINAL_TAB_ID
-      }
-      return current
-    })
+    if (!controlPlaneOn) return
+    setTabs((current) => current.filter(tab => tab.id !== CONTROL_PLANE_TAB_ID))
+    setActiveId((current) => (current === CONTROL_PLANE_TAB_ID ? null : current))
   }, [controlPlaneOn])
 
   useEffect(() => {
@@ -499,12 +479,11 @@ function WorkbenchInner(props: WorkbenchProps) {
     }
     scroll.dataset.gitIde = ''
     scroll.dataset.gitChat = chatOpen ? 'on' : 'off'
-    scroll.dataset.gitEditor = editorOpen ? 'on' : 'off'
+    scroll.dataset.gitEditor = 'off'
     scroll.dataset.gitSide = sideOpen ? 'on' : 'off'
-    scroll.dataset.gitTermDock = termDock
     scroll.dataset.gitBottomSpan = spanNow
-    if (panelOn) scroll.dataset.gitTermOpen = ''
-    else delete scroll.dataset.gitTermOpen
+    delete scroll.dataset.gitTermDock
+    delete scroll.dataset.gitTermOpen
     return () => {
       delete scroll.dataset.gitIde
       delete scroll.dataset.gitChat
@@ -514,36 +493,28 @@ function WorkbenchInner(props: WorkbenchProps) {
       delete scroll.dataset.gitTermDock
       delete scroll.dataset.gitBottomSpan
     }
-  }, [host, split, chatOpen, editorOpen, sideOpen, termDock, spanNow, panelOn])
+  }, [host, split, chatOpen, sideOpen, spanNow])
 
   useLayoutEffect(() => {
     const scroll = host
     if (scroll === null || !split) return
     const apply = (): void => {
       const hostW = scroll.clientWidth
-      if (chatW <= 0 && hostW > 0) {
-        setChatW(Math.round(hostW * CHAT_RATIO))
-        return
-      }
-      const next = clampLayout(hostW, chatW, sideW, { chat: chatOpen, editor: editorOpen, side: sideOpen })
-      scroll.style.setProperty('--git-col-chat', `${next.chat}px`)
-      scroll.style.setProperty('--git-col-side', `${next.side}px`)
-      scroll.style.setProperty('--git-status-h', `${STATUS_BAR_H}px`)
-      if (panelOn) {
-        const hostH = scroll.clientHeight
-        const nextH = termPanelOpen
-          ? clampTermHeight(termH, hostH, reservedAboveTerm(hostH))
-          : TERM_HEADER_H
-        scroll.style.setProperty('--git-term-h', `${nextH}px`)
+      if (sideOpen) {
+        const nextSide = clamp(sideW, SIDE_MIN, Math.min(SIDE_MAX, Math.max(SIDE_MIN, hostW - CHAT_MIN)))
+        scroll.style.setProperty('--git-col-side', `${nextSide}px`)
       } else {
-        scroll.style.removeProperty('--git-term-h')
+        scroll.style.removeProperty('--git-col-side')
       }
+      scroll.style.setProperty('--git-status-h', `${STATUS_BAR_H}px`)
+      scroll.style.removeProperty('--git-col-chat')
+      scroll.style.removeProperty('--git-term-h')
     }
     apply()
     const observer = new ResizeObserver(apply)
     observer.observe(scroll)
     return () => { observer.disconnect() }
-  }, [host, split, chatOpen, editorOpen, sideOpen, chatW, sideW, panelOn, termH, termPanelOpen])
+  }, [host, split, sideOpen, sideW])
 
   const beginResize = (which: 'chat' | 'side', event: React.PointerEvent<HTMLButtonElement>): void => {
     event.preventDefault()
@@ -660,68 +631,35 @@ function WorkbenchInner(props: WorkbenchProps) {
   }
 
   const openFile = useCallback(async (path: string): Promise<void> => {
-    if (workspaceId === undefined) return
-    if (isCanvasPath(path)) requestCanvasView(path, 'preview')
-    patchWorkbenchChrome({ editorOpen: true })
-    const id = fileTabId(path)
-    const previewKind = previewKindOfPath(path)
-    if (previewKind !== null) {
-      setTabs(current => current.some(tab => tab.id === id)
-        ? current
-        : [...current, { id, kind: 'preview', path, title: fileName(path), preview: previewKind }])
-      setActiveId(id)
-      return
-    }
-    setTabs((current) => current.some(tab => tab.id === id)
-      ? current
-      : [...current, { id, kind: 'file', path, title: fileName(path) }])
-    setActiveId(id)
-    if (buffersRef.current[path] !== undefined) return
-    const result = await client.readFile(workspaceId, path)
-    if (!result.ok) {
-      setTabs(current => current.filter(tab => tab.id !== id))
-      setActiveId(current => current === id ? null : current)
-      setFileError(result)
-      return
-    }
-    setFileError(null)
-    setTabs(current => current.map(tab => (
-      tab.id === id ? { ...tab, ignored: result.value.ignored === true } : tab
-    )))
-    setBuffers(current => current[path] !== undefined ? current : ({
-      ...current,
-      [path]: { path, original: result.value.content, draft: result.value.content, language: result.value.language },
-    }))
-  }, [client, workspaceId])
+    void path
+    openOfficialSidebarTab('files')
+  }, [])
 
   useEffect(() => retainCanvasLive(client, workspaceId, (path) => {
-    requestCanvasView(path, 'preview')
-    void openFile(path)
-  }), [client, workspaceId, openFile])
+    void path
+    openOfficialSidebarTab('files')
+  }), [client, workspaceId])
 
   const openFileFromReview = useCallback((path: string): void => {
-    void openFile(path)
-    setReviewJump(current => ({ path, stamp: (current?.stamp ?? 0) + 1 }))
-  }, [openFile])
+    void path
+    openOfficialSidebarTab('files')
+  }, [])
 
   const openDiff = (path: string, staged: boolean, repo?: string): void => {
-    patchWorkbenchChrome({ editorOpen: true })
-    const id = diffTabId(path, staged)
-    setSelectedDiff({ path, staged })
-    setTabs((current) => current.some(tab => tab.id === id)
-      ? current
-      : [...current, { id, kind: 'diff', path, title: fileName(path), staged, repo }])
-    setActiveId(id)
+    void path
+    void staged
+    void repo
+    openOfficialSidebarTab('git')
   }
 
   const openCommitDiff = (hash: string, path: string, repo?: string): void => {
-    patchWorkbenchChrome({ editorOpen: true })
-    const id = commitDiffTabId(hash, path)
-    setTabs((current) => current.some(tab => tab.id === id)
-      ? current
-      : [...current, { id, kind: 'commitDiff', path, title: fileName(path), hash, repo }])
-    setActiveId(id)
+    void hash
+    void path
+    void repo
+    openOfficialSidebarTab('git')
   }
+
+  useEffect(() => registerWorkbenchActions({ openDiff, openCommitDiff }))
 
   /** Keep open editor tabs and buffers in sync when a file or folder is renamed/moved. */
   const renamePath = (from: string, to: string): void => {
@@ -787,25 +725,14 @@ function WorkbenchInner(props: WorkbenchProps) {
     }, 0)
   }
 
-  /** Alt+J or the + menu: open a fresh, isolated terminal tab and switch to it. */
+  /** Open the workspace shell in the official right Sidebar. */
   const openNewTerminal = useCallback((): void => {
-    if (termDock === 'tab') patchWorkbenchChrome({ editorOpen: true })
-    else revealTermPanel()
-    const tab = nextTerminalTab(tabsRef.current)
-    setTabs(current => [...current, tab])
-    setActiveId(tab.id)
-    if (readBoolFlag(TERM_AI_OPEN_KEY, DEFAULT_TERM_AI_OPEN)) {
-      setAiTermIds(current => current.includes(tab.id) ? current : [...current, tab.id])
-    }
-  }, [revealTermPanel, termDock])
+    openOfficialSidebarTab('terminal')
+  }, [])
 
+  /** Open the embedded browser in the official right Sidebar. */
   const openNewBrowser = useCallback((): void => {
-    patchWorkbenchChrome({ editorOpen: true })
-    const tab = nextBrowserTab(tabsRef.current)
-    ensureBrowserTab(tab.id)
-    setActiveBrowserId(tab.id)
-    setTabs(current => [...current, tab])
-    setActiveId(tab.id)
+    openOfficialSidebarTab('browser')
   }, [])
 
   const changeDevtoolsDock = useCallback((dock: DevtoolsDock): void => {
@@ -813,23 +740,11 @@ function WorkbenchInner(props: WorkbenchProps) {
     setDevtoolsDock(dock)
     saveDevtoolsOpen(true)
     setDevtoolsOpen(true)
-    if (dock === 'side') {
-      saveBottomTool('terminal')
-      setBottomTool('terminal')
-      patchWorkbenchChrome({ sideOpen: true, sideTab: 'devtools' })
-      return
-    }
-    saveBottomTool('devtools')
-    setBottomTool('devtools')
-    if (termDock !== 'bottom') {
-      saveTermDock('bottom')
-      setTermDock('bottom')
-    }
-    setTermPanelShown(true)
-    setTermPanelOpen(true)
-    saveTermPanelOpen(true)
-    if (sideTab === 'devtools') patchWorkbenchChrome({ sideTab: 'files' })
-  }, [sideTab, termDock])
+    // DevTools only docks in the legacy SideDock; bottom shell chrome is retired.
+    saveBottomTool('terminal')
+    setBottomTool('terminal')
+    patchWorkbenchChrome({ sideOpen: true, sideTab: 'devtools' })
+  }, [])
 
   const openDevtools = useCallback((): void => {
     changeDevtoolsDock('bottom')
@@ -1039,7 +954,7 @@ function WorkbenchInner(props: WorkbenchProps) {
           }, t)
         }
       }
-      if (ok) seat.querySelector('textarea')?.focus()
+      if (ok) focusComposer(seat)
     }
     window.addEventListener('dragover', onDragOver, true)
     window.addEventListener('dragleave', onDragLeave, true)
@@ -1118,94 +1033,10 @@ function WorkbenchInner(props: WorkbenchProps) {
           </IconButton>
         </div>
       )}
-      {editorOpen ? (
-        <EditorPane
-          client={client}
-          workspaceId={workspaceId}
-          sessionId={sessionId}
-          useSession={props.useSession}
-          workspaceTitle={workspace?.title}
-          tabs={editorTabs}
-          activeId={editorActiveId}
-          buffers={buffers}
-          onOpenFile={(path) => { void openFile(path) }}
-          onActivate={setActiveId}
-          onClose={closeTab}
-          onCloseMany={closeTabs}
-          onDraft={(path, draft) => {
-            setBuffers(current => current[path] === undefined ? current : { ...current, [path]: { ...current[path]!, draft } })
-          }}
-          onSaved={(path, content) => {
-            setBuffers(current => current[path] === undefined
-              ? current
-              : { ...current, [path]: { ...current[path]!, original: content, draft: content } })
-          }}
-          onCollapse={() => { patchWorkbenchChrome({ editorOpen: false }) }}
-          notice={fileError}
-          termSeed={termSeed}
-          editorMode={editorMode}
-          onNewTerminal={openNewTerminal}
-          onNewBrowser={openNewBrowser}
-          onOpenDevtools={openDevtools}
-          onPickBrowserEl={pickBrowserEl}
-          onBrowserTitle={renameBrowserTitle}
-          onDockToBottom={termDock === 'tab' ? () => { changeTermDock('bottom') } : undefined}
-          terminalDocked={termDock === 'bottom'}
-          aiTermIds={aiTermIds}
-          onAiModeChange={toggleTermAi}
-          onTermCleanExit={handleTermCleanExit}
-          onAddEditorToChat={sendEditorToChat}
-          reviewByPath={reviewByPath}
-          reviewBusy={reviewBusy}
-          onReviewKeepFile={(path) => {
-            void runReviewAction(() => client.reviewKeep(workspaceId!, path), [path])
-          }}
-          onReviewUndoFile={(path) => {
-            void runReviewAction(() => client.reviewUndo(workspaceId!, path), [path])
-          }}
-          onReviewKeepHunk={(path, hunkId) => {
-            void runReviewAction(() => client.reviewKeep(workspaceId!, path, hunkId), [path])
-          }}
-          onReviewUndoHunk={(path, hunkId) => {
-            void runReviewAction(() => client.reviewUndo(workspaceId!, path, hunkId), [path])
-          }}
-          reviewJump={reviewJump}
-          onCreateFile={async (path) => {
-            if (workspaceId === undefined) return { ok: false, code: 'NO_WORKSPACE', messageZh: t('editor.addFileNoWorkspace'), hintZh: '' }
-            const existing = await client.readFile(workspaceId, path)
-            if (existing.ok) {
-              await openFile(path)
-              return null
-            }
-            if (existing.code !== 'FS_NOT_FOUND') return existing
-            const created = await client.writeFile(workspaceId, path, '')
-            if (!created.ok) return created
-            await openFile(path)
-            return null
-          }}
-          t={t}
-        />
-      ) : (
-        <div className={railCss.rail} data-git-ide-panel="rail-editor">
-          <IconButton label={t('ide.showEditor')} onClick={() => { patchWorkbenchChrome({ editorOpen: true }) }}>
-            <IconEditor />
-          </IconButton>
-          <IconButton label={t('editor.addBrowser')} onClick={openNewBrowser}>
-            <IconGlobe />
-          </IconButton>
-        </div>
-      )}
       {sideOpen ? (
         <SideDock
           client={client}
           workspaceId={workspaceId}
-          workspaceTitle={workspace?.title}
-          workspacePath={workspace?.path}
-          sessionId={sessionId}
-          running={running}
-          useProjection={props.useProjection}
-          activePath={tabs.find(tab => tab.id === activeId)?.path}
-          selected={selectedDiff}
           tab={sideTab}
           onTab={(tab) => {
             if (tab === 'devtools') changeDevtoolsDock('side')
@@ -1213,10 +1044,6 @@ function WorkbenchInner(props: WorkbenchProps) {
           }}
           onOpenFile={(path) => { void openFile(path) }}
           onOpenReviewFile={openFileFromReview}
-          onOpenDiff={openDiff}
-          onOpenCommitDiff={openCommitDiff}
-          onRenamed={renamePath}
-          onDeleted={deletePath}
           onCollapse={() => { patchWorkbenchChrome({ sideOpen: false }) }}
           update={updateInfo}
           onDismissUpdate={() => { setUpdateHidden(true) }}
@@ -1227,130 +1054,34 @@ function WorkbenchInner(props: WorkbenchProps) {
           onAddNetToChat={sendNetToChat}
           onAddTextToChat={sendTextToChat}
         />
-      ) : (
-        <div className={railCss.rail} data-git-ide-panel="rail-side">
-          <IconButton label={t('ide.files')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'files' }) }}>
-            <IconFiles />
-          </IconButton>
-          <IconButton label={t('ide.git')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'git' }) }}>
-            <IconGit />
-          </IconButton>
-          {showUsageTab ? (
-            <IconButton label={t('ide.usage')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'usage' }) }}>
-              <IconUsage />
-            </IconButton>
-          ) : null}
-          {devtoolsOpen ? (
-            <IconButton label={t('ide.devtools')} onClick={() => {
-              changeDevtoolsDock('side')
-            }}>
-              <IconDevtools />
-            </IconButton>
-          ) : null}
-          <IconButton label={t('ide.settings')} onClick={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'settings' }) }}>
-            <IconSettings />
-          </IconButton>
-        </div>
-      )}
-      <UsageNavPortal
-        client={client}
-        sessionId={sessionId}
-        running={running}
-        useProjection={props.useProjection}
-        t={t}
-      />
+      ) : null}
       <div data-git-ide-panel="bottom">
-        {panelOn ? (
-          <div data-git-ide-panel="bottom-tools">
-            {termShown || (devtoolsDock === 'bottom' && devtoolsOpen) ? (
-          <TerminalPanel
-            client={client}
-            workspaceId={workspaceId}
-            tabs={termShown ? termTabs : []}
-            activeId={termActiveId}
-            termSeed={termSeed}
-            aiTermIds={aiTermIds}
-            dragging={dragging === 'term'}
-            onActivate={(id) => {
-              saveBottomTool('terminal')
-              setBottomTool('terminal')
-              setActiveId(id)
-              if (!termPanelOpen) changeTermPanelOpen(true)
-            }}
-            onClose={closeTab}
-            onNewTerminal={termShown ? openNewTerminal : undefined}
-            onAiModeChange={toggleTermAi}
-            onDockTab={termShown ? () => { changeTermDock('tab') } : undefined}
-            expanded={termPanelOpen}
-            onToggleExpand={() => { changeTermPanelOpen(!termPanelOpen) }}
-            onResizePointerDown={beginTermResize}
-            onResizeReset={resetTermHeight}
-            onCleanExit={handleTermCleanExit}
-            t={t}
-            onAddTermToChat={sendTermToChat}
-            devtools={(
-              <DevToolsPanel
-                dock="bottom"
-                onDock={changeDevtoolsDock}
-                t={t}
-                onAddNetToChat={sendNetToChat}
-                onAddTextToChat={sendTextToChat}
-              />
-            )}
-            devtoolsActive={bottomTool === 'devtools'}
-            onActivateDevtools={devtoolsOpen ? () => { changeDevtoolsDock('bottom') } : undefined}
-          />
-            ) : null}
-          </div>
-        ) : null}
         <StatusBar
           client={client}
           workspaceId={workspaceId}
           sessionId={sessionId}
-          active={
-            termDock === 'bottom' && (tabs.find(tab => tab.id === activeId)?.kind === 'terminal')
-              ? (fileTabs.find(tab => tab.id === lastFileId) ?? null)
-              : (tabs.find(tab => tab.id === activeId) ?? null)
-          }
+          running={running}
+          useProjection={props.useProjection}
+          active={null}
           plugin={pluginInfo}
-          tabs={tabs}
+          tabs={[]}
           aiTermIds={aiTermIds}
           editorMode={editorMode}
-          editorOpen={editorOpen}
+          editorOpen={false}
           sideOpen={sideOpen}
           termDock={termDock}
           bottomSpan={bottomSpan}
           onEditorModeChange={changeEditorMode}
-          onTermDockChange={changeTermDock}
+          onTermDockChange={() => { openOfficialSidebarTab('terminal') }}
           onBottomSpanChange={changeBottomSpan}
-          onActivate={(id) => {
-            const tab = tabs.find(item => item.id === id)
-            if (tab?.kind === 'terminal') {
-              if (termDock === 'bottom') changeTermPanelOpen(true)
-              else patchWorkbenchChrome({ editorOpen: true })
-            } else {
-              patchWorkbenchChrome({ editorOpen: true })
-            }
-            setActiveId(id)
-          }}
-          onPrepareUpdate={() => {
-            if (termDock === 'tab') patchWorkbenchChrome({ editorOpen: true })
-            else changeTermPanelOpen(true)
-            setActiveId(TERMINAL_TAB_ID)
-          }}
+          onActivate={() => { openOfficialSidebarTab('files') }}
+          onPrepareUpdate={() => { openOfficialSidebarTab('terminal') }}
+          showDevtools={devtoolsOpen}
+          onOpenSettings={() => { patchWorkbenchChrome({ sideOpen: true, sideTab: 'settings' }) }}
+          onOpenDevtools={() => { changeDevtoolsDock('side') }}
           t={t}
         />
       </div>
-      {chatOpen ? (
-        <div data-git-ide-panel="sash-chat">
-          <ColSash
-            label={t('ide.resizeChat')}
-            active={dragging === 'chat'}
-            onPointerDown={(event) => { beginResize('chat', event) }}
-            onReset={resetChatWidth}
-          />
-        </div>
-      ) : null}
       {sideOpen ? (
         <div data-git-ide-panel="sash-side">
           <ColSash

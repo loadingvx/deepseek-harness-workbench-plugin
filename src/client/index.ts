@@ -1,7 +1,8 @@
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import { createGitClient } from './api.ts'
 import { GitToolRow } from './GitToolRow.tsx'
 import { installUltraSlashClient } from './ultra-slash/install.ts'
@@ -10,6 +11,7 @@ import { installBrowserElClient } from './workbench/browser-el-client.ts'
 import { installNetRefClient } from './workbench/net-ref-client.ts'
 import { installTermRefClient } from './workbench/term-ref-client.ts'
 import { installEditorRefClient } from './workbench/editor-ref-client.ts'
+import { installOfficialSidebarTabs } from './workbench/sidebar-right/install.ts'
 import { Workbench } from './workbench/Workbench.tsx'
 import type { WorkbenchInjected } from './workbench/types.ts'
 import { en, NS, zh } from './locales.ts'
@@ -19,7 +21,7 @@ import { reviewSettingsEn, reviewSettingsZh } from './workbench/review-settings-
 import { agentAssetsEn, agentAssetsZh } from './workbench/agent-assets-locales.ts'
 import { SvgTailView } from './workbench/SvgTailView.tsx'
 
-export const inject = ['slots', 'locale', 'inputTriggers', 'sessions']
+export const inject = ['slots', 'locale', 'inputTriggers', 'sessions', 'sidebarRightTabs', 'sidebarRight']
 
 function registerWorkbenchLocale(locale: {
   dicts?: Map<string, Map<string, Record<string, string>>>
@@ -118,4 +120,6 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     select: selectSvgTailGated,
   }, SvgTailView))
+
+  installOfficialSidebarTabs(ctx, client)
 }
