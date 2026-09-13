@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
  * Issue #26: stacked usage panels / unpin cannot clear non-empty hosts.
- * Asserts the singleton + force-release fix.
+ * Asserts the singleton + force-release fix, and that side-pane parents
+ * cannot be seated into the left rail (click-Usage stacking path).
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -14,8 +15,10 @@ import {
   readUsageDock,
   releaseNavDockHost,
   resetNavDockBootstrapForTests,
+  syncNavDockHostBox,
   USAGE_DOCK_HOST,
   USAGE_DOCK_KEY,
+  usagePanelParked,
   writeUsageDock,
 } from '../src/client/workbench/usage-dock.ts'
 
@@ -127,5 +130,56 @@ describe('issue #26 singleton usage host', () => {
     expect(isNavPortalOwner(first)).toBe(false)
     expect(isNavPortalOwner(second)).toBe(true)
     expect(readNavPortalLease()).toBe(second)
+  })
+})
+
+describe('issue #26 click-Usage stacking path', () => {
+  it('only the nav portal surface parks while dock=nav', () => {
+    expect(usagePanelParked('nav', 'nav')).toBe(true)
+    expect(usagePanelParked('side', 'nav')).toBe(false)
+    expect(usagePanelParked('popover', 'nav')).toBe(false)
+    expect(usagePanelParked('nav', 'side')).toBe(false)
+    expect(usagePanelParked('side', 'side')).toBe(false)
+  })
+
+  it('syncNavDockHostBox refuses to seat a right-dock PaneShell into the left rail', () => {
+    const left = mountSidebar('1')
+    const host = ensureNavDockHost()!
+    paintFakePanel(host, 'portal')
+
+    const rightRail = document.createElement('div')
+    rightRail.dataset.rail = 'right'
+    const pane = document.createElement('div')
+    pane.setAttribute('data-workbench-sidebar-pane', '')
+    paintFakePanel(pane, 'side-click')
+    rightRail.append(pane)
+    document.body.append(rightRail)
+
+    // Pre-fix hazard: seating the pane parent stacked a second balance card.
+    // Guard: only `[data-dsw-usage-dock]` hosts may be seated.
+    syncNavDockHostBox(pane)
+
+    expect(rightRail.contains(pane)).toBe(true)
+    expect(left.contains(pane)).toBe(false)
+    expect(left.querySelectorAll('[data-git-chrome="usage"]')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-git-chrome="usage"]')).toHaveLength(2)
+  })
+
+  it('repeated side-pane sync attempts cannot stack orphans beside the host', () => {
+    const left = mountSidebar('1')
+    const host = ensureNavDockHost()!
+    paintFakePanel(host, 'portal')
+
+    for (let i = 0; i < 5; i += 1) {
+      const pane = document.createElement('div')
+      pane.setAttribute('data-workbench-sidebar-pane', '')
+      paintFakePanel(pane, `click-${i}`)
+      document.body.append(pane)
+      syncNavDockHostBox(pane)
+      expect(left.contains(pane)).toBe(false)
+    }
+
+    expect(left.querySelectorAll('[data-git-chrome="usage"]')).toHaveLength(1)
+    expect(document.querySelectorAll(`[${USAGE_DOCK_HOST}]`)).toHaveLength(1)
   })
 })

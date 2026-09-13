@@ -48,6 +48,15 @@ declare module '@deepseek-ai/cordis' {
         get(name: string): unknown
       } | undefined
     }
+    /** Workspace navigation face (DSH ≥ 0.1.5); owns startSession / openSession. */
+    uiWorkspace?: {
+      startSession(workspaceId?: string): void
+      openSession?(sessionId: string): void
+    }
+    /** Workspace data controller. Older harness builds also exposed startSession here. */
+    workspaces?: {
+      startSession?(workspaceId?: string): void
+    }
     agentDefaultModel?: {
       currentSelection(): { provider: string; model: string; reasoningEffort?: string }
     }

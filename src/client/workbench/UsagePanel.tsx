@@ -46,7 +46,10 @@ import {
   subscribeNavPortalLease,
   subscribeUsageDock,
   syncNavDockHostBox,
+  usagePanelParked,
   writeUsageDock,
+  USAGE_DOCK_HOST,
+  type UsagePanelSurface,
 } from './usage-dock.ts'
 import css from './UsagePanel.module.css'
 
@@ -60,8 +63,13 @@ type UsagePanelProps = {
   running?: boolean
   useProjection?: (key: string, selector?: (value: unknown) => unknown) => unknown
   t: Translate
-  /** StatusBar bubble: fixed panel layout (pin still available). */
-  variant?: 'panel' | 'popover'
+  /**
+   * Where this instance is painted:
+   * - `nav` — UsageNavPortal only (left rail)
+   * - `popover` — StatusBar bubble
+   * - `panel` — right-dock Usage tab (default)
+   */
+  variant?: UsagePanelSurface
 }
 
 /**
@@ -117,7 +125,7 @@ export function UsageNavPortal(props: UsagePanelProps) {
   }, [dock])
 
   if (dock !== 'nav' || !owner || host === null) return null
-  return createPortal(<UsagePanel {...props} />, host)
+  return createPortal(<UsagePanel {...props} variant="nav" />, host)
 }
 
 function useNavUsageFrame(enabled: boolean): {
@@ -141,7 +149,8 @@ function useNavUsageFrame(enabled: boolean): {
     if (!enabled) return
     const root = rootRef.current
     const host = root?.parentElement
-    if (host == null) return
+    // Only the `[data-dsw-usage-dock]` host may be sized / seated (#26).
+    if (host == null || !host.hasAttribute(USAGE_DOCK_HOST)) return
     const sidebar = findNavSidebarRoot(host)
     const apply = (): void => {
       syncNavDockHostBox(host)
@@ -172,7 +181,7 @@ function useNavUsageFrame(enabled: boolean): {
   useLayoutEffect(() => {
     if (!enabled) return
     const host = rootRef.current?.parentElement
-    if (host == null) return
+    if (host == null || !host.hasAttribute(USAGE_DOCK_HOST)) return
     host.style.height = `${height}px`
     syncNavDockHostBox(host)
   }, [enabled, height])
@@ -228,12 +237,13 @@ function useNavUsageFrame(enabled: boolean): {
 }
 
 export function UsagePanel({
-  client, sessionId, running, useProjection, t, variant = 'panel',
+  client, sessionId, running, useProjection, t, variant = 'side',
 }: UsagePanelProps) {
   const dock = useSyncExternalStore(subscribeUsageDock, readUsageDock, defaultUsageDock)
   const snapshot = useSyncExternalStore(subscribeUsageLive, readUsageLive, () => null)
   const popover = variant === 'popover'
-  const nav = useNavUsageFrame(!popover && dock === 'nav')
+  const parked = usagePanelParked(variant, dock)
+  const nav = useNavUsageFrame(parked)
   const [loading, setLoading] = useState(true)
   const [observed, setObserved] = useState<ObservedSpend | undefined>(undefined)
   const [pinError, setPinError] = useState(false)
@@ -327,7 +337,6 @@ export function UsagePanel({
 
   const statusText = moneyStatus(snapshot, t)
   const pinned = dock === 'nav'
-  const parked = !popover && pinned
   const compact = parked && nav.compact
 
   return (

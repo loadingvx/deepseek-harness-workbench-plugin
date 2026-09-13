@@ -4,11 +4,10 @@
  *
  * Conflicts with a leftover standalone ultra-slash install are handled by
  * yielding: if the `/ultra-slash` slash source is already registered, this
- * half stands down for it so the web app always mounts. The `/new` bridge is
- * only installed when this half actually owns the slash source — a double
- * bridge would start two sessions per `/new`.
+ * half stands down for it so the web app always mounts. Bare `/new` switches
+ * sessions via the `command/executed` event (not by patching matchEnter).
  */
-import { PLUGIN_NAME } from '../../shared/ultra-slash/ids.ts'
+import { NEW_COMMAND_NAME, PLUGIN_NAME } from '../../shared/ultra-slash/ids.ts'
 import { translate, type UltraSlashKey, type UiLocale } from '../../shared/ultra-slash/locales.ts'
 import {
   findCommandSource,
@@ -24,7 +23,7 @@ import {
   type SlashSource,
   type SlashTriggerService,
 } from './slash-menu.ts'
-import { installNewSessionBridge, newSlashMatchEnter, newSlashMatchSpace, startNewSession } from './new-session.ts'
+import { newSlashMatchEnter, newSlashMatchSpace, startNewSession } from './new-session.ts'
 import { getSlashCache, setSlashI18n } from './runtime.ts'
 
 const DIVIDER_STYLE_ID = `${PLUGIN_NAME}-divider`
@@ -39,8 +38,44 @@ interface LocaleFace extends LocaleRegistry {
 interface UltraSlashClientContext {
   effect(fn: () => (() => void) | void, label?: string): void
   get(name: string): unknown
+  on?(event: string, handler: (...args: unknown[]) => unknown): () => void
   inputTriggers?: unknown
   locale?: unknown
+  sessions?: unknown
+  workspaces?: unknown
+  remote?: unknown
+  uiWorkspace?: { startSession?: (workspaceId?: string) => void }
+}
+
+/**
+ * Resolve a cordis service without throwing.
+ * Never touch `ctx.sessions` / `ctx.uiWorkspace` as properties first — cordis
+ * Proxy throws `cannot get property "…" without inject` when the name is not
+ * on this fiber's inject list, even if `ctx.get(name)` would succeed.
+ */
+function peekInjected(ctx: UltraSlashClientContext, name: string): unknown {
+  try {
+    if (name === 'sessions') return ctx.sessions
+    if (name === 'workspaces') return ctx.workspaces
+    if (name === 'remote') return ctx.remote
+    if (name === 'uiWorkspace') return ctx.uiWorkspace
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+/** Resolve cordis services without throwing; always read faces at call time. */
+function serviceGet(ctx: UltraSlashClientContext): (name: string) => unknown {
+  return (name) => {
+    try {
+      const viaGet = ctx.get(name)
+      if (viaGet !== undefined) return viaGet
+    } catch {
+      // fall through to field peek
+    }
+    return peekInjected(ctx, name)
+  }
 }
 
 function injectDividerStyle(): () => void {
@@ -166,9 +201,32 @@ export function installUltraSlashClient(ctx: UltraSlashClientContext): void {
 
   ctx.effect(() => injectDividerStyle(), `${PLUGIN_NAME}: slash divider`)
 
-  // The bridge must only run when this half owns the slash source: a double
-  // bridge would start two sessions for one /new.
-  let ownSource = false
+  const get = serviceGet(ctx)
+
+  // Bare `/new` and menu picks are handled by DSH's command source (host ack
+  // toast). Listen for the official client event instead of monkey-patching
+  // matchEnter — wrapping live sources via `inputTriggers.live` is fragile.
+  ctx.effect(() => {
+    if (typeof ctx.on !== 'function') {
+      console.warn(`[${PLUGIN_NAME}] ctx.on unavailable; bare /new will not switch sessions`)
+      return () => {}
+    }
+    return ctx.on('command/executed', (_sessionId, name, result) => {
+      if (name !== NEW_COMMAND_NAME) return
+      if (result !== null && typeof result === 'object' && (result as { kind?: string }).kind === 'error') return
+      const text = cache.defaults().new ?? ''
+      void startNewSession(get, text).then(
+        (started) => {
+          if (!started.ok) {
+            console.warn(`[${PLUGIN_NAME}] /new: could not start a session after command/executed`)
+          }
+        },
+        (error: unknown) => {
+          console.warn(`[${PLUGIN_NAME}] /new: startNewSession rejected after command/executed`, error)
+        },
+      )
+    })
+  }, `${PLUGIN_NAME}: /new on command/executed`)
 
   ctx.effect(() => {
     const t = bindMenuTranslate(locale)
@@ -194,35 +252,18 @@ export function installUltraSlashClient(ctx: UltraSlashClientContext): void {
         if (commandName === '') return undefined
         return { text: `/${commandName} ` }
       },
-      matchSpace: newSlashMatchSpace((name) => ctx.get(name), t, readNewDefault),
-      matchEnter: newSlashMatchEnter((name) => ctx.get(name), t, readNewDefault),
-      // The text-ref lexicon: the plugin's command names highlight in the
-      // composer textarea in every session state (the roll is derived from
-      // the persisted catalog, never from the session's running state).
+      matchSpace: newSlashMatchSpace(get, t, readNewDefault),
+      // `/new <text>` only — bare `/new` stays on the command source + event above.
+      matchEnter: newSlashMatchEnter(get, t, readNewDefault),
       lexicon: () => pluginLexicon(cache.list().map((command) => command.name)),
       subscribeLexicon: (_session: unknown, listener: () => void) => cache.subscribe(listener),
     }
     const outcome = registerSourceTolerant(inputTriggers, source)
-    ownSource = outcome.owned
-    return () => {
-      outcome.dispose()
-      ownSource = false
-    }
+    return () => { outcome.dispose() }
   }, `${PLUGIN_NAME}: ultra-slash source`)
 
   ctx.effect(
     () => installCommandSourceFilter(inputTriggers, hiddenNames),
     `${PLUGIN_NAME}: hide plugin names from 命令`,
-  )
-
-  ctx.effect(
-    () => {
-      if (!ownSource) return () => {}
-      return installNewSessionBridge(inputTriggers, (initialText) => {
-        const text = initialText.trim().length > 0 ? initialText : cache.defaults().new ?? ''
-        startNewSession((name) => ctx.get(name), text)
-      })
-    },
-    `${PLUGIN_NAME}: /new session`,
   )
 }

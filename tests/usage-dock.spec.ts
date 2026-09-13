@@ -13,6 +13,7 @@ import {
   resetNavDockBootstrapForTests,
   USAGE_DOCK_HOST,
   USAGE_DOCK_KEY,
+  usagePanelParked,
   usageTabVisible,
   writeUsageDock,
 } from '../src/client/workbench/usage-dock.ts'
@@ -118,6 +119,14 @@ describe('usageTabVisible', () => {
     expect(usageTabVisible('side', true)).toBe(true)
     expect(usageTabVisible('nav', false)).toBe(true)
     expect(usageTabVisible('nav', true)).toBe(false)
+  })
+})
+
+describe('usagePanelParked', () => {
+  it('parks only the nav portal surface when dock preference is nav', () => {
+    expect(usagePanelParked('nav', 'nav')).toBe(true)
+    expect(usagePanelParked('side', 'nav')).toBe(false)
+    expect(usagePanelParked('popover', 'nav')).toBe(false)
   })
 })
 

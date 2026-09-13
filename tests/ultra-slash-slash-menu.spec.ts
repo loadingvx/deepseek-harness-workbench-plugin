@@ -233,6 +233,96 @@ describe('conflict yield on the client half', () => {
     expect(slashSourceTaken(empty)).toBe(false)
   })
 
+  it('installUltraSlashClient starts a session on command/executed for /new', async () => {
+    const { installUltraSlashClient } = await import('../src/client/ultra-slash/install.ts')
+    const { startNewSession } = await import('../src/client/ultra-slash/new-session.ts')
+    let current = 's1'
+    const listeners = new Set<() => void>()
+    const notify = (): void => {
+      for (const fn of listeners) fn()
+    }
+    const create = vi.fn(async () => 's-new')
+    const remoteCreate = vi.fn(async () => ({ ok: true, value: { sessionId: 's-new' } }))
+    const open = vi.fn((id: string) => {
+      current = id
+      notify()
+    })
+    const eventListeners = new Map<string, Array<(...args: unknown[]) => unknown>>()
+    const service: SlashTriggerService = {
+      live: { sources: [] },
+      registerSource: vi.fn(() => () => {}),
+    }
+    const effects: Array<() => unknown> = []
+    const ctx = {
+      effect(fn: () => unknown) {
+        effects.push(fn)
+        return () => {}
+      },
+      get(name: string) {
+        if (name === 'sessions') {
+          return {
+            list: {
+              getSnapshot: () => ({ current, phase: 'ready', byId: { s1: { updatedAt: 1 } } }),
+              subscribe: (fn: () => void) => {
+                listeners.add(fn)
+                return () => { listeners.delete(fn) }
+              },
+            },
+            create,
+            open,
+            binding: () => undefined,
+          }
+        }
+        if (name === 'workspaces') {
+          return {
+            list: {
+              getSnapshot: () => ({
+                phase: 'ready',
+                items: [{ workspaceId: 'ws1', sessionIds: ['s1'], createdAt: '2026-01-01T00:00:00.000Z' }],
+              }),
+            },
+          }
+        }
+        if (name === 'uiWorkspace') {
+          return { openSession: open, startSession: vi.fn() }
+        }
+        if (name === 'remote') {
+          return {
+            session: { create: remoteCreate },
+            agentPresets: {
+              list: async () => ({ ok: true, value: { presets: [{ id: 'standard' }] } }),
+            },
+          }
+        }
+        return undefined
+      },
+      on(event: string, handler: (...args: unknown[]) => unknown) {
+        const list = eventListeners.get(event) ?? []
+        list.push(handler)
+        eventListeners.set(event, list)
+        return () => {}
+      },
+      inputTriggers: service,
+      locale: {
+        dicts: new Map(),
+        register: vi.fn(() => () => {}),
+        getSnapshot: () => ({ active: 'zh' }),
+      },
+    }
+    installUltraSlashClient(ctx as never)
+    for (const fn of effects) fn()
+    const handlers = eventListeners.get('command/executed') ?? []
+    expect(handlers.length).toBeGreaterThan(0)
+    for (const handler of handlers) handler('s1', 'new', { kind: 'success' })
+    await vi.waitFor(() => expect(remoteCreate).toHaveBeenCalledWith({
+      workspaceId: 'ws1',
+      agentPreset: 'standard',
+    }))
+    expect(open).toHaveBeenCalledWith('s-new')
+    expect(current).toBe('s-new')
+    expect(typeof startNewSession).toBe('function')
+  })
+
   it('installUltraSlashClient stands down when the /ultra-slash source is already owned', async () => {
     const { installUltraSlashClient } = await import('../src/client/ultra-slash/install.ts')
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -252,6 +342,7 @@ describe('conflict yield on the client half', () => {
         return () => {}
       },
       get: () => undefined,
+      on: () => () => {},
       inputTriggers: service,
       locale: {
         dicts: new Map(),

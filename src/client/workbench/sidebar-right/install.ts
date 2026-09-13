@@ -19,6 +19,13 @@ import { ControlPlanePane } from './ControlPlanePane.tsx'
 import { GitPane } from './GitPane.tsx'
 import { SlashPane } from './SlashPane.tsx'
 import { TerminalPane } from './TerminalPane.tsx'
+import {
+  isNavHostReady,
+  readUsageDock,
+  subscribeNavHost,
+  subscribeUsageDock,
+  usageTabVisible,
+} from '../usage-dock.ts'
 import { UsagePane } from './UsagePane.tsx'
 import {
   WORKBENCH_BROWSER_ID,
@@ -65,7 +72,25 @@ export function installOfficialSidebarTabs(ctx: ClientContext, client: GitClient
   const withClient = () => ({ client })
 
   ctx.effect(() => tabs.register(gitTabDefinition(t)), 'ui-workbench: sidebar-right git type')
-  ctx.effect(() => tabs.register(usageTabDefinition(t)), 'ui-workbench: sidebar-right usage type')
+  // Hide the Usage tab while the panel is pinned above Settings — opening it
+  // would mount a second UsagePanel and used to stack orphans in the left rail (#26).
+  ctx.effect(() => {
+    let disposeTab: (() => void) | undefined
+    const sync = (): void => {
+      disposeTab?.()
+      disposeTab = undefined
+      if (!usageTabVisible(readUsageDock(), isNavHostReady())) return
+      disposeTab = tabs.register(usageTabDefinition(t))
+    }
+    sync()
+    const stopDock = subscribeUsageDock(sync)
+    const stopHost = subscribeNavHost(sync)
+    return () => {
+      stopDock()
+      stopHost()
+      disposeTab?.()
+    }
+  }, 'ui-workbench: sidebar-right usage type')
   ctx.effect(() => tabs.register(slashTabDefinition(t)), 'ui-workbench: sidebar-right ultra-slash type')
   ctx.effect(() => tabs.register(terminalTabDefinition(t)), 'ui-workbench: sidebar-right terminal type')
   ctx.effect(() => tabs.register(browserTabDefinition(t)), 'ui-workbench: sidebar-right browser type')

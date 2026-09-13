@@ -61,24 +61,29 @@ Host 端 `/new` 只回执（ack），真正的会话切换在 client 端做—�
 ### 3.2 方案与取舍
 
 - **否决「给 /new 加 host 端 `input`」**：菜单点选会从「立即执行」变成「claim 占位」；且 claim 的 submit 闭包由 DSH `leadingClaim` 创建，插件无法挂钩、拿不到 args。
-- **采用「插件 source 的 matchEnter 返回 claim」**：
-  - 轮询顺序保证：裸 `/new` 由 command source 先处理（'handled'）→ bridge 开空白会话；`/new <text>` command source 返回 undefined → 插件 source claim → 带参数一次 Enter 直接 `submit`。
+- **采用「插件 source 的 matchEnter 返回 claim」**（仅 `/new <text>`）：
+  - 轮询顺序保证：裸 `/new` 由 command source 先处理（'handled'）→ 发出 `command/executed`；`/new <text>` command source 返回 undefined → 插件 source claim → 带参数一次 Enter 直接 `submit`。
   - `submit(args)` 内做实际动作：`startNewSession(get, args)`。
-- **幽灵提示（`<第一句话，可空>`）走 matchSpace**：claim 只在 Enter 判定里产生，所以输入 `/new `（空格）时不会有 `/steer <引导内容>` 那种提示。给插件 source 加 `matchSpace`（token === '/new' 时返回同一个 claim），空格一敲即进入 claimed 相、draft 变成 `/new ` 并显示幽灵提示；再 Enter 直接走 claim.submit。command source 对 `/new` 的 matchSpace 返回 undefined（无 host input），不冲突。
-- 桥接（`installNewSessionBridge`）保留并增强：裸 `/new` 与菜单点选仍开空白会话，现在把解析出的文本一并传给 `startNewSession`（空文本时行为不变）。
+- **裸 `/new` / 菜单点选**：监听 DSH 客户端事件 `command/executed`（name === `new`），再调 `startNewSession`。不要再 monkey-patch command source 的 `matchEnter`（`inputTriggers.live` 包装不可靠，会出现「只有 host 回执、界面不切会话」）。
+- **幽灵提示（`<第一句话，可空>`）走 matchSpace**：……
 
 ### 3.3 startNewSession 的发送时序（核心代码路径）
 
-1. `workspaces.startSession()`：创建并导航到新会话（异步，内部 `connectWorkspace → sessions.open`）。
-2. args 非空时：先记录 `before = sessions.list.getSnapshot().current`，再等 `current` 变化——优先 `list.subscribe`，无订阅时回退 30ms 轮询；3 秒超时（`NEW_SESSION_WAIT_MS`），且要求 `sessions.binding(current).session` 已可用（绑定跟随 current 存在）。
-3. `session.prompt([{ type: 'text', text }], 'queue')` 发送第一句话。新会话空白 → 首轮发送是 DSH 支持的 first-send flow（`session.prompt` 里有 blankBit 处理）。
+1. **优先** `sessions.create({ workspaceId })` + `uiWorkspace.openSession(id)`（否则 `sessions.open`）：强制新建会话。DSH 的 `uiWorkspace.startSession()` 会**复用已有空白会话**，在已有 blank 时 `/new` 只弹 host 回执、界面看起来没切走。
+2. workspaceId 解析：当前会话所属 workspace → 否则按最近活跃/创建时间选（与 DSH `startSession` 一致）。
+3. open 之后以 `sessions.list.current === id` 为准（短等投影），失败再回退 `uiWorkspace.startSession`（旧版 `workspaces.startSession`）。
+4. args 非空时：先记录 `before = sessions.list.getSnapshot().current`，再等 `current` 变化后 `session.prompt(..., 'queue')` 发第一句。
+
+> **Harness ≥ 0.1.5**：`startSession` 只在 `ctx.uiWorkspace` 上；`IWorkspaces` 已无此方法。裸 `/new` 靠 `command/executed` 触发客户端切换，不要再 monkey-patch command source。
 
 ### 3.4 关键 client API 备忘
 
 | API | 形态 | 用途 |
 | --- | --- | --- |
-| `ctx.get('workspaces')` | `{ startSession(workspaceId?) }` | 共享「新会话」动作；显式 workspace → 当前会话 workspace → recent workspace |
-| `ctx.get('sessions')` | `{ list: { getSnapshot(): { current?: string }, subscribe? }, binding(id): { session?: { prompt(content, mode) } } }` | 定位新会话并发消息 |
+| `ctx.get('uiWorkspace')` | `{ startSession(workspaceId?), openSession?(id) }` | 共享「新会话」动作（DSH ≥ 0.1.5）；显式 workspace → 当前会话 workspace → recent workspace |
+| `ctx.get('workspaces')` | 数据控制器；旧版才有 `startSession` | 仅作 `/new` 的兼容回退 |
+| `ctx.get('sessions')` | `{ create?, open?, list, binding }` | **强制新建** + 定位新会话并发消息 |
+| `ctx.on('command/executed')` | `(sessionId, name, result)` | 裸 `/new` / 菜单点选后切会话 |
 | `session.prompt` | `prompt([{type:'text',text}], 'queue' | 'steer')` | queue 追加下一轮；steer 打断当前轮 |
 | `leadingCommandInput(line)` | 解析 token 后的文本（保留换行） | 桥接与 matchEnter 共用 |
 

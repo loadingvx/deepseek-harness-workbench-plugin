@@ -47,6 +47,18 @@ export function usageTabVisible(dock: UsageDock, navReady: boolean): boolean {
   return dock !== 'nav' || !navReady
 }
 
+/**
+ * Which UsagePanel surface may apply left-nav layout / seat into the session rail.
+ * Only the UsageNavPortal body (`surface: 'nav'`) — never the right-dock pane or
+ * status-bar popover. Otherwise opening the Usage tab while pinned moves the
+ * side PaneShell into the left rail and stacks orphan balance panels (#26).
+ */
+export type UsagePanelSurface = 'nav' | 'side' | 'popover'
+
+export function usagePanelParked(surface: UsagePanelSurface, dock: UsageDock): boolean {
+  return surface === 'nav' && dock === 'nav'
+}
+
 export function defaultUsageDock(): UsageDock {
   return DEFAULT_USAGE_DOCK
 }
@@ -210,6 +222,8 @@ function seatHostAboveFooter(host: HTMLElement): void {
 }
 
 export function syncNavDockHostBox(host: HTMLElement): void {
+  // Defense: never seat arbitrary parents (e.g. right-dock PaneShell) into the rail.
+  if (!host.hasAttribute(USAGE_DOCK_HOST)) return
   seatHostAboveFooter(host)
   host.style.boxSizing = 'border-box'
   host.style.display = 'block'

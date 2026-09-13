@@ -28,9 +28,9 @@ import { MIN_HARNESS_VERSION, PLUGIN_NAME } from '../shared/version.ts'
  * "pending (waiting for services…)" on harness &lt; 0.1.5 and blocks web boot.
  * We nest-inject those services below so the parent entry always activates.
  */
-export const inject = ['slots', 'locale', 'inputTriggers', 'sessions']
+export const inject = ['slots', 'locale', 'inputTriggers', 'sessions', 'remote']
 
-const SIDEBAR_RIGHT_INJECT = ['sidebarRightTabs', 'sidebarRight'] as const
+const SIDEBAR_RIGHT_INJECT = ['sidebarRightTabs', 'sidebarRight', 'uiWorkspace', 'workspaces'] as const
 
 function registerWorkbenchLocale(locale: {
   dicts?: Map<string, Map<string, Record<string, string>>>
