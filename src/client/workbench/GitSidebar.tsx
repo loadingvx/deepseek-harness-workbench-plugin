@@ -18,6 +18,10 @@ import {
   type GitSyncPrefs, type PullMode, type PushMode,
 } from '../../shared/git-sync-prefs.ts'
 import {
+  AUTO_FETCH_DEFAULT_MINUTES, AUTO_FETCH_MAX_MINUTES,
+  AUTO_FETCH_OFF_MINUTES, AUTO_FETCH_PRESETS, parseAutoFetchMinutesInput,
+} from '../../shared/git-auto-fetch.ts'
+import {
   GRAPH_LIMIT_DEFAULT, GRAPH_LIMIT_MAX, GRAPH_LIMIT_MIN, GRAPH_LIMIT_PRESETS,
   parseGraphLimitInput, readGraphLimit, writeGraphLimit,
 } from '../../shared/git-graph-limit.ts'
@@ -25,6 +29,7 @@ import { invalidBranchName } from '../../shared/branch-name.ts'
 import { IconAutoRefresh, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRestore, IconSparkle, IconTune } from './icons.tsx'
 import { readNearbyGit, retainNearbyGit, setNearbyRepo, setParentGitDecision, subscribeNearbyGit } from './nearby-git.ts'
 import {
+  applyGitLiveFetchInterval,
   readGitLiveStatus,
   retainGitLive,
   subscribeGitLive,
@@ -220,6 +225,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const [prefsDraft, setPrefsDraft] = useState<GitSyncPrefs>(readGitSyncPrefs)
   const [graphLimit, setGraphLimit] = useState(readGraphLimit)
   const [graphLimitDraft, setGraphLimitDraft] = useState(() => String(readGraphLimit()))
+  const [autoFetchDraft, setAutoFetchDraft] = useState(() => String(readGitSyncPrefs().autoFetchMinutes))
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const graphLimitRef = useRef(graphLimit)
   graphLimitRef.current = graphLimit
@@ -255,7 +261,9 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     if (settingsHydrated.current || !templateOpen) return
     settingsHydrated.current = true
     setTemplateDraft(template)
-    setPrefsDraft(readGitSyncPrefs())
+    const prefs = readGitSyncPrefs()
+    setPrefsDraft(prefs)
+    setAutoFetchDraft(String(prefs.autoFetchMinutes))
     setGraphLimitDraft(String(readGraphLimit()))
     setSettingsError(null)
   }, [templateOpen, template])
@@ -706,7 +714,9 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const openTemplate = (): void => {
     setPrompt(null)
     setTemplateDraft(template)
-    setPrefsDraft(readGitSyncPrefs())
+    const prefs = readGitSyncPrefs()
+    setPrefsDraft(prefs)
+    setAutoFetchDraft(String(prefs.autoFetchMinutes))
     setGraphLimitDraft(String(readGraphLimit()))
     setSettingsError(null)
     writeBoolFlag(GIT_SETTINGS_OPEN_KEY, true)
@@ -731,6 +741,11 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   }
 
   const saveTemplate = (): void => {
+    const fetchParsed = parseAutoFetchMinutesInput(autoFetchDraft)
+    if (!fetchParsed.ok) {
+      setSettingsError(t(`gitSettings.autoFetch.${fetchParsed.error}`))
+      return
+    }
     const parsed = parseGraphLimitInput(graphLimitDraft)
     if (!parsed.ok) {
       setSettingsError(t(`gitSettings.graphLimit.${parsed.error}`))
@@ -740,7 +755,11 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     graphLimitRef.current = nextLimit
     setGraphLimit(nextLimit)
     setCustomTemplate(writeCustomTemplate(templateDraft, localeDefault))
-    setSyncPrefs(writeGitSyncPrefs(prefsDraft))
+    setSyncPrefs(writeGitSyncPrefs({
+      ...prefsDraft,
+      autoFetchMinutes: fetchParsed.value,
+    }))
+    applyGitLiveFetchInterval()
     writeBoolFlag(GIT_SETTINGS_OPEN_KEY, false)
     setSettingsError(null)
     setTemplateOpen(false)
@@ -943,7 +962,12 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                 <IconButton
                   dense
                   label={t('gitSettings.open')}
-                  active={customTemplate !== null || syncPrefs.pullMode !== 'merge' || syncPrefs.pushMode !== 'safe'}
+                  active={
+                    customTemplate !== null
+                    || syncPrefs.pullMode !== 'merge'
+                    || syncPrefs.pushMode !== 'safe'
+                    || syncPrefs.autoFetchMinutes !== AUTO_FETCH_DEFAULT_MINUTES
+                  }
                   onClick={openTemplate}
                 >
                   <IconTune />
@@ -1267,6 +1291,62 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                 ))}
               </fieldset>
               <fieldset className={css.choiceSet}>
+                <legend>{t('gitSettings.autoFetchTitle')}</legend>
+                <p className={css.choiceLead}>{t('gitSettings.autoFetchHint')}</p>
+                <div className={css.limitRow}>
+                  <input
+                    className={`${css.fieldInput} ${css.limitInput}`}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    spellCheck={false}
+                    min={AUTO_FETCH_OFF_MINUTES}
+                    max={AUTO_FETCH_MAX_MINUTES}
+                    value={autoFetchDraft}
+                    aria-label={t('gitSettings.autoFetchLabel')}
+                    aria-invalid={settingsError !== null || undefined}
+                    onChange={(event) => {
+                      setAutoFetchDraft(event.target.value)
+                      setSettingsError(null)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        saveTemplate()
+                      }
+                      if (event.key === 'Escape') closeTemplate()
+                    }}
+                  />
+                  <div className={css.limitPresets}>
+                    <button
+                      type="button"
+                      className={css.limitPreset}
+                      data-active={autoFetchDraft === String(AUTO_FETCH_OFF_MINUTES) || undefined}
+                      onClick={() => {
+                        setAutoFetchDraft(String(AUTO_FETCH_OFF_MINUTES))
+                        setSettingsError(null)
+                      }}
+                    >
+                      {t('gitSettings.autoFetch.off')}
+                    </button>
+                    {AUTO_FETCH_PRESETS.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        className={css.limitPreset}
+                        data-active={autoFetchDraft === String(preset) || undefined}
+                        onClick={() => {
+                          setAutoFetchDraft(String(preset))
+                          setSettingsError(null)
+                        }}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </fieldset>
+              <fieldset className={css.choiceSet}>
                 <legend>{t('gitSettings.graphLimitTitle')}</legend>
                 <p className={css.choiceLead}>{t('gitSettings.graphLimitHint')}</p>
                 <div className={css.limitRow}>
@@ -1331,6 +1411,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                 onClick={() => {
                   setTemplateDraft(localeDefault)
                   setPrefsDraft({ ...DEFAULT_GIT_SYNC_PREFS })
+                  setAutoFetchDraft(String(AUTO_FETCH_DEFAULT_MINUTES))
                   setGraphLimitDraft(String(GRAPH_LIMIT_DEFAULT))
                   setSettingsError(null)
                 }}

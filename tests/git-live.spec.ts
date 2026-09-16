@@ -3,13 +3,33 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GitClient } from '../src/client/api.ts'
 import type { GitStatusSnapshot } from '../src/shared/types.ts'
+import { writeGitSyncPrefs } from '../src/shared/git-sync-prefs.ts'
 import {
   pauseGitLive,
   readGitLiveStatus,
+  refreshGitLiveRemote,
   refreshGitLiveStatus,
   retainGitLive,
   subscribeGitLive,
 } from '../src/client/workbench/git-live.ts'
+
+const memory = new Map<string, string>()
+
+beforeEach(() => {
+  memory.clear()
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => memory.get(key) ?? null,
+    setItem: (key: string, value: string) => { memory.set(key, String(value)) },
+    removeItem: (key: string) => { memory.delete(key) },
+    clear: () => { memory.clear() },
+  })
+  writeGitSyncPrefs({ pullMode: 'merge', pushMode: 'safe', autoFetchMinutes: 60 })
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
 
 const snapshot: GitStatusSnapshot = {
   probe: {
@@ -20,6 +40,7 @@ const snapshot: GitStatusSnapshot = {
     behind: 0,
     hasHead: true,
     branch: 'main',
+    remote: 'origin',
   },
   staged: [],
   unstaged: [],
@@ -32,10 +53,6 @@ function mockClient(): GitClient {
     fetch: vi.fn(async () => ({ ok: true as const, value: { remote: 'origin' } })),
   } as unknown as GitClient
 }
-
-afterEach(() => {
-  vi.useRealTimers()
-})
 
 describe('git-live shared polling', () => {
   it('dedupes consumers and exposes the latest status', async () => {
@@ -65,6 +82,28 @@ describe('git-live shared polling', () => {
     await Promise.resolve()
     expect(client.status).toHaveBeenCalled()
     offSub()
+    release()
+  })
+
+  it('does not start a second fetch while one is in flight', async () => {
+    let finishFetch!: (value: { ok: true; value: { remote: string } }) => void
+    const client = mockClient()
+    vi.mocked(client.fetch).mockImplementation(() => new Promise((resolve) => {
+      finishFetch = resolve
+    }))
+
+    const release = retainGitLive(client, 'ws-1', '.')
+    await refreshGitLiveStatus()
+    const first = refreshGitLiveRemote()
+    await Promise.resolve()
+    expect(client.fetch).toHaveBeenCalledTimes(1)
+
+    void refreshGitLiveRemote()
+    await Promise.resolve()
+    expect(client.fetch).toHaveBeenCalledTimes(1)
+
+    finishFetch({ ok: true, value: { remote: 'origin' } })
+    await first
     release()
   })
 })

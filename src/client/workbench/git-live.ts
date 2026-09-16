@@ -2,16 +2,19 @@
  * 共享 Git 状态轮询：StatusBar 与 GitSidebar 共用同一组定时器，避免重复请求。
  *
  * - 8s：git status（工作区改动、分支、ahead/behind）
- * - 60s：git fetch --prune + 重新 status（仅在有 remote 时）
+ * - 自动 fetch：间隔由 Git 设置（默认 60 分钟）；仅在有 remote 时
+ * - 上一次 fetch 未完成时跳过，避免叠跑
+ * - fetch 失败时退避：下次等待 ≥ max(配置间隔, 本次耗时 × 2)
  * - 页面隐藏时跳过
  *
  * branches / log 仍由 GitSidebar 在挂载、写操作、手动刷新时单独加载。
  */
 import type { GitClient } from '../api.ts'
 import type { GitStatusSnapshot } from '../../shared/types.ts'
+import { autoFetchMinutesToMs, nextAutoFetchDelayMs } from '../../shared/git-auto-fetch.ts'
+import { readGitSyncPrefs } from '../../shared/git-sync-prefs.ts'
 
 const STATUS_POLL_MS = 8000
-const FETCH_POLL_MS = 60_000
 
 let liveClient: GitClient | null = null
 let liveWorkspace: string | undefined
@@ -24,6 +27,8 @@ let fetchTimer = 0
 let statusGen = 0
 let fetchGen = 0
 let paused = 0
+/** 上一次自动 fetch 仍在进行时禁止再启。 */
+let fetchBusy = false
 
 const listeners = new Set<() => void>()
 
@@ -33,6 +38,37 @@ function emit(): void {
 
 function hidden(): boolean {
   return typeof document !== 'undefined' && document.visibilityState === 'hidden'
+}
+
+function configuredFetchMs(): number {
+  return autoFetchMinutesToMs(readGitSyncPrefs().autoFetchMinutes)
+}
+
+function clearFetchTimer(): void {
+  if (fetchTimer !== 0) {
+    window.clearTimeout(fetchTimer)
+    fetchTimer = 0
+  }
+}
+
+function scheduleFetch(delayMs: number): void {
+  clearFetchTimer()
+  if (delayMs <= 0 || refs <= 0) return
+  fetchTimer = window.setTimeout(() => {
+    fetchTimer = 0
+    void fetchRemote()
+  }, delayMs)
+}
+
+/** 按当前偏好重排自动 fetch（设置保存后调用）。 */
+export function applyGitLiveFetchInterval(): void {
+  const ms = configuredFetchMs()
+  if (ms <= 0) {
+    clearFetchTimer()
+    return
+  }
+  if (fetchBusy) return
+  scheduleFetch(ms)
 }
 
 export function readGitLiveStatus(): GitStatusSnapshot | null {
@@ -55,6 +91,7 @@ async function loadStatus(): Promise<void> {
   const workspaceId = liveWorkspace
   if (client === null || workspaceId === undefined || paused > 0 || hidden()) return
   const gen = ++statusGen
+  const hadRemote = hasRemote
   const result = await client.status(workspaceId, liveRepoId)
   if (gen !== statusGen) return
   if (!result.ok) {
@@ -67,27 +104,57 @@ async function loadStatus(): Promise<void> {
   status = result.value
   hasRemote = result.value.probe.remote !== undefined
   emit()
+  if (!hadRemote && hasRemote && !fetchBusy && fetchTimer === 0) {
+    scheduleFetch(0)
+  }
 }
 
 async function fetchRemote(): Promise<void> {
   const client = liveClient
   const workspaceId = liveWorkspace
-  if (client === null || workspaceId === undefined || !hasRemote || paused > 0 || hidden()) return
+  if (client === null || workspaceId === undefined || !hasRemote || paused > 0 || hidden()) {
+    scheduleFetch(configuredFetchMs())
+    return
+  }
+  if (fetchBusy) return
+
+  fetchBusy = true
   const gen = ++fetchGen
-  const result = await client.fetch(workspaceId, liveRepoId)
-  if (gen !== fetchGen || !result.ok) return
-  await loadStatus()
+  const started = Date.now()
+  let failed = false
+  try {
+    const result = await client.fetch(workspaceId, liveRepoId)
+    if (gen !== fetchGen) return
+    failed = !result.ok
+    if (!failed) await loadStatus()
+  } catch {
+    if (gen !== fetchGen) return
+    failed = true
+  } finally {
+    if (gen === fetchGen) {
+      const durationMs = Date.now() - started
+      fetchBusy = false
+      const delay = nextAutoFetchDelayMs(configuredFetchMs(), failed, durationMs)
+      scheduleFetch(delay)
+    } else {
+      fetchBusy = false
+    }
+  }
 }
 
 function onVisible(): void {
-  if (document.visibilityState === 'visible') void fetchRemote()
+  if (document.visibilityState !== 'visible') return
+  if (configuredFetchMs() <= 0) return
+  if (fetchBusy) return
+  void fetchRemote()
 }
 
 function startTimers(): void {
   if (statusTimer !== 0) return
   statusTimer = window.setInterval(() => { void loadStatus() }, STATUS_POLL_MS)
-  fetchTimer = window.setInterval(() => { void fetchRemote() }, FETCH_POLL_MS)
   document.addEventListener('visibilitychange', onVisible)
+  const ms = configuredFetchMs()
+  if (ms > 0) scheduleFetch(ms)
 }
 
 function stopTimers(): void {
@@ -95,17 +162,14 @@ function stopTimers(): void {
     window.clearInterval(statusTimer)
     statusTimer = 0
   }
-  if (fetchTimer !== 0) {
-    window.clearInterval(fetchTimer)
-    fetchTimer = 0
-  }
+  clearFetchTimer()
   document.removeEventListener('visibilitychange', onVisible)
 }
 
 function bootstrap(): void {
   if (liveWorkspace === undefined) return
   void loadStatus().then(() => {
-    if (hasRemote) void fetchRemote()
+    if (hasRemote && configuredFetchMs() > 0) void fetchRemote()
   })
 }
 
@@ -121,6 +185,7 @@ export function retainGitLive(client: GitClient, workspaceId?: string, repoId = 
   if (wsChanged || repoChanged) {
     statusGen += 1
     fetchGen += 1
+    fetchBusy = false
     status = null
     hasRemote = false
     emit()
@@ -137,6 +202,7 @@ export function retainGitLive(client: GitClient, workspaceId?: string, repoId = 
     refs = 0
     statusGen += 1
     fetchGen += 1
+    fetchBusy = false
     stopTimers()
     liveClient = null
     liveWorkspace = undefined

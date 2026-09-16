@@ -10,10 +10,20 @@ import {
 } from '../src/shared/git-sync-prefs.ts'
 
 describe('git-sync-prefs', () => {
-  it('defaults pull to merge and push to safe', () => {
-    expect(DEFAULT_GIT_SYNC_PREFS).toEqual({ pullMode: 'merge', pushMode: 'safe' })
+  it('defaults pull to merge, push to safe, and auto-fetch to 60 minutes', () => {
+    expect(DEFAULT_GIT_SYNC_PREFS).toEqual({
+      pullMode: 'merge',
+      pushMode: 'safe',
+      autoFetchMinutes: 60,
+    })
     expect(parseGitSyncPrefs(null)).toEqual(DEFAULT_GIT_SYNC_PREFS)
     expect(parseGitSyncPrefs({ pullMode: 'nope', pushMode: '--force' })).toEqual(DEFAULT_GIT_SYNC_PREFS)
+    expect(parseGitSyncPrefs({ pullMode: 'rebase', pushMode: 'lease', autoFetchMinutes: 15 })).toEqual({
+      pullMode: 'rebase',
+      pushMode: 'lease',
+      autoFetchMinutes: 15,
+    })
+    expect(parseGitSyncPrefs({ pullMode: 'merge', pushMode: 'safe' }).autoFetchMinutes).toBe(60)
   })
 
   it('accepts only the enumerated modes', () => {
