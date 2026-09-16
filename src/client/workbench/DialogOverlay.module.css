@@ -1,0 +1,20 @@
+/* Full-viewport layer — same contract as dsh-client-ui-primitives Modal
+   and ui-settings-general SettingsRoot overlay (figma Mask + Dialog). */
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: safe center;
+  justify-content: center;
+  overflow: auto;
+  padding: 24px;
+}
+
+/* rgba(0,0,0,0.24) + blur(2px) in light; dark theme raises mask opacity. */
+.mask {
+  position: absolute;
+  inset: 0;
+  background: var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.24));
+  backdrop-filter: var(--dsw-mask-blur, blur(2px));
+}

@@ -234,18 +234,9 @@
   cursor: not-allowed;
 }
 
-.reviewDialogMask {
-  position: absolute;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  background: color-mix(in srgb, var(--dsw-alias-bg-base) 40%, transparent);
-}
-
 .reviewDialog {
+  position: relative;
+  z-index: 1;
   width: min(380px, 100%);
   padding: 14px 16px;
   border-radius: 8px;
@@ -662,16 +653,9 @@
   color: var(--dsw-alias-label-caption);
 }
 
-.dialogMask {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--dsw-alias-bg-base) 55%, transparent);
-}
-
 .dialog {
+  position: relative;
+  z-index: 1;
   width: min(420px, calc(100% - 32px));
   padding: 16px;
   border: 1px solid var(--dsw-alias-border-l1);

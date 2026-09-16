@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { GitClient } from '../api.ts'
 import type { GitResult, ReviewFileSnapshot, ReviewSnapshot } from '../../shared/types.ts'
+import { DialogOverlay } from './DialogOverlay.tsx'
 import { IconButton } from './IconButton.tsx'
 import { IconRefresh, IconReview } from './icons.tsx'
 import {
@@ -166,19 +167,12 @@ export function ReviewPanel({
       )}
 
       {undoAsk !== null ? (
-        <div
-          className={css.dialogMask}
-          onClick={() => { setUndoAsk(null) }}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') setUndoAsk(null)
-          }}
-        >
+        <DialogOverlay onClose={() => { setUndoAsk(null) }}>
           <div
             className={css.dialog}
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="review-undo-title"
-            onClick={(event) => { event.stopPropagation() }}
           >
             <h2 id="review-undo-title">{t('review.undoConfirmTitle')}</h2>
             <p>
@@ -195,7 +189,7 @@ export function ReviewPanel({
               </button>
             </div>
           </div>
-        </div>
+        </DialogOverlay>
       ) : null}
     </div>
   )

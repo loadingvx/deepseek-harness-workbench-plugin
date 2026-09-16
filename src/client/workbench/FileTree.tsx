@@ -7,6 +7,7 @@ import { copyFileName, uniqueFileName } from '../../shared/copy-name.ts'
 import { fileManagerKind, fileManagerLocaleKey } from '../../shared/file-manager.ts'
 import { isExternalEditorId, type ExternalEditorId, type ExternalEditorInfo, type FsDirEntry, type GitFail } from '../../shared/types.ts'
 import { FILE_REF_KIND_TYPE, FILE_REF_PATH_TYPE } from '../../shared/file-ref.ts'
+import { DialogOverlay } from './DialogOverlay.tsx'
 import { FileKindIcon } from './file-icons.tsx'
 import { IconButton } from './IconButton.tsx'
 import { IconChevron, IconClose, IconExternal, IconEye, IconRefresh, IconRename, IconSearch, IconTrash } from './icons.tsx'
@@ -1234,19 +1235,12 @@ export function FileTree({ client, workspaceId, workspaceTitle, workspacePath, a
         />
       ) : null}
       {deleteAsk !== null ? (
-        <div
-          className={css.dialogMask}
-          onClick={() => { setDeleteAsk(null) }}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') setDeleteAsk(null)
-          }}
-        >
+        <DialogOverlay onClose={() => { setDeleteAsk(null) }}>
           <div
             className={css.dialog}
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="dsh-tree-delete-title"
-            onClick={(event) => { event.stopPropagation() }}
           >
             <h2 id="dsh-tree-delete-title">
               {deleteAsk.kind === 'directory' ? t('tree.deleteDirTitle') : t('tree.deleteTitle')}
@@ -1270,7 +1264,7 @@ export function FileTree({ client, workspaceId, workspaceTitle, workspacePath, a
               </button>
             </div>
           </div>
-        </div>
+        </DialogOverlay>
       ) : null}
     </nav>
   )

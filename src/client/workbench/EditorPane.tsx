@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type R
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { GitClient } from '../api.ts'
 import type { GitFail, ReviewFileSnapshot } from '../../shared/types.ts'
+import { DialogOverlay } from './DialogOverlay.tsx'
 import { IconButton } from './IconButton.tsx'
 import { joinWorkspaceFile, suggestNewFileDir, termIdFromTabId } from '../../shared/new-file-path.ts'
 import { IconChat, IconChevronLeft, IconChevronRight, IconClose, IconDiff, IconEditor, IconEye, IconGlobe, IconLayout, IconMore, IconPanelOff, IconPlus, IconSave, IconSplit, IconTerminal } from './icons.tsx'
@@ -996,15 +997,11 @@ export function EditorPane({
           ) : null}
           {body}
           {reviewUndoAsk !== null ? (
-            <div
-              className={css.reviewDialogMask}
-              onClick={() => { setReviewUndoAsk(null) }}
-            >
+            <DialogOverlay onClose={() => { setReviewUndoAsk(null) }}>
               <div
                 className={css.reviewDialog}
                 role="alertdialog"
                 aria-modal="true"
-                onClick={(event) => { event.stopPropagation() }}
               >
                 <h2>{t('review.undoConfirmTitle')}</h2>
                 <p>{t('review.undoConfirmFileBody', { name: fileName(reviewUndoAsk) })}</p>
@@ -1026,11 +1023,11 @@ export function EditorPane({
                   </button>
                 </div>
               </div>
-            </div>
+            </DialogOverlay>
           ) : null}
           {newFileOpen ? (
-            <div className={css.dialogMask}>
-              <div className={css.dialog} role="dialog" aria-labelledby="git-new-file-title">
+            <DialogOverlay onClose={() => { setNewFileOpen(false) }}>
+              <div className={css.dialog} role="dialog" aria-labelledby="git-new-file-title" aria-modal="true">
                 <h2 id="git-new-file-title">{t('editor.addFileTitle')}</h2>
                 <p>{t('editor.addFileHint')}</p>
                 <label className={css.field}>
@@ -1072,11 +1069,11 @@ export function EditorPane({
                   </button>
                 </div>
               </div>
-            </div>
+            </DialogOverlay>
           ) : null}
           {pendingClose !== null ? (
-            <div className={css.dialogMask}>
-              <div className={css.dialog} role="dialog" aria-labelledby="git-close-title">
+            <DialogOverlay onClose={() => { setPendingClose(null) }}>
+              <div className={css.dialog} role="dialog" aria-labelledby="git-close-title" aria-modal="true">
                 <h2 id="git-close-title">{t('editor.closeDirtyTitle')}</h2>
                 <p>
                   {pendingClose.names.length === 1
@@ -1100,7 +1097,7 @@ export function EditorPane({
                   </button>
                 </div>
               </div>
-            </div>
+            </DialogOverlay>
           ) : null}
         </div>
       </div>

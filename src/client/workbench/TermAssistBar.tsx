@@ -30,6 +30,7 @@ import {
   type BlacklistKind,
   type BlacklistRule,
 } from '../../shared/term-assist-blacklist.ts'
+import { DialogOverlay } from './DialogOverlay.tsx'
 import { IconButton } from './IconButton.tsx'
 import { IconClose, IconSend, IconSparkle, IconStop, IconTune } from './icons.tsx'
 import type { Translate } from './types.ts'
@@ -426,19 +427,12 @@ export function TermAssistBar({
       ) : null}
 
       {settingsOpen ? (
-        <div
-          className={css.dialogMask}
-          onClick={closeSettings}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') closeSettings()
-          }}
-        >
+        <DialogOverlay onClose={closeSettings}>
           <div
             className={css.dialog}
             role="dialog"
             aria-modal="true"
             aria-labelledby="term-ai-settings-title"
-            onClick={(event) => { event.stopPropagation() }}
           >
             <h2 id="term-ai-settings-title">{t('term.ai.settingsTitle')}</h2>
             <p>{t('term.ai.settingsHint')}</p>
@@ -632,7 +626,7 @@ export function TermAssistBar({
               </button>
             </div>
           </div>
-        </div>
+        </DialogOverlay>
       ) : null}
     </div>
   )

@@ -82,7 +82,7 @@ export const zh = {
   'gitSettings.title': 'Git 设置',
   'gitSettings.hint': '拉取 / 推送只能从下面选，不会执行你随便输入的参数。自动获取与 GRAPH 条数改完点「保存」立刻生效。',
   'gitSettings.autoFetchTitle': '自动获取（Fetch）',
-  'gitSettings.autoFetchHint': '后台定期 git fetch --prune，刷新超前/落后计数。默认每 60 分钟一次。填 0 关闭（只手动获取）。上一次未完成不会叠跑；失败时下次至少等待「本次耗时 × 2」与设定间隔中的较大值。',
+  'gitSettings.autoFetchHint': '后台定期 git fetch --prune，刷新超前/落后计数。默认每 60 分钟一次。 0为关闭（只手动获取）。',
   'gitSettings.autoFetchLabel': '间隔（分钟）',
   'gitSettings.autoFetch.off': '关闭',
   'gitSettings.autoFetch.empty': '请填写自动获取间隔（分钟），或填 0 关闭。',

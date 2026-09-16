@@ -938,19 +938,9 @@
   cursor: default;
 }
 
-.dialogMask {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: flex;
-  align-items: safe center;
-  justify-content: center;
-  overflow: auto;
-  padding: 24px;
-  background: color-mix(in srgb, var(--dsw-alias-bg-base) 55%, transparent);
-}
-
 .dialog {
+  position: relative;
+  z-index: 1;
   width: min(360px, calc(100% - 24px));
   padding: 16px 18px;
   border: 1px solid var(--dsw-alias-border-l1);

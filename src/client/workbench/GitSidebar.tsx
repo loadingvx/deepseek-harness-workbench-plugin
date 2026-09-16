@@ -26,6 +26,7 @@ import {
   parseGraphLimitInput, readGraphLimit, writeGraphLimit,
 } from '../../shared/git-graph-limit.ts'
 import { invalidBranchName } from '../../shared/branch-name.ts'
+import { DialogOverlay } from './DialogOverlay.tsx'
 import { IconAutoRefresh, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRestore, IconSparkle, IconTune } from './icons.tsx'
 import { readNearbyGit, retainNearbyGit, setNearbyRepo, setParentGitDecision, subscribeNearbyGit } from './nearby-git.ts'
 import {
@@ -1166,19 +1167,12 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       ) : null}
 
       {askParent && nearby.snapshot?.parent !== null && nearby.snapshot?.parent !== undefined ? (
-        <div
-          className={css.dialogMask}
-          onClick={() => { setParentGitDecision('skip') }}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') setParentGitDecision('skip')
-          }}
-        >
+        <DialogOverlay onClose={() => { setParentGitDecision('skip') }}>
           <div
             className={css.dialog}
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="git-parent-ask-title"
-            onClick={(event) => { event.stopPropagation() }}
           >
             <h2 id="git-parent-ask-title">{t('repo.parentAskTitle')}</h2>
             <p>{t('repo.parentAskBody', { name: nearby.snapshot.parent.name })}</p>
@@ -1191,23 +1185,16 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
               </button>
             </div>
           </div>
-        </div>
+        </DialogOverlay>
       ) : null}
 
       {restoreAsk !== null ? (
-        <div
-          className={css.dialogMask}
-          onClick={closeRestore}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') closeRestore()
-          }}
-        >
+        <DialogOverlay onClose={closeRestore}>
           <div
             className={css.dialog}
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="git-restore-title"
-            onClick={(event) => { event.stopPropagation() }}
           >
             <h2 id="git-restore-title">
               {restoreAsk.untracked ? t('restore.untrackedTitle') : t('restore.title')}
@@ -1231,23 +1218,16 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
               </button>
             </div>
           </div>
-        </div>
+        </DialogOverlay>
       ) : null}
 
       {templateOpen ? (
-        <div
-          className={css.dialogMask}
-          onClick={closeTemplate}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') closeTemplate()
-          }}
-        >
+        <DialogOverlay onClose={closeTemplate}>
           <div
             className={`${css.dialog} ${css.dialogWide}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="git-commit-template-title"
-            onClick={(event) => { event.stopPropagation() }}
           >
             <h2 id="git-commit-template-title">{t('gitSettings.title')}</h2>
             <div className={css.dialogBody}>
@@ -1427,23 +1407,16 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
               </button>
             </div>
           </div>
-        </div>
+        </DialogOverlay>
       ) : null}
 
       {prompt !== null ? (
-        <div
-          className={css.dialogMask}
-          onClick={closePrompt}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') closePrompt()
-          }}
-        >
+        <DialogOverlay onClose={closePrompt}>
           <div
             className={css.dialog}
             role="dialog"
             aria-modal="true"
             aria-labelledby="git-graph-prompt-title"
-            onClick={(event) => { event.stopPropagation() }}
           >
             <h2 id="git-graph-prompt-title">{prompt === 'branch' ? t('branch.newTitle') : t('merge.title')}</h2>
             <p>{prompt === 'branch' ? t('branch.newHint') : t('merge.hint', { branch: branchName })}</p>
@@ -1505,7 +1478,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
               </button>
             </div>
           </div>
-        </div>
+        </DialogOverlay>
       ) : null}
     </aside>
   )
