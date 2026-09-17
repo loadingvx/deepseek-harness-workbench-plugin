@@ -1,5 +1,5 @@
 
-![preview](docs/img/social-preview.jpg)
+![preview](docs/preview.jpg)
 
 > **Requires DeepSeek Harness ≥ 0.1.5 (compatibility update)**
 >
