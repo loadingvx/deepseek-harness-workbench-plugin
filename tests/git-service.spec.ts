@@ -408,20 +408,38 @@ describe('GitService', () => {
     expect(status.probe.branch).toBe('main')
   })
 
-  it('fetches from a configured remote', async () => {
-    const remote = await tempDir('dsh-fetch-bare-')
+  it('fetches only the current branch upstream from a configured remote', async () => {
+    const parent = await tempDir('dsh-fetch-scope-')
+    const remote = join(parent, 'remote.git')
+    const a = join(parent, 'a')
+    await mkdir(remote)
+    await mkdir(a)
     await runGit({ cwd: remote, args: ['init', '--bare', '-b', 'main'] })
-    const root = await initRepo()
-    await writeFile(join(root, 'a.txt'), 'a\n')
-    await git.stage(root, ['a.txt'])
-    await git.commit(root, 'first')
-    await expect(git.fetch(root)).rejects.toMatchObject({ code: 'NO_REMOTE' })
-    await runGit({ cwd: root, args: ['remote', 'add', 'origin', remote] })
-    const fetched = await git.fetch(root)
+    await runGit({ cwd: a, args: ['init', '-b', 'main'] })
+    await runGit({ cwd: a, args: ['config', 'user.name', 'Test User'] })
+    await runGit({ cwd: a, args: ['config', 'user.email', 'test@example.com'] })
+    await runGit({ cwd: a, args: ['config', 'commit.gpgsign', 'false'] })
+    await writeFile(join(a, 'a.txt'), 'one\n')
+    await git.stage(a, ['a.txt'])
+    await git.commit(a, 'seed')
+    await runGit({ cwd: a, args: ['remote', 'add', 'origin', remote] })
+    await git.push(a)
+    await runGit({ cwd: parent, args: ['clone', remote, 'b'] })
+    const b = join(parent, 'b')
+    await runGit({ cwd: b, args: ['config', 'user.name', 'Test User'] })
+    await runGit({ cwd: b, args: ['config', 'user.email', 'test@example.com'] })
+    await runGit({ cwd: b, args: ['config', 'commit.gpgsign', 'false'] })
+    await writeFile(join(a, 'a.txt'), 'two\n')
+    await git.stage(a, ['a.txt'])
+    await git.commit(a, 'ahead')
+    await git.push(a)
+    expect((await git.status(b)).probe.behind).toBe(0)
+    const fetched = await git.fetch(b)
     expect(fetched.remote).toBe('origin')
+    expect((await git.status(b)).probe.behind).toBe(1)
   })
 
-  it('pulls after fetching so a stale behind count still updates', async () => {
+  it('pulls even when the local behind count is stale', async () => {
     const parent = await tempDir('dsh-stale-pull-')
     const remote = join(parent, 'remote.git')
     const a = join(parent, 'a')
@@ -453,7 +471,7 @@ describe('GitService', () => {
     expect(await readFile(join(b, 'a.txt'), 'utf8')).toBe('two\n')
   })
 
-  it('refuses push after fetching when the remote grew', async () => {
+  it('refuses push when the remote grew without a pre-fetch', async () => {
     const parent = await tempDir('dsh-stale-push-')
     const remote = join(parent, 'remote.git')
     const a = join(parent, 'a')
@@ -484,7 +502,7 @@ describe('GitService', () => {
     expect((await git.status(b)).probe.behind).toBe(0)
     expect((await git.status(b)).probe.ahead).toBe(1)
     await expect(git.push(b)).rejects.toMatchObject({ code: 'REMOTE_AHEAD' })
-    expect((await git.status(b)).probe.behind).toBe(1)
+    expect((await git.status(b)).probe.behind).toBe(0)
   })
 
   it('merges a diverged branch with the default pull mode', async () => {

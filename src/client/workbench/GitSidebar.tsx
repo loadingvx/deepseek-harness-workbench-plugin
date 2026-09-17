@@ -18,10 +18,6 @@ import {
   type GitSyncPrefs, type PullMode, type PushMode,
 } from '../../shared/git-sync-prefs.ts'
 import {
-  AUTO_FETCH_DEFAULT_MINUTES, AUTO_FETCH_MAX_MINUTES,
-  AUTO_FETCH_OFF_MINUTES, AUTO_FETCH_PRESETS, parseAutoFetchMinutesInput,
-} from '../../shared/git-auto-fetch.ts'
-import {
   GRAPH_LIMIT_DEFAULT, GRAPH_LIMIT_MAX, GRAPH_LIMIT_MIN, GRAPH_LIMIT_PRESETS,
   parseGraphLimitInput, readGraphLimit, writeGraphLimit,
 } from '../../shared/git-graph-limit.ts'
@@ -30,7 +26,6 @@ import { DialogOverlay } from './DialogOverlay.tsx'
 import { IconAutoRefresh, IconCheck, IconChevron, IconCompact, IconFetch, IconMerge, IconMinus, IconNewBranch, IconPlus, IconPull, IconPush, IconRestore, IconSparkle, IconTune } from './icons.tsx'
 import { readNearbyGit, retainNearbyGit, setNearbyRepo, setParentGitDecision, subscribeNearbyGit } from './nearby-git.ts'
 import {
-  applyGitLiveFetchInterval,
   readGitLiveStatus,
   retainGitLive,
   subscribeGitLive,
@@ -206,11 +201,10 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<'commit' | 'push' | 'pull' | 'fetch' | null>(null)
   const [remoteSyncing, setRemoteSyncing] = useState(false)
-  const [remoteHint, setRemoteHint] = useState<GitFail | null>(null)
   const busyLock = useRef(false)
-  const headSeenRef = useRef<HeadKey>(null)
   const remoteLock = useRef(false)
   const hasRemoteRef = useRef(false)
+  const headSeenRef = useRef<HeadKey>(null)
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const generateAbort = useRef<AbortController | null>(null)
@@ -226,7 +220,6 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const [prefsDraft, setPrefsDraft] = useState<GitSyncPrefs>(readGitSyncPrefs)
   const [graphLimit, setGraphLimit] = useState(readGraphLimit)
   const [graphLimitDraft, setGraphLimitDraft] = useState(() => String(readGraphLimit()))
-  const [autoFetchDraft, setAutoFetchDraft] = useState(() => String(readGitSyncPrefs().autoFetchMinutes))
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const graphLimitRef = useRef(graphLimit)
   graphLimitRef.current = graphLimit
@@ -264,7 +257,6 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     setTemplateDraft(template)
     const prefs = readGitSyncPrefs()
     setPrefsDraft(prefs)
-    setAutoFetchDraft(String(prefs.autoFetchMinutes))
     setGraphLimitDraft(String(readGraphLimit()))
     setSettingsError(null)
   }, [templateOpen, template])
@@ -348,11 +340,10 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
       const result = await client.fetch(workspaceId, repoId)
       if (!result.ok) {
         if (result.code === 'BUSY') return
-        if (silent) setRemoteHint(result)
-        else setError(result)
+        if (silent) return
+        setError(result)
         return
       }
-      setRemoteHint(null)
       if (!busyLock.current) await refresh()
     } finally {
       remoteLock.current = false
@@ -474,7 +465,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   const branchName = status?.probe.detached ? t('panel.detached') : (status?.probe.branch ?? t('panel.title'))
   const commitAll = stagedCount === 0 && dirtyCount > 0
   const busyBlockReason = busy ? t('action.disabledBusy') : null
-  const remoteBlockReason = remoteSyncing ? t('panel.checkingRemote') : null
+  const remoteBlockReason = remoteSyncing ? t('action.fetching') : null
   const commitDisabledReason = generating
     ? t('commit.generating')
     : message.trim() === ''
@@ -717,7 +708,6 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     setTemplateDraft(template)
     const prefs = readGitSyncPrefs()
     setPrefsDraft(prefs)
-    setAutoFetchDraft(String(prefs.autoFetchMinutes))
     setGraphLimitDraft(String(readGraphLimit()))
     setSettingsError(null)
     writeBoolFlag(GIT_SETTINGS_OPEN_KEY, true)
@@ -742,11 +732,6 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
   }
 
   const saveTemplate = (): void => {
-    const fetchParsed = parseAutoFetchMinutesInput(autoFetchDraft)
-    if (!fetchParsed.ok) {
-      setSettingsError(t(`gitSettings.autoFetch.${fetchParsed.error}`))
-      return
-    }
     const parsed = parseGraphLimitInput(graphLimitDraft)
     if (!parsed.ok) {
       setSettingsError(t(`gitSettings.graphLimit.${parsed.error}`))
@@ -756,11 +741,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
     graphLimitRef.current = nextLimit
     setGraphLimit(nextLimit)
     setCustomTemplate(writeCustomTemplate(templateDraft, localeDefault))
-    setSyncPrefs(writeGitSyncPrefs({
-      ...prefsDraft,
-      autoFetchMinutes: fetchParsed.value,
-    }))
-    applyGitLiveFetchInterval()
+    setSyncPrefs(writeGitSyncPrefs(prefsDraft))
     writeBoolFlag(GIT_SETTINGS_OPEN_KEY, false)
     setSettingsError(null)
     setTemplateOpen(false)
@@ -825,11 +806,6 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
         <div className={css.banner} data-git-chrome="banner">
           <div>{error.messageZh}</div>
           <div className={css.bannerHint}>{error.hintZh}</div>
-        </div>
-      ) : remoteHint !== null ? (
-        <div className={css.banner} data-kind="warn" data-git-chrome="banner">
-          <div>{t('remote.checkFail')}</div>
-          <div className={css.bannerHint}>{remoteHint.messageZh}</div>
         </div>
       ) : null}
       {loading && status === null ? <p className={css.hint} data-git-chrome="hint" style={{ padding: '8px 10px' }}>{t('panel.loading')}</p> : null}
@@ -967,7 +943,6 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                     customTemplate !== null
                     || syncPrefs.pullMode !== 'merge'
                     || syncPrefs.pushMode !== 'safe'
-                    || syncPrefs.autoFetchMinutes !== AUTO_FETCH_DEFAULT_MINUTES
                   }
                   onClick={openTemplate}
                 >
@@ -1211,7 +1186,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
               <button
                 type="button"
                 className={`${css.dialogOk} ${css.dialogDanger}`}
-                disabled={busy || remoteSyncing}
+                disabled={busy}
                 onClick={confirmRestore}
               >
                 {restoreAsk.untracked ? t('restore.delete') : t('restore.ok')}
@@ -1269,62 +1244,6 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                     </span>
                   </label>
                 ))}
-              </fieldset>
-              <fieldset className={css.choiceSet}>
-                <legend>{t('gitSettings.autoFetchTitle')}</legend>
-                <p className={css.choiceLead}>{t('gitSettings.autoFetchHint')}</p>
-                <div className={css.limitRow}>
-                  <input
-                    className={`${css.fieldInput} ${css.limitInput}`}
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    spellCheck={false}
-                    min={AUTO_FETCH_OFF_MINUTES}
-                    max={AUTO_FETCH_MAX_MINUTES}
-                    value={autoFetchDraft}
-                    aria-label={t('gitSettings.autoFetchLabel')}
-                    aria-invalid={settingsError !== null || undefined}
-                    onChange={(event) => {
-                      setAutoFetchDraft(event.target.value)
-                      setSettingsError(null)
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
-                        saveTemplate()
-                      }
-                      if (event.key === 'Escape') closeTemplate()
-                    }}
-                  />
-                  <div className={css.limitPresets}>
-                    <button
-                      type="button"
-                      className={css.limitPreset}
-                      data-active={autoFetchDraft === String(AUTO_FETCH_OFF_MINUTES) || undefined}
-                      onClick={() => {
-                        setAutoFetchDraft(String(AUTO_FETCH_OFF_MINUTES))
-                        setSettingsError(null)
-                      }}
-                    >
-                      {t('gitSettings.autoFetch.off')}
-                    </button>
-                    {AUTO_FETCH_PRESETS.map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        className={css.limitPreset}
-                        data-active={autoFetchDraft === String(preset) || undefined}
-                        onClick={() => {
-                          setAutoFetchDraft(String(preset))
-                          setSettingsError(null)
-                        }}
-                      >
-                        {preset}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </fieldset>
               <fieldset className={css.choiceSet}>
                 <legend>{t('gitSettings.graphLimitTitle')}</legend>
@@ -1391,7 +1310,6 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
                 onClick={() => {
                   setTemplateDraft(localeDefault)
                   setPrefsDraft({ ...DEFAULT_GIT_SYNC_PREFS })
-                  setAutoFetchDraft(String(AUTO_FETCH_DEFAULT_MINUTES))
                   setGraphLimitDraft(String(GRAPH_LIMIT_DEFAULT))
                   setSettingsError(null)
                 }}
@@ -1471,7 +1389,7 @@ export function GitSidebar({ client, workspaceId, selected, onOpenDiff, onOpenCo
               <button
                 type="button"
                 className={css.dialogOk}
-                disabled={busy || remoteSyncing || (prompt === 'merge' && promptValue.trim() === '')}
+                disabled={busy || (prompt === 'merge' && promptValue.trim() === '')}
                 onClick={submitPrompt}
               >
                 {prompt === 'branch' ? t('branch.newConfirm') : t('merge.confirm')}

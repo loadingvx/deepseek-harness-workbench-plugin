@@ -94,6 +94,9 @@ declare module '@deepseek-ai/cordis' {
     /** Official right Sidebar navigation face (ui-sidebar-right). */
     sidebarRight?: {
       openTab(kind: string, options?: Record<string, unknown>): void
+      openResource(address: string, options?: Record<string, unknown>): void
+      split(paneId?: string): string | undefined
+      close(tabId: string): void
     }
     /** Official right Sidebar tab-type registry (stage one). */
     sidebarRightTabs?: {

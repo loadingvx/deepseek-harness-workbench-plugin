@@ -568,11 +568,23 @@ export class GitService {
     })
   }
 
-  /** Update remote-tracking refs, then re-read ahead/behind. Caller must already hold the mutex. */
-  private async refreshTracking(root: string, probe: GitProbe, signal?: AbortSignal): Promise<GitProbe> {
-    if (probe.remote === undefined) return probe
-    await runGit({ cwd: root, args: ['fetch', '--prune', probe.remote], signal, timeoutMs: 90_000 })
-    return this.probe(root, signal)
+  /**
+   * Split `origin/feature/login` into remote + branch. Only the first `/` separates them.
+   */
+  private parseUpstreamRef(upstream: string): { remote: string; branch: string } | undefined {
+    const slash = upstream.indexOf('/')
+    if (slash <= 0 || slash >= upstream.length - 1) return undefined
+    return { remote: upstream.slice(0, slash), branch: upstream.slice(slash + 1) }
+  }
+
+  /** Fetch only the current branch upstream — avoids wildcard refspec scans on huge remotes. */
+  private async fetchUpstreamRef(root: string, probe: GitProbe, signal?: AbortSignal): Promise<void> {
+    if (probe.remote === undefined) return
+    const parsed = probe.upstream !== undefined ? this.parseUpstreamRef(probe.upstream) : undefined
+    const remote = parsed?.remote ?? probe.remote
+    const branch = parsed?.branch ?? probe.branch
+    if (branch === undefined || branch.trim() === '') return
+    await runGit({ cwd: root, args: ['fetch', remote, branch], signal, timeoutMs: 90_000 })
   }
 
   private async abortInterruptedPull(root: string, mode: PullMode, signal?: AbortSignal): Promise<void> {
@@ -588,8 +600,7 @@ export class GitService {
       if (probe.detached) throw new GitError('DETACHED_HEAD')
       if (probe.remote === undefined) throw new GitError('NO_REMOTE')
       if (!probe.hasHead) throw new GitError('NOTHING_TO_PUSH')
-      probe = await this.refreshTracking(root, probe, signal)
-      if (probe.behind > 0 && mode !== 'lease') throw new GitError('REMOTE_AHEAD')
+      // Use local ahead/behind only; let `git push` reject non-fast-forward (REMOTE_AHEAD).
       if (probe.ahead === 0 && probe.upstream !== undefined) throw new GitError('NOTHING_TO_PUSH')
       const branch = probe.branch
       if (branch === undefined || branch.trim() === '') throw new GitError('BRANCH_MISSING')
@@ -603,15 +614,13 @@ export class GitService {
     const mode = parsePullMode(pullMode)
     return this.mutex.run(async () => {
       await this.requireRepo(root, signal)
-      let probe = await this.probe(root, signal)
+      const probe = await this.probe(root, signal)
       if (probe.detached) throw new GitError('DETACHED_HEAD')
       if (probe.remote === undefined) throw new GitError('NO_REMOTE')
       if (probe.upstream === undefined) throw new GitError('NO_UPSTREAM')
       const snapshot = await this.status(root, signal)
       const dirty = snapshot.staged.length + snapshot.unstaged.length + snapshot.untracked.length
       if (dirty > 0) throw new GitError('DIRTY_WORKTREE')
-      probe = await this.refreshTracking(root, probe, signal)
-      if (probe.behind === 0) throw new GitError('NOTHING_TO_PULL')
       const branch = probe.branch
       if (branch === undefined || branch.trim() === '') throw new GitError('BRANCH_MISSING')
       try {
@@ -637,11 +646,10 @@ export class GitService {
   }
 
   async fetch(root: string, signal?: AbortSignal): Promise<GitFetchResult> {
-    // fetch 只更新远端跟踪分支，不碰 index/staging；与 status/log 一样可与本地 commit/stage 并行。
     await this.requireRepo(root, signal)
     const probe = await this.probe(root, signal)
     if (probe.remote === undefined) throw new GitError('NO_REMOTE')
-    await runGit({ cwd: root, args: ['fetch', '--prune', probe.remote], signal, timeoutMs: 90_000 })
+    await this.fetchUpstreamRef(root, probe, signal)
     return { remote: probe.remote }
   }
 

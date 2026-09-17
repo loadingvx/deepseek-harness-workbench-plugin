@@ -1,7 +1,5 @@
 /** Safe, enumerable pull/push defaults. Never accept free-form argv from the UI. */
 
-import { AUTO_FETCH_DEFAULT_MINUTES, parseAutoFetchMinutes } from './git-auto-fetch.ts'
-
 export const GIT_SYNC_PREFS_KEY = 'dsh-workbench-git-sync-prefs'
 
 export type PullMode = 'merge' | 'ff-only' | 'rebase'
@@ -10,14 +8,11 @@ export type PushMode = 'safe' | 'lease'
 export interface GitSyncPrefs {
   pullMode: PullMode
   pushMode: PushMode
-  /** 自动 fetch 间隔（分钟）；0 = 关闭。默认 60。 */
-  autoFetchMinutes: number
 }
 
 export const DEFAULT_GIT_SYNC_PREFS: GitSyncPrefs = {
   pullMode: 'merge',
   pushMode: 'safe',
-  autoFetchMinutes: AUTO_FETCH_DEFAULT_MINUTES,
 }
 
 export function parsePullMode(raw: unknown): PullMode {
@@ -32,13 +27,10 @@ export function parsePushMode(raw: unknown): PushMode {
 
 export function parseGitSyncPrefs(raw: unknown): GitSyncPrefs {
   if (typeof raw !== 'object' || raw === null) return { ...DEFAULT_GIT_SYNC_PREFS }
-  const rec = raw as { pullMode?: unknown; pushMode?: unknown; autoFetchMinutes?: unknown }
+  const rec = raw as { pullMode?: unknown; pushMode?: unknown }
   return {
     pullMode: parsePullMode(rec.pullMode),
     pushMode: parsePushMode(rec.pushMode),
-    autoFetchMinutes: rec.autoFetchMinutes === undefined
-      ? AUTO_FETCH_DEFAULT_MINUTES
-      : parseAutoFetchMinutes(rec.autoFetchMinutes),
   }
 }
 

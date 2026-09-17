@@ -30,11 +30,16 @@ import { UsagePane } from './UsagePane.tsx'
 import {
   WORKBENCH_BROWSER_ID,
   WORKBENCH_CONTROL_PLANE_ID,
+  WORKBENCH_DIFF_ID,
   WORKBENCH_GIT_ID,
   WORKBENCH_SLASH_ID,
   WORKBENCH_TERMINAL_ID,
   WORKBENCH_USAGE_ID,
 } from './ids.ts'
+import { DiffBody } from './diff/DiffBody.tsx'
+import { gitDiffTabDefinition } from './diff/definition.ts'
+import { bindSidebarDiffFace } from './diff/open-git-diff.ts'
+import { TabCloseMenu } from './TabCloseMenu.tsx'
 import {
   hasOfficialSidebarServices,
   resolveSidebarRight,
@@ -95,8 +100,10 @@ export function installOfficialSidebarTabs(ctx: ClientContext, client: GitClient
   ctx.effect(() => tabs.register(terminalTabDefinition(t)), 'ui-workbench: sidebar-right terminal type')
   ctx.effect(() => tabs.register(browserTabDefinition(t)), 'ui-workbench: sidebar-right browser type')
   ctx.effect(() => tabs.register(controlPlaneTabDefinition(t)), 'ui-workbench: sidebar-right control-plane type')
+  ctx.effect(() => tabs.register(gitDiffTabDefinition(t)), 'ui-workbench: sidebar-right git-diff type')
 
   registerBody(ctx, WORKBENCH_GIT_ID, 'ui-workbench: sidebar-right git body', GitPane, withClient)
+  registerBody(ctx, WORKBENCH_DIFF_ID, 'ui-workbench: sidebar-right git-diff body', DiffBody, withClient)
   registerBody(ctx, WORKBENCH_USAGE_ID, 'ui-workbench: sidebar-right usage body', UsagePane, withClient)
   registerBody(ctx, WORKBENCH_SLASH_ID, 'ui-workbench: sidebar-right ultra-slash body', SlashPane)
   registerBody(ctx, WORKBENCH_TERMINAL_ID, 'ui-workbench: sidebar-right terminal body', TerminalPane, withClient)
@@ -105,8 +112,31 @@ export function installOfficialSidebarTabs(ctx: ClientContext, client: GitClient
 
   const sidebar = resolveSidebarRight(ctx)
   if (sidebar !== undefined) {
-    ctx.effect(() => bindOfficialSidebar({
-      openTab: (kind) => { sidebar.openTab(kind) },
-    }), 'ui-workbench: bind official sidebar')
+    ctx.effect(() => ctx.slots.inject('sidebar.right.tab.menu.item', () => ctx.slots.register({
+      name: 'sidebar.right.tab.menu.item',
+      id: 'dsh-workbench-plugin/tab-close',
+      locale: NS,
+      inject: () => ({
+        t,
+        closeTab: (tabId: string) => { sidebar.close(tabId) },
+      }),
+    }, TabCloseMenu)), 'ui-workbench: sidebar-right tab close menu')
+
+    ctx.effect(() => {
+      const releaseSidebar = bindOfficialSidebar({
+        openTab: (kind) => { sidebar.openTab(kind) },
+      })
+      const releaseDiff = bindSidebarDiffFace({
+        split: (paneId) => sidebar.split(paneId),
+        openTab: (kind, options) => { sidebar.openTab(kind, options) },
+        openResource: (address, options) => {
+          sidebar.openResource(address, options as Record<string, unknown>)
+        },
+      })
+      return () => {
+        releaseDiff()
+        releaseSidebar()
+      }
+    }, 'ui-workbench: bind official sidebar')
   }
 }

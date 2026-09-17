@@ -62,7 +62,6 @@ import { IconChat } from './icons.tsx'
 import { ensureIdeStyles } from './ide-host.css.ts'
 import railCss from './Rail.module.css'
 import { openOfficialSidebarTab } from './official-sidebar.ts'
-import { registerWorkbenchActions } from './workbench-actions.ts'
 import { SideDock } from './SideDock.tsx'
 import {
   applyReviewLiveSnapshot,
@@ -625,22 +624,6 @@ function WorkbenchInner(props: WorkbenchProps) {
     void path
     openOfficialSidebarTab('files')
   }, [])
-
-  const openDiff = (path: string, staged: boolean, repo?: string): void => {
-    void path
-    void staged
-    void repo
-    openOfficialSidebarTab('git')
-  }
-
-  const openCommitDiff = (hash: string, path: string, repo?: string): void => {
-    void hash
-    void path
-    void repo
-    openOfficialSidebarTab('git')
-  }
-
-  useEffect(() => registerWorkbenchActions({ openDiff, openCommitDiff }))
 
   /** Keep open editor tabs and buffers in sync when a file or folder is renamed/moved. */
   const renamePath = (from: string, to: string): void => {

@@ -10,7 +10,10 @@ type SidebarRightTabs = {
 }
 
 type SidebarRight = {
-  openTab: (kind: string) => void
+  openTab: (kind: string, options?: { paneId?: string }) => void
+  openResource: (address: string, options?: { paneId?: string; revealIfOpened?: boolean; kind?: string }) => void
+  split: (paneId?: string) => string | undefined
+  close: (tabId: string) => void
 }
 
 export function resolveSidebarRightTabs(ctx: ClientContext): SidebarRightTabs | undefined {
