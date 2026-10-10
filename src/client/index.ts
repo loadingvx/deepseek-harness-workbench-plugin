@@ -19,7 +19,9 @@ import { selectSvgTailGated } from './workbench/svg-render-settings.ts'
 import { svgRenderEn, svgRenderZh } from './workbench/svg-render-locales.ts'
 import { reviewSettingsEn, reviewSettingsZh } from './workbench/review-settings-locales.ts'
 import { agentAssetsEn, agentAssetsZh } from './workbench/agent-assets-locales.ts'
+import { transferEn, transferZh } from './workbench/transfer-locales.ts'
 import { SvgTailView } from './workbench/SvgTailView.tsx'
+import { FilesTransfer } from './workbench/FilesTransfer.tsx'
 import { MIN_HARNESS_VERSION, PLUGIN_NAME } from '../shared/version.ts'
 
 /**
@@ -36,8 +38,8 @@ function registerWorkbenchLocale(locale: {
   dicts?: Map<string, Map<string, Record<string, string>>>
   register: (ns: string, dicts: unknown) => unknown
 }): () => void {
-  const fullZh = { ...zh, ...svgRenderZh, ...reviewSettingsZh, ...agentAssetsZh }
-  const fullEn = { ...en, ...svgRenderEn, ...reviewSettingsEn, ...agentAssetsEn }
+  const fullZh = { ...zh, ...svgRenderZh, ...reviewSettingsZh, ...agentAssetsZh, ...transferZh }
+  const fullEn = { ...en, ...svgRenderEn, ...reviewSettingsEn, ...agentAssetsEn, ...transferEn }
   const table = locale.dicts?.get(NS)
   if (table !== undefined && (table.has('zh') || table.has('en'))) {
     const zhDict = table.get('zh')
@@ -112,6 +114,12 @@ function applyWorkbench(ctx: ClientContext): void {
     locale: NS,
     select: selectSvgTailGated,
   }, SvgTailView))
+
+  ctx.slots.inject('sidebar.right.tab.files.actions', () => ctx.slots.register({
+    name: 'sidebar.right.tab.files.actions',
+    id: 'workbench-file-transfers',
+    locale: NS,
+  }, FilesTransfer))
 
   installOfficialSidebarTabs(ctx, client)
 }

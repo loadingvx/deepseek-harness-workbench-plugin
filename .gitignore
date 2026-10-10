@@ -6,3 +6,5 @@ coverage
 .DS_Store
 .canvas/
 *.js.map
+# Local deployment copy of the host entry (named after the commit it was built from).
+lib/index.live-*.js

@@ -27,6 +27,7 @@ export type GitErrorCode =
   | 'FS_BINARY'
   | 'FS_WRITE_FAILED'
   | 'FS_EXISTS'
+  | 'AUTH_REQUIRED'
   | 'FS_RENAME_FAILED'
   | 'FS_DELETE_FAILED'
   | 'FS_MKDIR_FAILED'

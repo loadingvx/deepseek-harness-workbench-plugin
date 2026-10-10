@@ -106,6 +106,10 @@ const COPY: Record<GitErrorCode, { messageZh: string; hintZh: string }> = {
     messageZh: '这个名字已经有人用了。',
     hintZh: '换一个名字，或先把同名文件处理掉再试。',
   },
+  AUTH_REQUIRED: {
+    messageZh: '请先登录当前 DSH 网页后再传输文件。',
+    hintZh: '上传和下载与网页使用同一道登录门；未登录或跨站请求会被拒绝。',
+  },
   FS_RENAME_FAILED: {
     messageZh: '无法重命名或移动这个文件。',
     hintZh: '请确认目标位置可以写入、源文件没有被占用，然后重试。',
